@@ -20,6 +20,18 @@ function git(args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 }
 
+function redactRemote(url) {
+  return url.replace(/x-access-token:[^@]+@/i, 'x-access-token:***@')
+}
+
+function normalizeGitUrl(url) {
+  return url
+    .trim()
+    .replace(/x-access-token:[^@]+@/i, '')
+    .replace(/^https:\/\/[^/@]+@github\.com\//i, 'https://github.com/')
+    .replace(/\.git$/i, '')
+}
+
 const remotes = git(['remote', '-v'])
   .split(/\r?\n/)
   .filter(Boolean)
@@ -27,6 +39,10 @@ const remotes = git(['remote', '-v'])
     const [name, url] = line.split(/\s+/)
     return { name, url }
   })
+
+if (process.env.REPOSITORY_URL) {
+  remotes.push({ name: 'origin', url: process.env.REPOSITORY_URL })
+}
 
 const remoteNames = [...new Set(remotes.map((item) => item.name))]
 if (remoteNames.some((name) => name !== 'origin')) {
@@ -39,15 +55,20 @@ const allowedOrigins = [
   `git@github.com:${allow.github.owner}/${allow.github.repo}.git`,
   `git@github.com:${allow.github.owner}/${allow.github.repo}`,
   `https://github.com/${allow.github.owner}/${allow.github.repo}`,
-]
+].map((item) => normalizeGitUrl(item))
+
+const allowedRepo = `${allow.github.owner}/${allow.github.repo}`.toLowerCase()
 
 for (const remote of remotes) {
-  const normalized = remote.url.replace(/\.git$/, '')
-  const ok = allowedOrigins.some(
-    (item) => item.replace(/\.git$/, '') === normalized,
-  )
+  const normalized = normalizeGitUrl(remote.url)
+  const repoMatch = normalized.match(/github\.com[/:]([^/]+\/[^/]+)$/i)
+  const repo = repoMatch?.[1]?.toLowerCase()
+  const ok =
+    allowedOrigins.includes(normalized) || repo === allowedRepo
   if (!ok) {
-    fail(`Git remote ${remote.name} is ${remote.url}, not ${allow.github.origin}`)
+    fail(
+      `Git remote ${remote.name} is ${redactRemote(remote.url)}, not ${allow.github.origin}`,
+    )
   }
 }
 
@@ -88,7 +109,6 @@ const forbiddenRefs = [
   ...allow.forbidden.supabaseOrgs,
   ...allow.forbidden.supabaseProjects,
 ]
-const allowedRepo = `${allow.github.owner}/${allow.github.repo}`.toLowerCase()
 
 for (const rel of tracked) {
   const posix = rel.replaceAll('\\', '/')
