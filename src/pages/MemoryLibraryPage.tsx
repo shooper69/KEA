@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { KeaMark } from '../components/companion/KeaMark'
+import { UserMenu } from '../components/companion/UserMenu'
 import { VOCABULARY_MASTERY_THRESHOLD } from '../architecture/vocabularyMemory'
 import { getLanguage } from '../config/languages'
 import { useSession } from '../context/SessionContext'
@@ -28,7 +29,7 @@ export function MemoryLibraryPage() {
     <main className="companion-screen memory-library">
       <CloudAtmosphere presence="idle" />
       <header className="memory-library__header">
-        <Link to="/" aria-label="KEA home">
+        <Link to="/conversation" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
         </Link>
         <div className="memory-library__nav">
@@ -37,12 +38,13 @@ export function MemoryLibraryPage() {
               Talk
             </Link>
           ) : null}
+          <UserMenu />
         </div>
       </header>
       <div className="memory-library__content">
         <h1>Memory Library</h1>
         <p className="memory-library__lede">
-          Words KEA is holding for you. They leave after {VOCABULARY_MASTERY_THRESHOLD}{' '}
+          Words Kea is holding for you. They leave after {VOCABULARY_MASTERY_THRESHOLD}{' '}
           natural uses.
         </p>
         <label className="memory-library__search">

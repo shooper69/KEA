@@ -1,0 +1,24 @@
+---
+description: Kea is isolated from every other product, CLI, and database
+alwaysApply: true
+---
+
+# Kea isolation
+
+Write the product name as **Kea**, never KEA. The GitHub path `shooper69/KEA` is the repo id only.
+
+Kea is a separate product. Do nothing that is related to Remelife or Investech: no orgs, projects, CLIs, env, users, databases, or “borrowed” logins.
+
+## Only these identities
+
+- GitHub: `shooper69/KEA`
+- Supabase: Kea Production `laubnngplqvsxokbfski` via the Kea dashboard or `.kea/supabase-access-token`
+- Netlify: `keachat` / `kea.chat` via `.kea/netlify-auth-token`
+
+## Never
+
+- Run the machine-wide `supabase` or `netlify` CLI in this repo (those logins are other products)
+- List, link, query, or mention other products’ orgs as a way to reach Kea
+- Copy schema, env, users, or code across products
+
+Use the signed-in **Kea Production** dashboard, or `npm run kea:supabase` / `kea:netlify` / `kea:github` after Kea-only tokens exist. If `npm run guard` fails, stop.

@@ -3,7 +3,7 @@ import type { VoicePersonalityId, VoicePresenceState } from '../types'
 /**
  * Voice companion architecture (placeholder)
  *
- * KEA is voice-first. The user should be able to wear headphones,
+ * Kea is voice-first. The user should be able to wear headphones,
  * keep the phone in a pocket, and talk naturally — no typing.
  *
  * The voice should feel as if it comes from the swirling clouds.
@@ -31,6 +31,6 @@ export interface VoiceCompanionBridge {
 
 export const DEFAULT_VOICE_CONFIG: VoiceCompanionConfig = {
   provider: 'openai-gpt-voice',
-  personalityId: 'wise-female',
+  personalityId: 'luna',
   handsFree: true,
 }

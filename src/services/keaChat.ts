@@ -1,3 +1,7 @@
+import { memoryPromptBlock } from '../architecture/companionMemory'
+import { getAboutKea } from '../data/keaAbout'
+import { getMasterDefinition } from '../data/keaMasterDefinition'
+import { getAverageReplyWords } from '../data/keaSpeech'
 import type { LearnerLevel } from '../types'
 import type { TranscriptMessage } from '../types'
 
@@ -23,13 +27,17 @@ export async function askKea(options: {
       nativeLanguage: options.nativeLanguage,
       targetLanguage: options.targetLanguage,
       level: options.level,
+      masterDefinition: getMasterDefinition(),
+      aboutKea: getAboutKea(),
+      memoryBlock: memoryPromptBlock(),
+      averageReplyWords: getAverageReplyWords(),
       messages,
     }),
   })
 
   const data = (await response.json()) as { reply?: string; error?: string }
   if (!response.ok || !data.reply) {
-    throw new Error(data.error ?? 'KEA could not reply')
+    throw new Error(data.error ?? 'Kea could not reply')
   }
   return data.reply
 }

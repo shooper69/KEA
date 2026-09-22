@@ -5,11 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "guard": "node scripts/assert-kea-isolation.mjs",
+    "build": "npm run guard && tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "kea:supabase": "node scripts/kea-cli.mjs supabase",
+    "kea:netlify": "node scripts/kea-cli.mjs netlify",
+    "kea:github": "node scripts/kea-cli.mjs github"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"

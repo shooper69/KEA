@@ -1,0 +1,36 @@
+{
+  "product": "Kea",
+  "github": {
+    "owner": "shooper69",
+    "repo": "KEA",
+    "origin": "https://github.com/shooper69/KEA.git"
+  },
+  "supabase": {
+    "profile": "kea",
+    "projectRef": "laubnngplqvsxokbfski",
+    "projectName": "Kea Production",
+    "url": "https://laubnngplqvsxokbfski.supabase.co",
+    "dashboard": "https://supabase.com/dashboard/project/laubnngplqvsxokbfski"
+  },
+  "netlify": {
+    "siteName": "keachat",
+    "domain": "kea.chat"
+  },
+  "forbidden": {
+    "names": [
+      "remelife",
+      "reme-life",
+      "reme_life",
+      "investech",
+      "reme-app",
+      "rmm library"
+    ],
+    "supabaseOrgs": ["wndkfgkzqpolikigigat", "kueydbazybqskwfjrvlv"],
+    "supabaseProjects": [
+      "gvwcptqvccbuirqpavls",
+      "tdqhtegtohjdidvgufpw",
+      "hsondneukfkkncqfxcnq",
+      "uolkjqotmzfqfdeeitmn"
+    ]
+  }
+}

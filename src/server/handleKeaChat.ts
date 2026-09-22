@@ -1,4 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { DEFAULT_KEA_MASTER_DEFINITION } from '../data/keaMasterDefinition.ts'
+import {
+  clampAverageReplyWords,
+  DEFAULT_AVERAGE_REPLY_WORDS,
+  maxTokensForAverageWords,
+} from '../data/keaSpeech.ts'
 import { buildKeaSystemPrompt } from './keaPrompt.ts'
 
 interface ChatTurn {
@@ -13,6 +19,10 @@ interface ChatRequest {
   level?: string
   messages?: ChatTurn[]
   text?: string
+  masterDefinition?: string
+  aboutKea?: string
+  memoryBlock?: string
+  averageReplyWords?: number
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -57,6 +67,9 @@ export async function handleKeaChat(
     return
   }
 
+  const averageReplyWords = clampAverageReplyWords(
+    payload.averageReplyWords ?? DEFAULT_AVERAGE_REPLY_WORDS,
+  )
   const isTranslate = payload.mode === 'translate'
   const openaiMessages = isTranslate
     ? [
@@ -77,6 +90,11 @@ export async function handleKeaChat(
             nativeLanguage: payload.nativeLanguage ?? 'English',
             targetLanguage: payload.targetLanguage ?? 'Spanish',
             level: payload.level ?? 'intermediate',
+            masterDefinition:
+              payload.masterDefinition?.trim() || DEFAULT_KEA_MASTER_DEFINITION,
+            aboutKea: payload.aboutKea,
+            memoryBlock: payload.memoryBlock,
+            averageReplyWords,
           }),
         },
         ...(payload.messages ?? []),
@@ -99,6 +117,7 @@ export async function handleKeaChat(
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         temperature: isTranslate ? 0.2 : 0.7,
+        max_tokens: isTranslate ? 200 : maxTokensForAverageWords(averageReplyWords),
         messages: openaiMessages,
       }),
     },
@@ -122,7 +141,7 @@ export async function handleKeaChat(
   const reply = data.choices?.[0]?.message?.content?.trim()
   if (!reply) {
     res.statusCode = 502
-    res.end(JSON.stringify({ error: 'Empty reply from KEA' }))
+    res.end(JSON.stringify({ error: 'Empty reply from Kea' }))
     return
   }
 

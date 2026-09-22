@@ -1,10 +1,10 @@
 /**
  * Vocabulary memory
  *
- * When KEA notices the user reaching for English, the word is kept:
+ * When Kea notices the user reaching for English, the word is kept:
  *   English = translation in the chosen language
  *
- * It stays in memory until KEA has heard the user use it naturally
+ * It stays in memory until Kea has heard the user use it naturally
  * 10 times. Then it leaves, like a word that no longer needs help.
  */
 

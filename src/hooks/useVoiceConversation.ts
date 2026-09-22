@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { captureLearnRequest, touchChatTopic } from '../architecture/companionMemory'
+import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
+import {
+  DEFAULT_VOICE_CHARACTER,
+  getVoicePersonality,
+} from '../config/voices'
 import { getLanguage } from '../config/languages'
 import {
-  getSpeechRecognition,
   listVoices,
   pauseSpeech,
   resumeSpeech,
-  speakText,
-  stopSpeech,
 } from '../lib/speech'
 import { askKea, translateSpanishToEnglish } from '../services/keaChat'
+import { transcribeWithWhisper } from '../services/keaTranscribe'
+import { speakKeaLine, stopKeaSpeech } from '../services/keaSpeak'
 import type {
   LanguageCode,
   LearnerLevel,
   NativeLanguageCode,
   TranscriptMessage,
+  VoicePersonalityId,
   VoicePresenceState,
 } from '../types'
 
@@ -22,64 +28,102 @@ const NATIVE_NAMES: Record<NativeLanguageCode, string> = {
   es: 'Spanish',
   fr: 'French',
   de: 'German',
+  ru: 'Russian',
 }
 
-/** Quiet time after the last speech energy / transcript before the turn is sent. */
-const END_OF_TURN_SILENCE_MS = 1600
-/** Pauses shorter than this never commit a turn (must stay below END_OF_TURN_SILENCE_MS). */
-const SHORT_PAUSE_MS = 700
-/** RMS above this counts as the user currently speaking (0–1 scale). */
-const SPEECH_RMS_THRESHOLD = 0.035
-/** Ignore clicks and breath pops shorter than this. */
-const MIN_SPEECH_MS = 220
+const CHARACTER_KEY = 'kea-voice-character'
+const RESTART_LISTEN_MS = 80
+const MIN_SPEECH_MS = 280
+const MAX_RECORD_MS = 22000
+const SPEECH_RMS = 0.04
+const DEFAULT_ANSWER_SILENCE_MS = 5000
+
+function readCharacter(): VoicePersonalityId {
+  try {
+    const stored = localStorage.getItem(CHARACTER_KEY)
+    if (
+      stored === 'luna' ||
+      stored === 'mira' ||
+      stored === 'sage' ||
+      stored === 'rowan' ||
+      stored === 'theo'
+    ) {
+      return stored
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_VOICE_CHARACTER
+}
+
+function logSpeech(event: string, detail?: unknown) {
+  if (detail === undefined) console.info(`[Kea speech] ${event}`)
+  else console.info(`[Kea speech] ${event}`, detail)
+}
+
+function logAi(event: string, detail?: unknown) {
+  if (detail === undefined) console.info(`[Kea AI] ${event}`)
+  else console.info(`[Kea AI] ${event}`, detail)
+}
+
+function pickRecorderMime(): string {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ]
+  return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
+}
 
 interface UseVoiceConversationOptions {
   targetLanguage: LanguageCode
   nativeLanguage: NativeLanguageCode
   level: LearnerLevel
-}
-
-function micRms(analyser: AnalyserNode, buffer: Uint8Array<ArrayBuffer>) {
-  analyser.getByteTimeDomainData(buffer)
-  let sum = 0
-  for (let index = 0; index < buffer.length; index += 1) {
-    const sample = (buffer[index] - 128) / 128
-    sum += sample * sample
-  }
-  return Math.sqrt(sum / buffer.length)
+  listenIdleSeconds?: number
+  answerAfterSilenceSeconds?: number
 }
 
 export function useVoiceConversation({
   targetLanguage,
   nativeLanguage,
   level,
+  listenIdleSeconds = 10,
+  answerAfterSilenceSeconds = 5,
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
-  const [interim, setInterim] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [voiceURI, setVoiceURI] = useState('')
-  const [rate, setRate] = useState(0.95)
+  const [characterId, setCharacterId] = useState<VoicePersonalityId>(readCharacter)
+  const [rate, setRate] = useState(() => getVoicePersonality(readCharacter()).rate)
   const [handsFree, setHandsFree] = useState(false)
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
   const handsFreeRef = useRef(false)
   const busyRef = useRef(false)
   const historyRef = useRef<TranscriptMessage[]>([])
   const statusRef = useRef<VoicePresenceState>('idle')
   const sendToKeaRef = useRef<(text: string) => Promise<void>>(async () => {})
-  const finalTranscriptRef = useRef('')
-  const interimTranscriptRef = useRef('')
-  const commitTimerRef = useRef<number | null>(null)
+  const listenIdleTimerRef = useRef<number | null>(null)
   const lastActivityAtRef = useRef(0)
-  const speechStartedAtRef = useRef(0)
-  const vadSpeakingRef = useRef(false)
+  const fatalListenRef = useRef(false)
+  const restartTimerRef = useRef<number | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
-  const pcmRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const rafRef = useRef(0)
+  const recordStartedAtRef = useRef(0)
+  const speechMsRef = useRef(0)
+  const silenceMsRef = useRef(0)
+  const stoppingRecordRef = useRef(false)
+  const startListeningRef = useRef<() => void>(() => {})
+  const answerSilenceMsRef = useRef(DEFAULT_ANSWER_SILENCE_MS)
+  answerSilenceMsRef.current = Math.round(
+    Math.min(15, Math.max(1, answerAfterSilenceSeconds)) * 1000,
+  )
 
   useEffect(() => {
     handsFreeRef.current = handsFree
@@ -93,35 +137,49 @@ export function useVoiceConversation({
     historyRef.current = messages
   }, [messages])
 
-  const clearCommitTimer = useCallback(() => {
-    if (commitTimerRef.current !== null) {
-      window.clearTimeout(commitTimerRef.current)
-      commitTimerRef.current = null
+  const clearListenIdleTimer = useCallback(() => {
+    if (listenIdleTimerRef.current !== null) {
+      window.clearTimeout(listenIdleTimerRef.current)
+      listenIdleTimerRef.current = null
     }
   }, [])
 
-  const resetTurnBuffers = useCallback(() => {
-    finalTranscriptRef.current = ''
-    interimTranscriptRef.current = ''
-    speechStartedAtRef.current = 0
-    vadSpeakingRef.current = false
-    setInterim('')
+  const clearRestartTimer = useCallback(() => {
+    if (restartTimerRef.current !== null) {
+      window.clearTimeout(restartTimerRef.current)
+      restartTimerRef.current = null
+    }
   }, [])
 
-  const teardownAudio = useCallback(() => {
+  const stopAnalyser = useCallback((closeContext = false) => {
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current)
       rafRef.current = 0
     }
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
-    pcmRef.current = null
+    analyserRef.current?.disconnect()
     analyserRef.current = null
-    if (audioContextRef.current) {
+    sourceRef.current?.disconnect()
+    sourceRef.current = null
+    if (closeContext && audioContextRef.current) {
       void audioContextRef.current.close()
       audioContextRef.current = null
     }
   }, [])
+
+  const teardownAudio = useCallback(() => {
+    stopAnalyser(true)
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      try {
+        recorderRef.current.stop()
+      } catch {
+        // ignore
+      }
+    }
+    recorderRef.current = null
+    chunksRef.current = []
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+  }, [stopAnalyser])
 
   useEffect(() => {
     const refresh = () => setVoices(listVoices())
@@ -129,32 +187,44 @@ export function useVoiceConversation({
     window.speechSynthesis?.addEventListener('voiceschanged', refresh)
     return () => {
       window.speechSynthesis?.removeEventListener('voiceschanged', refresh)
-      stopSpeech()
-      recognitionRef.current?.abort()
+      stopKeaSpeech()
     }
   }, [])
 
   useEffect(() => {
     return () => {
-      if (commitTimerRef.current !== null) window.clearTimeout(commitTimerRef.current)
+      if (listenIdleTimerRef.current !== null) window.clearTimeout(listenIdleTimerRef.current)
+      if (restartTimerRef.current !== null) window.clearTimeout(restartTimerRef.current)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach((track) => track.stop())
       if (audioContextRef.current) void audioContextRef.current.close()
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [])
 
-  const startListening = useCallback(() => {
-    const recognition = recognitionRef.current
-    if (!recognition || busyRef.current) return
-    try {
-      recognition.lang = getLanguage(targetLanguage).speechLocale
-      recognition.start()
-      setStatus('listening')
-      setError(null)
-    } catch {
-      // Chrome throws if start() is called while already started
+  const pauseListening = useCallback(() => {
+    if (busyRef.current) return
+    clearListenIdleTimer()
+    clearRestartTimer()
+    handsFreeRef.current = false
+    setHandsFree(false)
+    stoppingRecordRef.current = true
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+      recorderRef.current.stop()
     }
-  }, [targetLanguage])
+    stopAnalyser(true)
+    setStatus('idle')
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearListenIdleTimer, clearRestartTimer, stopAnalyser])
+
+  const armListenIdle = useCallback(() => {
+    clearListenIdleTimer()
+    listenIdleTimerRef.current = window.setTimeout(() => {
+      listenIdleTimerRef.current = null
+      if (busyRef.current || statusRef.current !== 'listening') return
+      if (speechMsRef.current > MIN_SPEECH_MS) return
+      pauseListening()
+    }, Math.max(3, listenIdleSeconds) * 1000)
+  }, [clearListenIdleTimer, listenIdleSeconds, pauseListening])
 
   const captionSpanish = useCallback(
     (id: string, text: string) => {
@@ -172,10 +242,155 @@ export function useVoiceConversation({
     [targetLanguage],
   )
 
+  const processRecording = useCallback(async (blob: Blob) => {
+    if (fatalListenRef.current || !handsFreeRef.current) return
+    if (blob.size < 800) {
+      busyRef.current = false
+      if (handsFreeRef.current && !busyRef.current) startListeningRef.current()
+      return
+    }
+    busyRef.current = true
+    clearListenIdleTimer()
+    setStatus('thinking')
+    patchVoiceDiagnostics({ recognitionRunning: false })
+    try {
+      logSpeech('whisper')
+      const result = await transcribeWithWhisper(blob)
+      logSpeech('transcript', result)
+      if (!result.text.trim()) {
+        busyRef.current = false
+        if (handsFreeRef.current) startListeningRef.current()
+        else setStatus('idle')
+        return
+      }
+      patchVoiceDiagnostics({
+        lastTranscript: result.text,
+        lastConfidence: result.confidence,
+        recognitionLanguage: 'whisper-1 mixed en/es',
+        lastRecognitionError: '',
+      })
+      await sendToKeaRef.current(result.text)
+    } catch (caught) {
+      busyRef.current = false
+      const message = caught instanceof Error ? caught.message : 'Could not transcribe speech'
+      logSpeech('error', message)
+      patchVoiceDiagnostics({ lastRecognitionError: message, recognitionRunning: false })
+      setError(message)
+      if (handsFreeRef.current) startListeningRef.current()
+      else setStatus('idle')
+    }
+  }, [clearListenIdleTimer])
+
+  const startListening = useCallback(() => {
+    if (busyRef.current || fatalListenRef.current) return
+    const stream = streamRef.current
+    if (!stream) return
+    try {
+      chunksRef.current = []
+      speechMsRef.current = 0
+      silenceMsRef.current = 0
+      stoppingRecordRef.current = false
+      recordStartedAtRef.current = performance.now()
+      const mime = pickRecorderMime()
+      const recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream)
+      recorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        stopAnalyser()
+        const blob = new Blob(chunksRef.current, {
+          type: recorder.mimeType || mime || 'audio/webm',
+        })
+        chunksRef.current = []
+        if (stoppingRecordRef.current) return
+        void processRecording(blob)
+      }
+      recorder.start(80)
+
+      let context = audioContextRef.current
+      if (!context || context.state === 'closed') {
+        context = new AudioContext()
+        audioContextRef.current = context
+      }
+      if (context.state === 'suspended') void context.resume()
+      const source = context.createMediaStreamSource(stream)
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 1024
+      source.connect(analyser)
+      sourceRef.current = source
+      analyserRef.current = analyser
+      const samples = new Uint8Array(analyser.fftSize)
+      let last = performance.now()
+      const finishForAnswer = () => {
+        if (recorder.state !== 'recording') return
+        stopAnalyser()
+        busyRef.current = true
+        setStatus('thinking')
+        try {
+          recorder.requestData()
+        } catch {
+          // Some engines flush on stop only.
+        }
+        recorder.stop()
+      }
+      const tick = (now: number) => {
+        rafRef.current = requestAnimationFrame(tick)
+        analyser.getByteTimeDomainData(samples)
+        let sum = 0
+        for (const value of samples) {
+          const n = (value - 128) / 128
+          sum += n * n
+        }
+        const rms = Math.sqrt(sum / samples.length)
+        const delta = now - last
+        last = now
+        if (rms > SPEECH_RMS) {
+          speechMsRef.current += delta
+          silenceMsRef.current = 0
+          lastActivityAtRef.current = now
+          armListenIdle()
+        } else if (speechMsRef.current > MIN_SPEECH_MS) {
+          silenceMsRef.current += delta
+          if (silenceMsRef.current >= answerSilenceMsRef.current) {
+            finishForAnswer()
+            return
+          }
+        }
+        if (now - recordStartedAtRef.current >= MAX_RECORD_MS) {
+          finishForAnswer()
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+
+      logSpeech('start', 'whisper-1')
+      patchVoiceDiagnostics({
+        recognitionAvailable: true,
+        recognitionRunning: true,
+        recognitionLanguage: 'whisper-1 mixed en/es',
+        lastRecognitionError: '',
+      })
+      setStatus('listening')
+      setError(null)
+      lastActivityAtRef.current = performance.now()
+      armListenIdle()
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught)
+      logSpeech('error', message)
+      patchVoiceDiagnostics({ recognitionRunning: false, lastRecognitionError: message })
+      setError('Microphone recording could not start.')
+    }
+  }, [armListenIdle, processRecording, stopAnalyser])
+
+  useEffect(() => {
+    startListeningRef.current = startListening
+  }, [startListening])
+
   const speakReply = useCallback(
     (text: string) => {
       busyRef.current = true
-      recognitionRef.current?.stop()
       setStatus('speaking')
       setMessages((current) =>
         current.map((item, index) => ({
@@ -183,46 +398,48 @@ export function useVoiceConversation({
           active: index === current.length - 1 && item.speaker === 'kea',
         })),
       )
-      speakText(text, {
+      patchVoiceDiagnostics({ lastSpeechOutput: text, recognitionRunning: false })
+      logSpeech('speaking')
+      void speakKeaLine(text, {
         lang: getLanguage(targetLanguage).speechLocale,
-        rate,
-        voiceURI: voiceURI || undefined,
         onend: () => {
           busyRef.current = false
           setMessages((current) =>
             current.map((item) => ({ ...item, active: false })),
           )
           if (handsFreeRef.current) {
-            startListening()
+            logSpeech('listening again')
+            window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
           } else {
             setStatus('idle')
           }
         },
         onerror: () => {
           busyRef.current = false
-          if (handsFreeRef.current) startListening()
-          else setStatus('idle')
+          if (handsFreeRef.current) {
+            window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+          } else setStatus('idle')
         },
       })
     },
-    [rate, startListening, targetLanguage, voiceURI],
+    [targetLanguage],
   )
 
   const sendToKea = useCallback(
     async (userText: string) => {
       busyRef.current = true
-      clearCommitTimer()
-      recognitionRef.current?.stop()
-      resetTurnBuffers()
+      clearListenIdleTimer()
       setStatus('thinking')
       const userMessage: TranscriptMessage = {
         id: crypto.randomUUID(),
         speaker: 'user',
         text: userText,
       }
+      historyRef.current = [...historyRef.current, userMessage]
       setMessages((current) => [...current, userMessage])
       captionSpanish(userMessage.id, userText)
       try {
+        logAi('request', userText)
         const reply = await askKea({
           nativeLanguage: NATIVE_NAMES[nativeLanguage],
           targetLanguage: getLanguage(targetLanguage).name,
@@ -230,6 +447,7 @@ export function useVoiceConversation({
           history: historyRef.current,
           userText,
         })
+        logAi('response', reply)
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',
@@ -238,20 +456,23 @@ export function useVoiceConversation({
         }
         setMessages((current) => [...current, keaMessage])
         captionSpanish(keaMessage.id, reply)
+        captureLearnRequest(userText, targetLanguage, reply)
+        touchChatTopic(userText, reply)
+        patchVoiceDiagnostics({ lastAiResponse: reply, lastTranscript: userText })
         speakReply(reply)
       } catch (caught) {
         busyRef.current = false
+        handsFreeRef.current = false
         setStatus('idle')
         setHandsFree(false)
-        setError(caught instanceof Error ? caught.message : 'KEA could not reply')
+        setError(caught instanceof Error ? caught.message : 'Kea could not reply')
       }
     },
     [
       captionSpanish,
-      clearCommitTimer,
+      clearListenIdleTimer,
       level,
       nativeLanguage,
-      resetTurnBuffers,
       speakReply,
       targetLanguage,
     ],
@@ -261,184 +482,65 @@ export function useVoiceConversation({
     sendToKeaRef.current = sendToKea
   }, [sendToKea])
 
-  const commitTurn = useCallback(() => {
-    if (busyRef.current || statusRef.current !== 'listening') return
-    if (vadSpeakingRef.current) return
-
-    const text = [finalTranscriptRef.current, interimTranscriptRef.current]
-      .filter(Boolean)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (!text) return
-
-    const spokenFor = speechStartedAtRef.current
-      ? performance.now() - speechStartedAtRef.current
-      : MIN_SPEECH_MS
-    if (spokenFor < MIN_SPEECH_MS) return
-
-    const quietFor = performance.now() - lastActivityAtRef.current
-    if (quietFor < SHORT_PAUSE_MS || quietFor < END_OF_TURN_SILENCE_MS) return
-
-    void sendToKeaRef.current(text)
-  }, [])
-
-  const scheduleCommit = useCallback(() => {
-    clearCommitTimer()
-    commitTimerRef.current = window.setTimeout(() => {
-      commitTimerRef.current = null
-      if (vadSpeakingRef.current) {
-        scheduleCommit()
-        return
-      }
-      commitTurn()
-    }, END_OF_TURN_SILENCE_MS)
-  }, [clearCommitTimer, commitTurn])
-
-  const noteSpeechActivity = useCallback(() => {
-    if (busyRef.current || statusRef.current !== 'listening') return
-    lastActivityAtRef.current = performance.now()
-    if (!speechStartedAtRef.current) speechStartedAtRef.current = performance.now()
-    scheduleCommit()
-  }, [scheduleCommit])
-
-  const watchMicLevel = useCallback(() => {
-    const analyser = analyserRef.current
-    const buffer = pcmRef.current
-    if (!analyser || !buffer) return
-
-    const loop = () => {
-      rafRef.current = requestAnimationFrame(loop)
-      if (busyRef.current || statusRef.current !== 'listening') {
-        vadSpeakingRef.current = false
-        return
-      }
-      const speaking = micRms(analyser, buffer) >= SPEECH_RMS_THRESHOLD
-      if (speaking) {
-        vadSpeakingRef.current = true
-        lastActivityAtRef.current = performance.now()
-        if (!speechStartedAtRef.current) {
-          speechStartedAtRef.current = performance.now()
-        }
-        clearCommitTimer()
-        return
-      }
-      if (vadSpeakingRef.current) {
-        vadSpeakingRef.current = false
-        lastActivityAtRef.current = performance.now()
-        scheduleCommit()
-      }
-    }
-    rafRef.current = requestAnimationFrame(loop)
-  }, [clearCommitTimer, scheduleCommit])
-
-  const attachRecognition = useCallback(() => {
-    const recognition = getSpeechRecognition()
-    if (!recognition) {
-      setError('Speech recognition needs Chrome or Edge on this device.')
-      return null
-    }
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.onresult = (event) => {
-      if (busyRef.current) return
-      let nextInterim = ''
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const piece = event.results[index][0].transcript.trim()
-        if (!piece) continue
-        if (event.results[index].isFinal) {
-          finalTranscriptRef.current = `${finalTranscriptRef.current} ${piece}`.trim()
-        } else {
-          nextInterim += `${piece} `
-        }
-      }
-      interimTranscriptRef.current = nextInterim.trim()
-      const display = [finalTranscriptRef.current, interimTranscriptRef.current]
-        .filter(Boolean)
-        .join(' ')
-      setInterim(display)
-      noteSpeechActivity()
-    }
-    recognition.onerror = (event) => {
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setError('Microphone permission is needed for KEA to listen.')
-        setHandsFree(false)
-        setStatus('idle')
-        return
-      }
-      if (event.error === 'no-speech' || event.error === 'aborted') return
-      setError('Listening was interrupted. Tap the microphone to try again.')
-    }
-    recognition.onend = () => {
-      if (handsFreeRef.current && !busyRef.current && statusRef.current !== 'idle') {
-        startListening()
-      }
-    }
-    recognitionRef.current = recognition
-    return recognition
-  }, [noteSpeechActivity, startListening])
-
   const start = useCallback(async () => {
     setError(null)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-      })
-      streamRef.current = stream
-      const audioContext = new AudioContext()
-      await audioContext.resume()
-      const analyser = audioContext.createAnalyser()
-      analyser.fftSize = 1024
-      analyser.smoothingTimeConstant = 0.35
-      audioContext.createMediaStreamSource(stream).connect(analyser)
-      audioContextRef.current = audioContext
-      analyserRef.current = analyser
-      pcmRef.current = new Uint8Array(analyser.fftSize)
-    } catch {
-      setError('Microphone permission is needed for KEA to listen.')
+    fatalListenRef.current = false
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError('This browser cannot record the microphone for Whisper.')
+      patchVoiceDiagnostics({ recognitionAvailable: false })
       return
     }
-    attachRecognition()
-    setHandsFree(true)
-    startListening()
-    watchMicLevel()
-  }, [attachRecognition, startListening, watchMicLevel])
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+      patchVoiceDiagnostics({ recognitionAvailable: true })
+      handsFreeRef.current = true
+      setHandsFree(true)
+      startListening()
+    } catch {
+      fatalListenRef.current = true
+      setError('Microphone permission is needed for Kea to listen.')
+      patchVoiceDiagnostics({
+        recognitionAvailable: false,
+        lastRecognitionError: 'not-allowed',
+      })
+    }
+  }, [startListening])
 
   const stop = useCallback(() => {
+    fatalListenRef.current = true
+    handsFreeRef.current = false
     setHandsFree(false)
     busyRef.current = false
-    clearCommitTimer()
-    recognitionRef.current?.abort()
-    stopSpeech()
-    resetTurnBuffers()
+    stoppingRecordRef.current = true
+    clearListenIdleTimer()
+    clearRestartTimer()
+    stopKeaSpeech()
     teardownAudio()
     setStatus('idle')
-  }, [clearCommitTimer, resetTurnBuffers, teardownAudio])
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   const toggle = useCallback(() => {
     if (handsFree || status !== 'idle') stop()
     else void start()
   }, [handsFree, start, status, stop])
 
-  const liveMessages = interim
-    ? [
-        ...messages,
-        {
-          id: 'interim',
-          speaker: 'user' as const,
-          text: interim,
-          interim: true,
-        },
-      ]
-    : messages
-
   return {
     status,
-    messages: liveMessages,
+    messages,
     error,
     voices,
-    voiceURI,
-    setVoiceURI,
+    characterId,
+    setCharacter: (id: VoicePersonalityId) => {
+      setCharacterId(id)
+      setRate(getVoicePersonality(id).rate)
+      try {
+        localStorage.setItem(CHARACTER_KEY, id)
+      } catch {
+        // ignore
+      }
+    },
     rate,
     setRate,
     handsFree,
@@ -446,6 +548,6 @@ export function useVoiceConversation({
     stop,
     pauseSpeech,
     resumeSpeech,
-    stopSpeech,
+    stopSpeech: stopKeaSpeech,
   }
 }

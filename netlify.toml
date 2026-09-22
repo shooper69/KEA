@@ -1,3 +1,6 @@
+# Kea only: Netlify site keachat · https://kea.chat · GitHub shooper69/KEA
+# Do not link this directory to any other Netlify site.
+
 [build]
   command = "npm run build"
   publish = "dist"
@@ -8,6 +11,21 @@
 [[redirects]]
   from = "/api/chat"
   to = "/.netlify/functions/chat"
+  status = 200
+
+[[redirects]]
+  from = "/api/transcribe"
+  to = "/.netlify/functions/transcribe"
+  status = 200
+
+[[redirects]]
+  from = "/api/tts"
+  to = "/.netlify/functions/tts"
+  status = 200
+
+[[redirects]]
+  from = "/api/billing/*"
+  to = "/.netlify/functions/billing/:splat"
   status = 200
 
 [[redirects]]

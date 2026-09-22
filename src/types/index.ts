@@ -1,5 +1,5 @@
-export type LanguageCode = 'es' | 'fr' | 'de'
-export type NativeLanguageCode = 'en' | LanguageCode
+export type LanguageCode = 'en' | 'es' | 'fr' | 'de' | 'ru'
+export type NativeLanguageCode = LanguageCode
 export type LearnerLevel = 'beginner' | 'intermediate' | 'advanced'
 
 export interface LanguageOption {
@@ -10,19 +10,30 @@ export interface LanguageOption {
 }
 
 export type VoicePersonalityId =
-  | 'wise-male'
-  | 'wise-female'
-  | 'warm-female'
-  | 'calm-male'
+  | 'luna'
+  | 'mira'
+  | 'sage'
+  | 'rowan'
+  | 'theo'
 
 export interface VoicePersonality {
   id: VoicePersonalityId
-  label: string
-  description: string
+  name: string
+  style: string
+  gender: 'female' | 'male'
+  rate: number
+  samples: Partial<Record<LanguageCode, string>>
 }
 
 /** Future OpenAI GPT voice session. Cloud motion follows this state. */
-export type VoicePresenceState = 'idle' | 'listening' | 'thinking' | 'speaking'
+export type VoicePresenceState =
+  | 'idle'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+export type SkyTheme = 'clouds' | 'weather'
+export type ChatKeep = 'device' | 'cloud'
+
 
 export type TranscriptSpeaker = 'user' | 'kea'
 
@@ -33,6 +44,8 @@ export interface TranscriptMessage {
   english?: string
   interim?: boolean
   active?: boolean
+  confidence?: number
+  pending?: boolean
 }
 
 export interface VocabularyMemoryItem {
@@ -41,6 +54,27 @@ export interface VocabularyMemoryItem {
   translation: string
   languageCode: LanguageCode
   successfulUses: number
+}
+
+export interface LearnListItem {
+  id: string
+  term: string
+  translation: string
+  languageCode: LanguageCode
+  createdAt: string
+  lastReviewedAt: string
+  practiceCount: number
+  status: 'learning' | 'reinforced'
+}
+
+export interface ChatTopic {
+  id: string
+  title: string
+  nativeTitle: string
+  summary: string
+  firstDiscussedAt: string
+  lastDiscussedAt: string
+  discussionCount: number
 }
 
 export interface PlaceholderUser {

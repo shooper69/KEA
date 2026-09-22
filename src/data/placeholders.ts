@@ -6,8 +6,9 @@ import type {
   VocabularyMemoryItem,
 } from '../types'
 
-export const PLACEHOLDER_TRANSCRIPTS: Record<LanguageCode, TranscriptMessage[]> =
-  {
+export const PLACEHOLDER_TRANSCRIPTS: Partial<
+  Record<LanguageCode, TranscriptMessage[]>
+> = {
     es: [
       {
         id: 'es-1',
@@ -168,4 +169,4 @@ export const PLACEHOLDER_USERS: PlaceholderUser[] = [
   },
 ]
 
-export const FUTURE_ADMIN_EMAIL = 'ghooper@gmail.com'
+export const FUTURE_ADMIN_EMAIL = 'simonghooper@gmail.com'

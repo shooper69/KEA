@@ -1,26 +1,14 @@
+import { DEFAULT_KEA_MASTER_DEFINITION } from '../../src/data/keaMasterDefinition'
+import {
+  clampAverageReplyWords,
+  DEFAULT_AVERAGE_REPLY_WORDS,
+  maxTokensForAverageWords,
+} from '../../src/data/keaSpeech'
+import { buildKeaSystemPrompt } from '../../src/server/keaPrompt'
+
 type ChatEvent = {
   httpMethod: string
   body: string | null
-}
-
-function systemPrompt(
-  nativeLanguage: string,
-  targetLanguage: string,
-  level: string,
-) {
-  return `You are KEA, a patient, intelligent and encouraging language tutor.
-Your job is to help users learn through natural conversation, like a foreign friend chatting about life.
-
-Rules:
-- Speak primarily in ${targetLanguage}.
-- Keep language appropriate to a ${level} learner.
-- Gently correct mistakes, then continue the conversation.
-- Encourage conversation rather than lectures.
-- Keep responses concise and natural (two to five short sentences).
-- Explain grammar only when necessary.
-- If the learner is struggling, temporarily switch to ${nativeLanguage} to help understanding, then return to ${targetLanguage}.
-- Always end in a way that invites another spoken reply.
-- The learner's native language is ${nativeLanguage}.`
 }
 
 export async function handler(event: ChatEvent) {
@@ -45,6 +33,10 @@ export async function handler(event: ChatEvent) {
     targetLanguage: string
     level: string
     text?: string
+    masterDefinition?: string
+    aboutKea?: string
+    memoryBlock?: string
+    averageReplyWords?: number
     messages: Array<{ role: 'user' | 'assistant'; content: string }>
   }
 
@@ -54,6 +46,9 @@ export async function handler(event: ChatEvent) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }
   }
 
+  const averageReplyWords = clampAverageReplyWords(
+    payload.averageReplyWords ?? DEFAULT_AVERAGE_REPLY_WORDS,
+  )
   const isTranslate = payload.mode === 'translate'
   if (isTranslate && !payload.text?.trim()) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Nothing to translate' }) }
@@ -70,6 +65,7 @@ export async function handler(event: ChatEvent) {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         temperature: isTranslate ? 0.2 : 0.7,
+        max_tokens: isTranslate ? 200 : maxTokensForAverageWords(averageReplyWords),
         messages: isTranslate
           ? [
               {
@@ -82,11 +78,17 @@ export async function handler(event: ChatEvent) {
           : [
               {
                 role: 'system',
-                content: systemPrompt(
-                  payload.nativeLanguage,
-                  payload.targetLanguage,
-                  payload.level ?? 'intermediate',
-                ),
+                content: buildKeaSystemPrompt({
+                  nativeLanguage: payload.nativeLanguage,
+                  targetLanguage: payload.targetLanguage,
+                  level: payload.level ?? 'intermediate',
+                  masterDefinition:
+                    payload.masterDefinition?.trim() ||
+                    DEFAULT_KEA_MASTER_DEFINITION,
+                  aboutKea: payload.aboutKea,
+                  memoryBlock: payload.memoryBlock,
+                  averageReplyWords,
+                }),
               },
               ...(payload.messages ?? []),
             ],
@@ -110,7 +112,7 @@ export async function handler(event: ChatEvent) {
 
   const reply = data.choices?.[0]?.message?.content?.trim()
   if (!reply) {
-    return { statusCode: 502, body: JSON.stringify({ error: 'Empty reply from KEA' }) }
+    return { statusCode: 502, body: JSON.stringify({ error: 'Empty reply from Kea' }) }
   }
 
   return {

@@ -1,9 +1,11 @@
+import { VOICE_PERSONALITIES } from '../../config/voices'
+import type { VoicePersonalityId } from '../../types'
+
 interface VoiceSettingsPanelProps {
   open: boolean
   onClose: () => void
-  voices: SpeechSynthesisVoice[]
-  voiceURI: string
-  onVoiceURI: (value: string) => void
+  characterId: VoicePersonalityId
+  onCharacter: (id: VoicePersonalityId) => void
   rate: number
   onRate: (value: number) => void
   onPause: () => void
@@ -14,9 +16,8 @@ interface VoiceSettingsPanelProps {
 export function VoiceSettingsPanel({
   open,
   onClose,
-  voices,
-  voiceURI,
-  onVoiceURI,
+  characterId,
+  onCharacter,
   rate,
   onRate,
   onPause,
@@ -25,38 +26,40 @@ export function VoiceSettingsPanel({
 }: VoiceSettingsPanelProps) {
   if (!open) return null
 
-  const targetVoices = voices.filter((voice) =>
-    /es|fr|de|en/i.test(voice.lang),
-  )
-  const options = targetVoices.length > 0 ? targetVoices : voices
-
   return (
-    <aside className="word-memory" aria-label="Voice settings">
-      <div className="word-memory__header">
+    <aside className="voice-cast" aria-label="Choose a voice character">
+      <div className="voice-cast__header">
         <div>
-          <h2>Voice</h2>
-          <p>Choose a browser voice, then tap the microphone to talk.</p>
+          <p className="voice-cast__kicker">Kea’s mood</p>
+          <h2>Choose a mood</h2>
+          <p>
+            It is still Kea. Each mood has a different manner.
+          </p>
         </div>
-        <button type="button" className="word-memory__close" onClick={onClose}>
+        <button type="button" className="voice-cast__close" onClick={onClose}>
           Close
         </button>
       </div>
-      <label className="voice-settings__label">
-        Voice
-        <select
-          value={voiceURI}
-          onChange={(event) => onVoiceURI(event.target.value)}
-        >
-          <option value="">Match the language</option>
-          {options.map((voice) => (
-            <option key={voice.voiceURI} value={voice.voiceURI}>
-              {voice.name} ({voice.lang})
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="voice-settings__label">
-        Speed {rate.toFixed(2)}
+      <div className="voice-cast__list" role="listbox" aria-label="Moods">
+        {VOICE_PERSONALITIES.map((mood) => {
+          const selected = mood.id === characterId
+          return (
+            <button
+              key={mood.id}
+              type="button"
+              role="option"
+              aria-selected={selected}
+              className={`voice-cast__choice${selected ? ' is-chosen' : ''}`}
+              onClick={() => onCharacter(mood.id)}
+            >
+              <span className="voice-cast__name">{mood.name}</span>
+              <span className="voice-cast__style">{mood.style}</span>
+            </button>
+          )
+        })}
+      </div>
+      <label className="voice-cast__pace">
+        <span>Pace</span>
         <input
           type="range"
           min="0.7"
@@ -66,15 +69,15 @@ export function VoiceSettingsPanel({
           onChange={(event) => onRate(Number(event.target.value))}
         />
       </label>
-      <div className="voice-settings__row">
+      <div className="voice-cast__row">
         <button type="button" onClick={onPause}>
-          Pause
+          Hush
         </button>
         <button type="button" onClick={onResume}>
-          Resume
+          Go on
         </button>
         <button type="button" onClick={onStop}>
-          Stop
+          Rest
         </button>
       </div>
     </aside>
