@@ -40,9 +40,11 @@ export async function handler(event: ChatEvent) {
   }
 
   let payload: {
+    mode?: 'chat' | 'translate'
     nativeLanguage: string
     targetLanguage: string
     level: string
+    text?: string
     messages: Array<{ role: 'user' | 'assistant'; content: string }>
   }
 
@@ -50,6 +52,11 @@ export async function handler(event: ChatEvent) {
     payload = JSON.parse(event.body ?? '{}') as typeof payload
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }
+  }
+
+  const isTranslate = payload.mode === 'translate'
+  if (isTranslate && !payload.text?.trim()) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Nothing to translate' }) }
   }
 
   const openaiResponse = await fetch(
@@ -62,18 +69,27 @@ export async function handler(event: ChatEvent) {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt(
-              payload.nativeLanguage,
-              payload.targetLanguage,
-              payload.level ?? 'intermediate',
-            ),
-          },
-          ...(payload.messages ?? []),
-        ],
+        temperature: isTranslate ? 0.2 : 0.7,
+        messages: isTranslate
+          ? [
+              {
+                role: 'system',
+                content:
+                  'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
+              },
+              { role: 'user', content: payload.text?.trim() ?? '' },
+            ]
+          : [
+              {
+                role: 'system',
+                content: systemPrompt(
+                  payload.nativeLanguage,
+                  payload.targetLanguage,
+                  payload.level ?? 'intermediate',
+                ),
+              },
+              ...(payload.messages ?? []),
+            ],
       }),
     },
   )
@@ -97,5 +113,8 @@ export async function handler(event: ChatEvent) {
     return { statusCode: 502, body: JSON.stringify({ error: 'Empty reply from KEA' }) }
   }
 
-  return { statusCode: 200, body: JSON.stringify({ reply }) }
+  return {
+    statusCode: 200,
+    body: JSON.stringify(isTranslate ? { translation: reply } : { reply }),
+  }
 }

@@ -33,3 +33,23 @@ export async function askKea(options: {
   }
   return data.reply
 }
+
+export async function translateSpanishToEnglish(text: string): Promise<string> {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'translate',
+      text,
+    }),
+  })
+
+  const data = (await response.json()) as {
+    translation?: string
+    error?: string
+  }
+  if (!response.ok || !data.translation) {
+    throw new Error(data.error ?? 'Translation failed')
+  }
+  return data.translation
+}

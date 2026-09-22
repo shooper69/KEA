@@ -7,10 +7,12 @@ interface ChatTurn {
 }
 
 interface ChatRequest {
-  nativeLanguage: string
-  targetLanguage: string
-  level: string
-  messages: ChatTurn[]
+  mode?: 'chat' | 'translate'
+  nativeLanguage?: string
+  targetLanguage?: string
+  level?: string
+  messages?: ChatTurn[]
+  text?: string
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -55,6 +57,37 @@ export async function handleKeaChat(
     return
   }
 
+  const isTranslate = payload.mode === 'translate'
+  const openaiMessages = isTranslate
+    ? [
+        {
+          role: 'system' as const,
+          content:
+            'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
+        },
+        {
+          role: 'user' as const,
+          content: payload.text?.trim() ?? '',
+        },
+      ]
+    : [
+        {
+          role: 'system' as const,
+          content: buildKeaSystemPrompt({
+            nativeLanguage: payload.nativeLanguage ?? 'English',
+            targetLanguage: payload.targetLanguage ?? 'Spanish',
+            level: payload.level ?? 'intermediate',
+          }),
+        },
+        ...(payload.messages ?? []),
+      ]
+
+  if (isTranslate && !payload.text?.trim()) {
+    res.statusCode = 400
+    res.end(JSON.stringify({ error: 'Nothing to translate' }))
+    return
+  }
+
   const openaiResponse = await fetch(
     'https://api.openai.com/v1/chat/completions',
     {
@@ -65,18 +98,8 @@ export async function handleKeaChat(
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'system',
-            content: buildKeaSystemPrompt({
-              nativeLanguage: payload.nativeLanguage,
-              targetLanguage: payload.targetLanguage,
-              level: payload.level ?? 'intermediate',
-            }),
-          },
-          ...payload.messages,
-        ],
+        temperature: isTranslate ? 0.2 : 0.7,
+        messages: openaiMessages,
       }),
     },
   )
@@ -104,5 +127,7 @@ export async function handleKeaChat(
   }
 
   res.statusCode = 200
-  res.end(JSON.stringify({ reply }))
+  res.end(
+    JSON.stringify(isTranslate ? { translation: reply } : { reply }),
+  )
 }

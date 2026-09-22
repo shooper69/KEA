@@ -13,21 +13,26 @@ export const PLACEHOLDER_TRANSCRIPTS: Record<LanguageCode, TranscriptMessage[]> 
         id: 'es-1',
         speaker: 'user',
         text: 'Hoy fue un día largo. No sé la palabra for supermarket.',
+        english: 'Today was a long day. I don’t know the word for supermarket.',
       },
       {
         id: 'es-2',
         speaker: 'kea',
         text: 'Supermarket en español es supermercado. Cuéntame, ¿fuiste después del trabajo?',
+        english:
+          'Supermarket in Spanish is supermercado. Tell me, did you go after work?',
       },
       {
         id: 'es-3',
         speaker: 'user',
         text: 'Sí. El supermercado estaba lleno, pero tranquilo.',
+        english: 'Yes. The supermarket was full, but calm.',
       },
       {
         id: 'es-4',
         speaker: 'kea',
         text: 'Me alegra. ¿Qué vas a cocinar esta noche?',
+        english: 'I’m glad. What are you going to cook tonight?',
       },
     ],
     fr: [

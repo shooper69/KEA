@@ -30,6 +30,7 @@ export interface TranscriptMessage {
   id: string
   speaker: TranscriptSpeaker
   text: string
+  english?: string
   interim?: boolean
   active?: boolean
 }

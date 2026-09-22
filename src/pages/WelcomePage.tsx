@@ -12,10 +12,15 @@ export function WelcomePage() {
   const { languageCode, setLanguageCode } = useSession()
   const [selected, setSelected] = useState<LanguageCode | null>(languageCode)
 
-  function continueToConversation() {
+  function startTalking() {
     if (!selected) return
     setLanguageCode(selected)
     navigate('/conversation')
+  }
+
+  function openMemory() {
+    if (selected) setLanguageCode(selected)
+    navigate('/memory')
   }
 
   return (
@@ -23,10 +28,10 @@ export function WelcomePage() {
       <CloudAtmosphere presence="idle" />
       <div className="welcome-screen__content">
         <KeaMark className="kea-mark--welcome" />
-        <h1>Choose your language</h1>
+        <h1>Talk with KEA</h1>
         <p className="welcome-screen__lede">
-          Then talk about your day. KEA is a friend who answers in that
-          language, and helps only when a word is missing.
+          A friend who speaks your language, and helps only when a word is
+          missing.
         </p>
         <div className="language-grid">
           {SUPPORTED_LANGUAGES.map((language) => {
@@ -45,9 +50,14 @@ export function WelcomePage() {
             )
           })}
         </div>
-        <Button type="button" disabled={!selected} onClick={continueToConversation}>
-          Continue
-        </Button>
+        <div className="welcome-screen__actions">
+          <Button type="button" disabled={!selected} onClick={startTalking}>
+            Start Talking
+          </Button>
+          <Button type="button" variant="ghost" onClick={openMemory}>
+            Memory Library
+          </Button>
+        </div>
       </div>
     </main>
   )
