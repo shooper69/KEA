@@ -253,7 +253,11 @@ export function WelcomePage() {
           role="dialog"
           aria-modal="true"
           aria-label={authOpen === 'login' ? 'Sign in' : 'Create account'}
-          onClick={() => setAuthOpen(false)}
+          onPointerDown={(event) => {
+            if (event.target !== event.currentTarget) return
+            if (event.pointerType !== 'mouse') return
+            setAuthOpen(false)
+          }}
         >
           <div
             className={`auth-modal__card${

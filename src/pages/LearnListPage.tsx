@@ -1,6 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getLearnList } from '../architecture/companionMemory'
+import {
+  getLearnList,
+  subscribeLearnMemory,
+} from '../architecture/companionMemory'
+import { getLearnMasteryUses } from '../data/keaLearnMastery'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { KeaMark } from '../components/companion/KeaMark'
 import { CompanionNav } from '../components/companion/CompanionNav'
@@ -9,7 +13,18 @@ import { useSession } from '../context/SessionContext'
 export function LearnListPage() {
   const { languageCode } = useSession()
   const [query, setQuery] = useState('')
-  const [items] = useState(() => getLearnList())
+  const [items, setItems] = useState(() => getLearnList())
+  const need = getLearnMasteryUses()
+
+  useEffect(() => {
+    const refresh = () => setItems(getLearnList())
+    const stop = subscribeLearnMemory(refresh)
+    window.addEventListener('kea-learn-memory', refresh)
+    return () => {
+      stop()
+      window.removeEventListener('kea-learn-memory', refresh)
+    }
+  }, [])
 
   const words = useMemo(() => {
     const scoped = languageCode
@@ -37,8 +52,7 @@ export function LearnListPage() {
         <h1>Learn List</h1>
         <p className="memory-library__lede">
           The following is a list of words and phrases that you have struggled
-          with. They get removed one by one once Kea sees that you have become
-          proficient in their use.
+          with. They leave once Kea has heard you use them well {need} times.
         </p>
         <label className="memory-library__search">
           <span className="visually-hidden">Search Learn List</span>

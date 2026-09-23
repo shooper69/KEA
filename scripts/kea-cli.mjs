@@ -37,6 +37,11 @@ Do not use the default supabase/netlify login; those are other products.
 `)
 }
 
+function read(rel) {
+  const full = path.join(root, rel)
+  return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : ''
+}
+
 function runGuard() {
   const result = spawnSync(
     process.execPath,
@@ -102,6 +107,58 @@ function assertSafeArgs(list) {
   }
 }
 
+function pinnedSupabaseArgs(list) {
+  const cleaned = []
+  for (let i = 0; i < list.length; i++) {
+    if (list[i] === '--project-ref') {
+      i += 1
+      continue
+    }
+    cleaned.push(list[i])
+  }
+  const head = cleaned[0]
+  if (head === 'link') {
+    return [
+      'link',
+      '--project-ref',
+      allow.supabase.projectRef,
+      '--yes',
+      ...cleaned.slice(1),
+    ]
+  }
+  if (head === 'db' || head === 'migration' || head === 'inspect') {
+    const linked = read(path.join('supabase', '.temp', 'project-ref')).trim()
+    if (linked !== allow.supabase.projectRef) {
+      console.error(
+        `Refused: linked project is ${linked || 'none'}, not Kea Production (${allow.supabase.projectRef}).`,
+      )
+      process.exit(1)
+    }
+    const hasTarget =
+      cleaned.includes('--linked') ||
+      cleaned.includes('--local') ||
+      cleaned.includes('--db-url')
+    return hasTarget ? cleaned : [...cleaned, '--linked']
+  }
+  if (head && head !== 'projects' && head !== 'orgs') {
+    const linked = read(path.join('supabase', '.temp', 'project-ref')).trim()
+    if (linked && linked !== allow.supabase.projectRef) {
+      console.error(
+        `Refused: linked project is ${linked}, not Kea Production (${allow.supabase.projectRef}).`,
+      )
+      process.exit(1)
+    }
+    if (!linked) {
+      console.error(
+        `Link Kea Production first: npm run kea:supabase -- link`,
+      )
+      process.exit(1)
+    }
+    console.log(`Using linked Kea Production ${allow.supabase.projectRef}`)
+  }
+  return cleaned
+}
+
 function requireSupabaseToken() {
   if (readToken('supabase-access-token')) return
   console.error(`No Kea Supabase token.
@@ -142,15 +199,6 @@ function assertSupabaseIdentity() {
     process.exit(1)
   }
   const refs = projects.map((item) => item.ref || item.id)
-  const names = projects.map((item) => String(item.name || ''))
-  if (refs.some((ref) => allow.forbidden.supabaseProjects.includes(ref))) {
-    console.error('Refused: this Supabase token can see a non-Kea project. Use a token from the Kea Production account only.')
-    process.exit(1)
-  }
-  if (names.some((name) => allow.forbidden.names.some((bad) => name.toLowerCase().includes(bad)))) {
-    console.error('Refused: this Supabase token can see a non-Kea project name.')
-    process.exit(1)
-  }
   if (!refs.includes(allow.supabase.projectRef)) {
     console.error(`Refused: token does not include Kea Production (${allow.supabase.projectRef}).`)
     process.exit(1)
@@ -194,16 +242,11 @@ if (tool === 'supabase') {
   }
   requireSupabaseToken()
   assertSupabaseIdentity()
-  if (args[0] === 'link') {
-    run('supabase', [
-      'link',
-      '--project-ref',
-      allow.supabase.projectRef,
-      '--yes',
-      ...args.slice(1).filter((arg) => arg !== '--project-ref' && !/^[a-z]{20}$/.test(arg)),
-    ])
+  const pinned = pinnedSupabaseArgs(args.length ? args : ['projects', 'list'])
+  if (pinned[0] === 'link') {
+    console.log(`Linking Kea Production ${allow.supabase.projectRef}`)
   }
-  run('supabase', args.length ? args : ['projects', 'list'])
+  run('supabase', pinned)
 }
 
 if (tool === 'netlify') {

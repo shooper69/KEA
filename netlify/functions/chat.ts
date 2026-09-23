@@ -65,7 +65,9 @@ export async function handler(event: ChatEvent) {
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         temperature: isTranslate ? 0.2 : 0.7,
-        max_tokens: isTranslate ? 200 : maxTokensForAverageWords(averageReplyWords),
+        max_tokens: isTranslate
+          ? 200
+          : maxTokensForAverageWords(averageReplyWords) + 120,
         messages: isTranslate
           ? [
               {

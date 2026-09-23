@@ -9,6 +9,7 @@
     "build": "npm run guard && tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "kea:auth-emails": "node scripts/kea-auth-emails.mjs && node scripts/kea-sync-auth-emails.mjs",
     "kea:supabase": "node scripts/kea-cli.mjs supabase",
     "kea:netlify": "node scripts/kea-cli.mjs netlify",
     "kea:github": "node scripts/kea-cli.mjs github"

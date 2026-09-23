@@ -6,6 +6,14 @@ import {
   saveAboutKea,
 } from '../data/keaAbout'
 import {
+  DEFAULT_LEARN_MASTERY_USES,
+  clampLearnMasteryUses,
+  getLearnMasteryUses,
+  MAX_LEARN_MASTERY_USES,
+  MIN_LEARN_MASTERY_USES,
+  saveLearnMasteryUses,
+} from '../data/keaLearnMastery'
+import {
   DEFAULT_AVERAGE_REPLY_WORDS,
   clampAverageReplyWords,
   getAverageReplyWords,
@@ -18,6 +26,7 @@ export function AdminAboutPage() {
   const [about, setAbout] = useState(getAboutKea)
   const [saved, setSaved] = useState(false)
   const [averageWords, setAverageWords] = useState(getAverageReplyWords)
+  const [masteryUses, setMasteryUses] = useState(getLearnMasteryUses)
 
   return (
     <section className="settings-card">
@@ -62,6 +71,41 @@ export function AdminAboutPage() {
           <span className="kea-length__unit">words</span>
         </div>
       </label>
+      <label className="welcome-field kea-length">
+        <span>Learn List — uses before a word leaves</span>
+        <p className="settings-note">
+          When Kea hears a struggling word used well this many times, it leaves
+          the Learn List and the number by the photo goes up by one. Default is{' '}
+          {DEFAULT_LEARN_MASTERY_USES}.
+        </p>
+        <div className="kea-length__row">
+          <input
+            type="range"
+            min={MIN_LEARN_MASTERY_USES}
+            max={MAX_LEARN_MASTERY_USES}
+            value={masteryUses}
+            aria-valuetext={`${masteryUses} times`}
+            onChange={(event) => {
+              const next = clampLearnMasteryUses(Number(event.target.value))
+              setMasteryUses(next)
+              saveLearnMasteryUses(next)
+            }}
+          />
+          <input
+            type="number"
+            min={MIN_LEARN_MASTERY_USES}
+            max={MAX_LEARN_MASTERY_USES}
+            value={masteryUses}
+            aria-label="Correct uses before a word leaves the Learn List"
+            onChange={(event) => {
+              const next = clampLearnMasteryUses(Number(event.target.value))
+              setMasteryUses(next)
+              saveLearnMasteryUses(next)
+            }}
+          />
+          <span className="kea-length__unit">times</span>
+        </div>
+      </label>
       <textarea
         className="master-definition about-kea"
         aria-label="About Kea"
@@ -78,6 +122,7 @@ export function AdminAboutPage() {
           onClick={() => {
             saveAboutKea(about)
             saveAverageReplyWords(averageWords)
+            saveLearnMasteryUses(masteryUses)
             setSaved(true)
           }}
         >
@@ -91,6 +136,8 @@ export function AdminAboutPage() {
             setAbout(DEFAULT_ABOUT_KEA)
             setAverageWords(DEFAULT_AVERAGE_REPLY_WORDS)
             saveAverageReplyWords(DEFAULT_AVERAGE_REPLY_WORDS)
+            setMasteryUses(DEFAULT_LEARN_MASTERY_USES)
+            saveLearnMasteryUses(DEFAULT_LEARN_MASTERY_USES)
             setSaved(true)
           }}
         >

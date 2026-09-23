@@ -5,6 +5,8 @@ interface PasswordFieldProps {
   hideLabel?: boolean
   autoComplete?: string
   placeholder?: string
+  name?: string
+  enterKeyHint?: 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'
   value: string
   onChange: (value: string) => void
 }
@@ -14,6 +16,8 @@ export function PasswordField({
   hideLabel = false,
   autoComplete = 'current-password',
   placeholder,
+  name,
+  enterKeyHint,
   value,
   onChange,
 }: PasswordFieldProps) {
@@ -26,11 +30,19 @@ export function PasswordField({
       <span className="password-field__control">
         <input
           id={inputId}
+          name={name}
           type={visible ? 'text' : 'password'}
           autoComplete={autoComplete}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint={enterKeyHint}
           placeholder={placeholder}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={(event) => {
+            event.currentTarget.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }}
         />
         <button
           type="button"

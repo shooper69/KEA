@@ -19,16 +19,22 @@ export function KeaAurora() {
     const context = canvas.getContext('2d', { alpha: true })
     if (!context) return
 
+    const backingScale = () => {
+      const large = window.matchMedia('(min-width: 721px)').matches
+      if (large) return 0.5
+      return Math.min(1.5, window.devicePixelRatio || 1)
+    }
+
     const fit = () => {
       const parent = canvas.parentElement
       const width = parent?.clientWidth || window.innerWidth
       const height = parent?.clientHeight || window.innerHeight
-      const dpr = Math.min(1.5, window.devicePixelRatio || 1)
-      canvas.width = Math.max(1, Math.floor(width * dpr))
-      canvas.height = Math.max(1, Math.floor(height * dpr))
+      const scale = backingScale()
+      canvas.width = Math.max(1, Math.floor(width * scale))
+      canvas.height = Math.max(1, Math.floor(height * scale))
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
-      context.setTransform(dpr, 0, 0, dpr, 0, 0)
+      context.setTransform(scale, 0, 0, scale, 0, 0)
     }
 
     fit()

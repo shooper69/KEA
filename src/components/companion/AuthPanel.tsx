@@ -27,7 +27,6 @@ interface AuthPanelProps {
 export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   const navigate = useNavigate()
   const { setProfile, firstName, isSignedIn } = useSession()
-  const [goHome, setGoHome] = useState(false)
   const [view, setView] = useState<AuthView>(() =>
     isPasswordRecoveryLocation() ? 'reset' : initialView,
   )
@@ -49,10 +48,9 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   }, [initialView])
 
   useEffect(() => {
-    if (!goHome) return
     if (isPasswordRecoveryLocation()) return
     if (isSignedIn) navigate('/conversation', { replace: true })
-  }, [goHome, isSignedIn, navigate])
+  }, [isSignedIn, navigate])
 
   const spokenLabel = SUPPORTED_LANGUAGES.find((item) => item.code === spoken)
   const learningLabel = SUPPORTED_LANGUAGES.find((item) => item.code === learning)
@@ -118,8 +116,8 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setMessage('')
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
       })
       if (error || !data.session) {
         const raw =
@@ -135,8 +133,8 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
         setMessage(authMessage(error, 'Incorrect email or password.'))
         return
       }
-      setGoHome(true)
       setMessage('Signing you in…')
+      navigate('/conversation', { replace: true })
     } catch (caught) {
       setMessage(authMessage(caught, 'Could not sign in.'))
     } finally {
@@ -331,16 +329,29 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             <span className="visually-hidden">Email</span>
             <input
               type="email"
-              autoComplete="email"
+              name="email"
+              inputMode="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder="Email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              onFocus={(event) => {
+                event.currentTarget.scrollIntoView({
+                  block: 'center',
+                  behavior: 'smooth',
+                })
+              }}
             />
           </label>
           <PasswordField
             hideLabel
             label="Password"
+            name="password"
             autoComplete="current-password"
+            enterKeyHint="go"
             placeholder="Password"
             value={password}
             onChange={setPassword}

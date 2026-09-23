@@ -289,6 +289,29 @@ html.kea-motion .admin-tabs a:hover {
   );
 }
 
+@media (min-width: 721px) {
+  .welcome-screen::before,
+  .welcome-screen .cloud-atmosphere__wash {
+    inset: auto;
+    top: -20%;
+    left: -6%;
+    width: 220%;
+    height: 140%;
+    background-size: 50% 140%;
+    background-repeat: repeat-x;
+    background-position: 0 50%;
+    animation-name: kea-color-flow;
+    animation-timing-function: linear;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+  }
+
+  .welcome-screen .cloud-atmosphere--sunrise {
+    --tint: 34s;
+  }
+}
+
 .cloud-atmosphere {
   pointer-events: none;
   position: absolute;
@@ -1194,6 +1217,15 @@ html.kea-motion .admin-tabs a:hover {
   }
 }
 
+@keyframes kea-color-flow {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
 @keyframes cloud-tint-spectrum {
   0%,
   100% {
@@ -1448,7 +1480,7 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .auth-modal__card--compact {
-  width: min(16.25rem, 78%);
+  width: min(22.5rem, calc(100% - 1.25rem));
   max-height: min(88dvh, 36rem);
   padding: 1.15rem 1.15rem 1.2rem;
   border-radius: 1.2rem;
@@ -1890,7 +1922,14 @@ html.kea-motion .admin-tabs a:hover {
   margin: 0;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  overflow: visible;
+}
+
+.settings-screen__header,
+.memory-library__header {
+  overflow: visible;
+  align-items: flex-start;
 }
 
 .conversation-screen__header-actions {
@@ -1902,11 +1941,37 @@ html.kea-motion .admin-tabs a:hover {
 
 .companion-nav {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 0.45rem;
   min-width: 0;
+}
+
+.companion-nav__account {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.learn-grown-badge {
+  min-width: 2.35rem;
+  height: 2.35rem;
+  padding: 0 0.4rem;
+  border-radius: 0.55rem;
+  display: grid;
+  place-items: center;
+  background: rgba(28, 52, 72, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f7fbff;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .memory-button {
@@ -2925,7 +2990,7 @@ html.kea-motion .admin-tabs a:hover {
   }
 
   .auth-modal__card--compact {
-    width: min(16.5rem, 78%);
+    width: min(22rem, calc(100% - 1.5rem));
     padding: 1.15rem 1.1rem 1.15rem;
   }
 }

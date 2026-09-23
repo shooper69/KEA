@@ -1,11 +1,20 @@
+import { getLearnMasteryUses } from '../data/keaLearnMastery'
 import type { ChatTopic, LanguageCode, LearnListItem } from '../types'
 
 const LEARN_KEY = 'kea-learn-list'
+const MASTERED_KEY = 'kea-learn-mastered'
 const TOPICS_KEY = 'kea-chat-topics'
 const OPEN_TOPIC_KEY = 'kea-open-topic-id'
+const CHANGE_EVENT = 'kea-learn-memory'
 
 const LEARN_REQUEST =
   /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say/i
+
+const ASK_TERM =
+  /(?:how (?:do (?:you|i)|to) say|what does|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать)\s+["«“']?([^?"»”']+)/i
+
+const MEMORY_BLOCK =
+  /(?:\n|^)\s*<<<KEA_MEMORY\s*([\s\S]*?)\s*(?:>>>|KEA_MEMORY>>>)\s*$/i
 
 const SAMPLE_TOPICS: ChatTopic[] = [
   {
@@ -59,6 +68,21 @@ const SAMPLE_LEARN: LearnListItem[] = [
   },
 ]
 
+export interface MasteredLearnItem {
+  id: string
+  term: string
+  translation: string
+  languageCode: LanguageCode
+  masteredAt: string
+}
+
+export interface LearnMemorySignals {
+  add: Array<{ term: string; translation: string }>
+  used: string[]
+}
+
+const listeners = new Set<() => void>()
+
 function mergeById<T extends { id: string }>(stored: T[], samples: T[]) {
   const have = new Set(stored.map((item) => item.id))
   const missing = samples.filter((item) => !have.has(item.id))
@@ -79,11 +103,149 @@ function writeJson(key: string, value: unknown) {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
-export function getLearnList(): LearnListItem[] {
+function notifyLearnMemory() {
+  listeners.forEach((listen) => listen())
+  window.dispatchEvent(new Event(CHANGE_EVENT))
+}
+
+export function subscribeLearnMemory(listen: () => void) {
+  listeners.add(listen)
+  return () => {
+    listeners.delete(listen)
+  }
+}
+
+function normalizeTerm(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+function termKey(value: string) {
+  return normalizeTerm(value).toLowerCase()
+}
+
+const STOP_WORDS = new Set([
+  'about',
+  'this',
+  'that',
+  'with',
+  'from',
+  'have',
+  'what',
+  'when',
+  'como',
+  'qué',
+  'que',
+])
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function isCountableToken(value: string) {
+  const key = termKey(value)
+  if (key.length < 4) return false
+  return !STOP_WORDS.has(key)
+}
+
+function hasWord(haystack: string, needle: string) {
+  const n = normalizeTerm(needle)
+  if (!isCountableToken(n)) return false
+  const re = new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(n)}(?:$|[^\\p{L}\\p{N}])`,
+    'iu',
+  )
+  return re.test(haystack)
+}
+
+export function looksLikeLearnRequest(text: string) {
+  return LEARN_REQUEST.test(text)
+}
+
+function askedTerm(userText: string) {
+  const hit = userText.match(ASK_TERM)
+  if (hit?.[1]) return normalizeTerm(hit[1])
+  if (!looksLikeLearnRequest(userText)) return ''
+  return normalizeTerm(userText.replace(/[?¿¡!.,]/g, '')).slice(0, 48)
+}
+
+export function splitKeaReply(raw: string): {
+  reply: string
+  signals: LearnMemorySignals
+} {
+  const match = raw.match(MEMORY_BLOCK)
+  const empty: LearnMemorySignals = { add: [], used: [] }
+  if (!match) return { reply: raw.trim(), signals: empty }
+  const reply = raw.replace(MEMORY_BLOCK, '').trim()
+  try {
+    const parsed = JSON.parse(match[1] || '{}') as {
+      add?: Array<{ term?: string; translation?: string }>
+      used?: unknown[]
+    }
+    const add = (parsed.add ?? [])
+      .map((item) => ({
+        term: normalizeTerm(item.term ?? ''),
+        translation: normalizeTerm(item.translation ?? ''),
+      }))
+      .filter((item) => item.term)
+    const used = (parsed.used ?? [])
+      .map((item) => normalizeTerm(String(item)))
+      .filter(Boolean)
+    return { reply, signals: { add, used } }
+  } catch {
+    return { reply, signals: empty }
+  }
+}
+
+function readLearnList(): LearnListItem[] {
   const stored = readJson<LearnListItem[]>(LEARN_KEY, [])
   const merged = mergeById(stored, SAMPLE_LEARN)
-  if (merged !== stored && merged.length !== stored.length) saveLearnList(merged)
+  if (merged !== stored && merged.length !== stored.length) {
+    writeJson(LEARN_KEY, merged)
+  }
   return merged
+}
+
+function readMastered(): MasteredLearnItem[] {
+  return readJson<MasteredLearnItem[]>(MASTERED_KEY, [])
+}
+
+function persistLearn(items: LearnListItem[], mastered = readMastered()) {
+  writeJson(LEARN_KEY, items)
+  writeJson(MASTERED_KEY, mastered)
+  notifyLearnMemory()
+}
+
+function graduateReady(items: LearnListItem[], mastered: MasteredLearnItem[]) {
+  const need = getLearnMasteryUses()
+  const keep: LearnListItem[] = []
+  let changed = false
+  const now = new Date().toISOString()
+  for (const item of items) {
+    if (item.practiceCount >= need) {
+      changed = true
+      mastered.push({
+        id: item.id,
+        term: item.term,
+        translation: item.translation,
+        languageCode: item.languageCode,
+        masteredAt: now,
+      })
+    } else {
+      keep.push(item)
+    }
+  }
+  return { items: keep, mastered, changed }
+}
+
+export function getLearnList(): LearnListItem[] {
+  const graduated = graduateReady(readLearnList(), readMastered())
+  if (graduated.changed) persistLearn(graduated.items, graduated.mastered)
+  return graduated.items
+}
+
+export function getMasteredLearnCount(): number {
+  getLearnList()
+  return readMastered().length
 }
 
 export function getChatTopics(): ChatTopic[] {
@@ -97,15 +259,115 @@ export function getChatTopics(): ChatTopic[] {
 }
 
 export function saveLearnList(items: LearnListItem[]) {
-  writeJson(LEARN_KEY, items)
+  persistLearn(items)
 }
 
 export function saveChatTopics(items: ChatTopic[]) {
   writeJson(TOPICS_KEY, items)
 }
 
-export function looksLikeLearnRequest(text: string) {
-  return LEARN_REQUEST.test(text)
+function upsertLearnItem(
+  items: LearnListItem[],
+  languageCode: LanguageCode,
+  term: string,
+  translation: string,
+) {
+  const key = termKey(term)
+  const existing = items.find(
+    (item) =>
+      item.languageCode === languageCode &&
+      (termKey(item.term) === key || termKey(item.translation) === key),
+  )
+  const now = new Date().toISOString()
+  if (existing) {
+    if (translation) existing.translation = translation.slice(0, 180)
+    existing.lastReviewedAt = now
+    return existing
+  }
+  const created: LearnListItem = {
+    id: crypto.randomUUID(),
+    term,
+    translation: translation.slice(0, 180),
+    languageCode,
+    createdAt: now,
+    lastReviewedAt: now,
+    practiceCount: 0,
+    status: 'learning',
+  }
+  items.unshift(created)
+  return created
+}
+
+function markUsed(
+  items: LearnListItem[],
+  languageCode: LanguageCode,
+  token: string,
+  skipIds: Set<string>,
+) {
+  const key = termKey(token)
+  const item = items.find(
+    (entry) =>
+      entry.languageCode === languageCode &&
+      !skipIds.has(entry.id) &&
+      (termKey(entry.term) === key || termKey(entry.translation) === key),
+  )
+  if (!item) return
+  item.practiceCount += 1
+  item.lastReviewedAt = new Date().toISOString()
+  item.status = item.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
+}
+
+export function applyLearnTurn(options: {
+  languageCode: LanguageCode
+  userText: string
+  keaReply: string
+  signals?: LearnMemorySignals
+}) {
+  const items = getLearnList()
+  const addedIds = new Set<string>()
+  const seenAdd = new Set<string>()
+
+  const additions = [...(options.signals?.add ?? [])]
+  const asked = askedTerm(options.userText)
+  if (asked) {
+    additions.push({
+      term: asked,
+      translation: options.keaReply.replace(/\s+/g, ' ').trim().slice(0, 180),
+    })
+  }
+
+  for (const addition of additions) {
+    const term = normalizeTerm(addition.term)
+    if (!term || seenAdd.has(termKey(term))) continue
+    seenAdd.add(termKey(term))
+    const row = upsertLearnItem(
+      items,
+      options.languageCode,
+      term,
+      addition.translation,
+    )
+    addedIds.add(row.id)
+  }
+
+  const usedTokens = new Set(
+    (options.signals?.used ?? []).map(termKey).filter(Boolean),
+  )
+  if (!looksLikeLearnRequest(options.userText)) {
+    for (const item of items) {
+      if (item.languageCode !== options.languageCode) continue
+      if (addedIds.has(item.id)) continue
+      if (hasWord(options.userText, item.term) || hasWord(options.userText, item.translation)) {
+        usedTokens.add(termKey(item.term))
+      }
+    }
+  }
+
+  for (const token of usedTokens) {
+    markUsed(items, options.languageCode, token, addedIds)
+  }
+
+  const graduated = graduateReady(items, readMastered())
+  persistLearn(graduated.items, graduated.mastered)
 }
 
 export function captureLearnRequest(
@@ -113,34 +375,7 @@ export function captureLearnRequest(
   languageCode: LanguageCode,
   keaReply: string,
 ) {
-  if (!looksLikeLearnRequest(userText)) return
-  const term = userText.replace(/\s+/g, ' ').trim().slice(0, 80)
-  if (!term) return
-  const items = getLearnList()
-  const existing = items.find(
-    (item) =>
-      item.languageCode === languageCode &&
-      item.term.toLowerCase() === term.toLowerCase(),
-  )
-  const now = new Date().toISOString()
-  if (existing) {
-    existing.translation = keaReply.slice(0, 180)
-    existing.lastReviewedAt = now
-    existing.practiceCount += 1
-    existing.status = existing.practiceCount >= 10 ? 'reinforced' : 'learning'
-  } else {
-    items.unshift({
-      id: crypto.randomUUID(),
-      term,
-      translation: keaReply.slice(0, 180),
-      languageCode,
-      createdAt: now,
-      lastReviewedAt: now,
-      practiceCount: 0,
-      status: 'learning',
-    })
-  }
-  saveLearnList(items)
+  applyLearnTurn({ languageCode, userText, keaReply })
 }
 
 export function touchChatTopic(userText: string, keaReply: string) {
@@ -207,9 +442,13 @@ export function getOpenChatTopic(): ChatTopic | null {
 }
 
 export function memoryPromptBlock() {
+  const need = getLearnMasteryUses()
   const learn = getLearnList()
     .slice(0, 12)
-    .map((item) => `- ${item.term} → ${item.translation} (${item.status})`)
+    .map(
+      (item) =>
+        `- ${item.term} → ${item.translation} (used well ${item.practiceCount}/${need})`,
+    )
     .join('\n')
   const topics = getChatTopics()
     .slice(0, 12)
@@ -222,8 +461,14 @@ export function memoryPromptBlock() {
 
 `
     : ''
-  return `${openBlock}LEARN LIST (language gaps only; never mix with topics):
+  return `${openBlock}LEARN LIST (language gaps only; never mix with topics). A word leaves after ${need} correct uses in the target language:
 ${learn || '(empty)'}
+
+After your spoken reply, write this hidden block on its own (never speak it, never mention it):
+<<<KEA_MEMORY
+{"add":[{"term":"short target-language word","translation":"native gloss"}],"used":["target-language word already on the list"]}
+>>>
+Use add when they drop a native-language word into a target-language sentence, or ask about a word or phrase. Use used when they say a Learn List word correctly in the target language in a real sentence. Use empty arrays if nothing happened.
 
 CURRENT CHAT TOPICS (conversation continuity only; never mix with Learn List):
 ${topics || '(empty)'}`

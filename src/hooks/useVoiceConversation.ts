@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { captureLearnRequest, touchChatTopic } from '../architecture/companionMemory'
+import {
+  applyLearnTurn,
+  splitKeaReply,
+  touchChatTopic,
+} from '../architecture/companionMemory'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import {
   DEFAULT_VOICE_CHARACTER,
@@ -440,13 +444,14 @@ export function useVoiceConversation({
       captionSpanish(userMessage.id, userText)
       try {
         logAi('request', userText)
-        const reply = await askKea({
+        const raw = await askKea({
           nativeLanguage: NATIVE_NAMES[nativeLanguage],
           targetLanguage: getLanguage(targetLanguage).name,
           level,
           history: historyRef.current,
           userText,
         })
+        const { reply, signals } = splitKeaReply(raw)
         logAi('response', reply)
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
@@ -456,7 +461,12 @@ export function useVoiceConversation({
         }
         setMessages((current) => [...current, keaMessage])
         captionSpanish(keaMessage.id, reply)
-        captureLearnRequest(userText, targetLanguage, reply)
+        applyLearnTurn({
+          languageCode: targetLanguage,
+          userText,
+          keaReply: reply,
+          signals,
+        })
         touchChatTopic(userText, reply)
         patchVoiceDiagnostics({ lastAiResponse: reply, lastTranscript: userText })
         speakReply(reply)
