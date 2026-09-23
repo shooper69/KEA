@@ -213,7 +213,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setPassword('')
     setConfirm('')
     setMessage('Password saved. You are signed in.')
-    setGoHome(true)
+    navigate('/conversation', { replace: true })
   }
 
   return (
