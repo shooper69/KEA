@@ -3,6 +3,7 @@ import type { VoicePresenceState } from '../../types'
 interface VoiceMicProps {
   live: boolean
   status: VoicePresenceState
+  hint?: string
   onToggle: () => void
 }
 
@@ -13,8 +14,9 @@ const STATUS_LABEL: Record<VoicePresenceState, string> = {
   speaking: 'Speaking',
 }
 
-export function VoiceMic({ live, status, onToggle }: VoiceMicProps) {
+export function VoiceMic({ live, status, hint, onToggle }: VoiceMicProps) {
   const waving = status === 'listening' || status === 'speaking'
+  const label = live ? STATUS_LABEL[status] : hint || STATUS_LABEL.idle
 
   return (
     <div className="voice-mic-wrap">
@@ -26,7 +28,11 @@ export function VoiceMic({ live, status, onToggle }: VoiceMicProps) {
           status === 'thinking' ? 'voice-mic--thinking' : ''
         }`}
         aria-pressed={live}
-        aria-label={live ? 'Stop conversation' : 'Start conversation'}
+        aria-label={
+          live
+            ? 'Stop conversation'
+            : 'Start conversation, or say Yo Kea'
+        }
         onClick={onToggle}
       >
         <svg className="voice-mic__icon" viewBox="0 0 120 120" aria-hidden="true">
@@ -97,7 +103,7 @@ export function VoiceMic({ live, status, onToggle }: VoiceMicProps) {
           />
         </svg>
       </button>
-      <p className="voice-mic__status">{STATUS_LABEL[status]}</p>
+      <p className="voice-mic__status">{label}</p>
     </div>
   )
 }

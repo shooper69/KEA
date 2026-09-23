@@ -9,6 +9,7 @@ import { VoiceMic } from '../components/companion/VoiceMic'
 import { recordTalkSeconds } from '../architecture/keaBilling'
 import { useSession } from '../context/SessionContext'
 import { useVoiceConversation } from '../hooks/useVoiceConversation'
+import { useKeaWakeWord } from '../hooks/useKeaWakeWord'
 
 export function ConversationPage() {
   const {
@@ -34,6 +35,15 @@ export function ConversationPage() {
   const live = voice.handsFree || voice.status !== 'idle'
   const liveRef = useRef(live)
   liveRef.current = live
+
+  const { armed } = useKeaWakeWord({
+    enabled: !live && !block,
+    onWake: () => {
+      if (liveRef.current) return
+      if (!guardStart()) return
+      void voice.start()
+    },
+  })
 
   useEffect(() => {
     if (!live) return
@@ -65,6 +75,13 @@ export function ConversationPage() {
       <VoiceMic
         live={live}
         status={voice.status}
+        hint={
+          live
+            ? undefined
+            : armed
+              ? 'Say Yo Kea'
+              : 'Tap once, then say Yo Kea'
+        }
         onToggle={() => {
           if (live) {
             voice.toggle()

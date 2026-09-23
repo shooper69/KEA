@@ -555,6 +555,7 @@ export function useVoiceConversation({
     setRate,
     handsFree,
     toggle,
+    start,
     stop,
     pauseSpeech,
     resumeSpeech,
