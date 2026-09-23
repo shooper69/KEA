@@ -14,6 +14,7 @@ import { WelcomePage } from './pages/WelcomePage'
 import { HomePage } from './pages/HomePage'
 import type { ReactNode } from 'react'
 import { KeaPageMotion } from './components/companion/KeaPageMotion'
+import { KeaSeo } from './components/companion/KeaSeo'
 
 function RequireOnboard({ children }: { children: ReactNode }) {
   const { isOnboarded, authReady, cloudAuth, isSignedIn } = useSession()
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <SessionProvider>
       <BrowserRouter>
+        <KeaSeo />
         <KeaPageMotion>
         <Routes>
           <Route path="/" element={<WelcomePage />} />

@@ -1,0 +1,21 @@
+# Kea
+
+> Kea is a hands-free conversational companion. People pick up language naturally by talking with her — not by taking a course.
+
+Kea is not a learning platform, tutor, chatbot, or lesson app. She talks with you like a friend. As you chat, she remembers topics and notices words you struggle with. Those words live on a Learn List until you start using them well.
+
+Site: https://kea.chat
+
+## For people
+
+- Talk: https://kea.chat/conversation
+- Learn List: https://kea.chat/learn
+- Topics: https://kea.chat/topics
+
+## Languages
+
+English, Spanish, French, German, and Russian. You speak one and talk with Kea in another.
+
+## Optional reading
+
+- Sitemap: https://kea.chat/sitemap.xml

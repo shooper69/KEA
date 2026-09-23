@@ -2,19 +2,91 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=3" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
+    <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#4ec4d4" />
-    <title>Kea</title>
+    <meta
+      name="description"
+      content="Kea is a hands-free conversational companion that helps you learn languages naturally through real conversation, remembered topics, and a personalised Learn List. Not a course, not a tutor — a friend you talk with."
+    />
+    <meta name="author" content="Kea" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="application-name" content="Kea" />
+    <link rel="canonical" href="https://kea.chat/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kea" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:url" content="https://kea.chat/" />
+    <meta property="og:title" content="Kea — a conversational companion for language" />
+    <meta
+      property="og:description"
+      content="Kea is a hands-free conversational companion. Talk naturally, remember topics, and grow a Learn List — without a lesson plan."
+    />
+    <meta property="og:image" content="https://kea.chat/kea-mark.png" />
+    <meta property="og:image:alt" content="Kea" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kea — a conversational companion for language" />
+    <meta
+      name="twitter:description"
+      content="Hands-free conversation with Kea. A companion, not a classroom."
+    />
+    <meta name="twitter:image" content="https://kea.chat/kea-mark.png" />
+    <title>Kea — a conversational companion for language</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@300;400;500;600&display=swap"
       rel="stylesheet"
     />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://kea.chat/#organization",
+            "name": "Kea",
+            "url": "https://kea.chat",
+            "logo": "https://kea.chat/favicon-512.png",
+            "description": "Kea is a hands-free conversational companion that helps people learn languages naturally through real conversation."
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://kea.chat/#website",
+            "url": "https://kea.chat",
+            "name": "Kea",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://kea.chat/#organization" }
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://kea.chat/#app",
+            "name": "Kea",
+            "url": "https://kea.chat",
+            "description": "A conversational companion for language. Talk, remember topics, and keep a Learn List — without a course or tutor.",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "Web",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>Chat with Kea</h1>
+      <p>
+        Kea is a hands-free conversational companion that helps you learn
+        languages naturally through real conversation, remembered topics, and a
+        personalised Learn List. She behaves like a friend, not a teacher.
+      </p>
+      <p><a href="https://kea.chat/">Open Kea</a></p>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

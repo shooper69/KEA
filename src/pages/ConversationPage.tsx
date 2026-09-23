@@ -46,6 +46,7 @@ export function ConversationPage() {
   return (
     <main className="companion-screen conversation-screen">
       <CloudAtmosphere presence={voice.status} />
+      <h1 className="visually-hidden">Talk with Kea</h1>
       <header className="conversation-screen__header">
         <Link to="/conversation" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
