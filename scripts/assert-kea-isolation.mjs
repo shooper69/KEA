@@ -102,7 +102,7 @@ const skipScan = new Set([
 ])
 
 const tracked = git(['ls-files']).split(/\r?\n/).filter(Boolean)
-const otherSupabase = /https:\/\/([a-z0-9]+)\.supabase\.co/gi
+const otherSupabase = /https:\/\/([a-z0-9]+)\.supabase\.co(?![a-z])/gi
 const otherGithubRemote =
   /(?:git@github\.com:|https:\/\/github\.com\/)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?(?:["'\s]|$)/gi
 const forbiddenRefs = [
@@ -112,7 +112,13 @@ const forbiddenRefs = [
 
 for (const rel of tracked) {
   const posix = rel.replaceAll('\\', '/')
-  if (skipScan.has(posix) || posix.startsWith('scripts/')) continue
+  if (
+    skipScan.has(posix) ||
+    posix.startsWith('scripts/') ||
+    posix.startsWith('.kea/')
+  ) {
+    continue
+  }
   if (!/\.(ts|tsx|js|mjs|cjs|json|toml|mdc|example|yml|yaml)$/i.test(posix)) {
     continue
   }

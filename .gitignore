@@ -18,6 +18,8 @@ dist-ssr
 .kea/supabase-access-token
 .kea/netlify-auth-token
 .kea/*.token
+.kea/*.mjs
+.kea/*.sql
 
 # Editor directories and files
 .vscode/*
