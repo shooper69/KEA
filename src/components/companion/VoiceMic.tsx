@@ -1,5 +1,7 @@
 import type { VoicePresenceState } from '../../types'
 
+const KEA_MIC_SRC = '/kea-04.png'
+
 interface VoiceMicProps {
   live: boolean
   status: VoicePresenceState
@@ -7,19 +9,23 @@ interface VoiceMicProps {
   onToggle: () => void
 }
 
-const STATUS_LABEL: Record<VoicePresenceState, string> = {
-  idle: 'Tap to talk',
-  listening: 'Listening',
-  thinking: 'Thinking',
-  speaking: 'Speaking',
-}
-
-export function VoiceMic({ live, status, hint, onToggle }: VoiceMicProps) {
+export function VoiceMic({ live, status, onToggle }: VoiceMicProps) {
   const waving = status === 'listening' || status === 'speaking'
-  const label = live ? STATUS_LABEL[status] : hint || STATUS_LABEL.idle
 
   return (
-    <div className="voice-mic-wrap">
+    <div
+      className={`voice-mic-wrap${live ? ' voice-mic-wrap--live' : ''}`}
+      onClick={(event) => {
+        const target = event.target as HTMLElement
+        if (target.closest('button.voice-mic')) return
+        onToggle()
+      }}
+    >
+      <p className="voice-mic__prompt voice-mic__prompt--left" aria-hidden="true">
+        Tap to talk
+        <br />
+        or stop me
+      </p>
       <button
         type="button"
         className={`voice-mic ${live ? 'voice-mic--live' : ''} ${
@@ -31,79 +37,22 @@ export function VoiceMic({ live, status, hint, onToggle }: VoiceMicProps) {
         aria-label={
           live
             ? 'Stop conversation'
-            : 'Start conversation, or say Yo Kea'
+            : "Tap to talk or stop me, or say 'Yo Kea' or 'Stop Kea'"
         }
         onClick={onToggle}
       >
-        <svg className="voice-mic__icon" viewBox="0 0 120 120" aria-hidden="true">
-          <defs>
-            <linearGradient id="mic-body" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#7cf0ff" />
-              <stop offset="50%" stopColor="#6b8cff" />
-              <stop offset="100%" stopColor="#c46bff" />
-            </linearGradient>
-          </defs>
-          <path
-            className="voice-mic__wave voice-mic__wave--l2"
-            d="M28 46 C22 52 20 60 20 68 C20 76 22 84 28 90"
-            fill="none"
-            stroke="url(#mic-body)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <path
-            className="voice-mic__wave voice-mic__wave--l1"
-            d="M38 52 C34 56 32 62 32 68 C32 74 34 80 38 84"
-            fill="none"
-            stroke="url(#mic-body)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <path
-            className="voice-mic__wave voice-mic__wave--r1"
-            d="M82 52 C86 56 88 62 88 68 C88 74 86 80 82 84"
-            fill="none"
-            stroke="url(#mic-body)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <path
-            className="voice-mic__wave voice-mic__wave--r2"
-            d="M92 46 C98 52 100 60 100 68 C100 76 98 84 92 90"
-            fill="none"
-            stroke="url(#mic-body)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <rect x="50" y="22" width="20" height="36" rx="10" fill="url(#mic-body)" />
-          <path
-            d="M44 56 C44 66 51 72 60 72 C69 72 76 66 76 56"
-            fill="none"
-            stroke="url(#mic-body)"
-            strokeWidth="3.2"
-            strokeLinecap="round"
-          />
-          <line
-            x1="60"
-            y1="72"
-            x2="60"
-            y2="86"
-            stroke="url(#mic-body)"
-            strokeWidth="3.2"
-            strokeLinecap="round"
-          />
-          <line
-            x1="48"
-            y1="86"
-            x2="72"
-            y2="86"
-            stroke="url(#mic-body)"
-            strokeWidth="3.2"
-            strokeLinecap="round"
-          />
-        </svg>
+        <span className="voice-mic__waves" aria-hidden="true">
+          <span className="voice-mic__ring voice-mic__ring--1" />
+          <span className="voice-mic__ring voice-mic__ring--2" />
+          <span className="voice-mic__ring voice-mic__ring--3" />
+        </span>
+        <img className="voice-mic__icon" src={KEA_MIC_SRC} alt="" />
       </button>
-      <p className="voice-mic__status">{label}</p>
+      <p className="voice-mic__prompt voice-mic__prompt--right" aria-hidden="true">
+        or say 'Yo Kea'
+        <br />
+        or 'Stop Kea'
+      </p>
     </div>
   )
 }

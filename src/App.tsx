@@ -6,6 +6,7 @@ import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminVoiceManagementPage } from './pages/AdminVoiceManagementPage'
 import { AdminVoiceTesterPage } from './pages/AdminVoiceTesterPage'
+import { AboutKeaPage } from './pages/AboutKeaPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
 import { LearnListPage } from './pages/LearnListPage'
@@ -81,6 +82,14 @@ export default function App() {
             }
           />
           <Route path="/memory" element={<Navigate to="/learn" replace />} />
+          <Route
+            path="/about"
+            element={
+              <RequireOnboard>
+                <AboutKeaPage />
+              </RequireOnboard>
+            }
+          />
           <Route
             path="/settings"
             element={

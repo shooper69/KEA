@@ -11,6 +11,7 @@
   --line: rgba(110, 66, 44, 0.28);
   --serif: 'Cormorant Garamond', Georgia, serif;
   --sans: 'Outfit', system-ui, sans-serif;
+  --title: Calibri, Carlito, 'Segoe UI', sans-serif;
   --admin-bg: #f4f1ea;
   --admin-ink: #1c2433;
   --admin-muted: #5c6573;
@@ -32,6 +33,16 @@ body,
   min-height: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#root::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 html {
@@ -52,6 +63,11 @@ h1,
 h2,
 p {
   margin: 0;
+}
+
+h1,
+h2 {
+  font-family: var(--title);
 }
 
 button {
@@ -77,13 +93,13 @@ button {
 }
 
 .kea-mark--header {
-  height: 3.45rem;
+  height: 3.05rem;
 }
 
 .kea-mark--welcome {
   position: static;
   display: block;
-  height: clamp(3.6rem, 9.5vh, 7.2rem);
+  height: clamp(5.8rem, 16vh, 11.5rem);
   width: auto;
   margin: 0 auto;
   transform: none;
@@ -91,21 +107,33 @@ button {
 
 .kea-button {
   appearance: none;
-  border: 1px solid var(--line);
-  background: rgba(255, 248, 240, 0.42);
-  color: var(--gold-strong);
-  letter-spacing: 0.22em;
-  font-size: 0.95rem;
+  border: 0;
+  background: linear-gradient(
+    180deg,
+    #9ec7ff 0%,
+    #4d7dff 48%,
+    #3a3ad8 100%
+  );
+  color: #fff8f0;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
   font-weight: 500;
-  padding: 0.95rem 1.8rem;
+  padding: 0.45rem 1.15rem;
   border-radius: 999px;
   cursor: pointer;
-  min-height: 2.75rem;
+  min-height: 2.15rem;
   width: 100%;
+  box-shadow:
+    inset 0 -1px 0 rgba(30, 24, 90, 0.22),
+    0 2px 0 #24186a,
+    0 4px 8px rgba(28, 16, 70, 0.16);
 }
 
 .kea-button--ghost {
   background: transparent;
+  color: var(--gold-strong);
+  border: 1px solid var(--line);
+  box-shadow: none;
 }
 
 .kea-button:disabled {
@@ -114,8 +142,15 @@ button {
 }
 
 .kea-button:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid #9ec7ff;
   outline-offset: 3px;
+}
+
+.kea-button:not(.kea-button--ghost):active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 0 #24186a,
+    0 2px 4px rgba(28, 16, 70, 0.16);
 }
 
 html.kea-motion .kea-button:not(:disabled) {
@@ -132,6 +167,7 @@ html.kea-motion .kea-button:not(:disabled):hover {
 }
 
 html.kea-motion .memory-button,
+html.kea-motion .companion-nav__clear,
 html.kea-motion .settings-tabs button,
 html.kea-motion .settings-tabs a,
 html.kea-motion .admin-tabs a,
@@ -145,6 +181,7 @@ html.kea-motion .voice-cast__play {
 }
 
 html.kea-motion .memory-button:hover,
+html.kea-motion .companion-nav__clear:hover,
 html.kea-motion .settings-tabs button:hover,
 html.kea-motion .settings-tabs a:hover,
 html.kea-motion .admin-tabs a:hover {
@@ -335,6 +372,16 @@ html.kea-motion .admin-tabs a:hover {
 
 .kea-page {
   min-height: 100svh;
+}
+
+html:has(.settings-screen),
+body:has(.settings-screen),
+#root:has(.settings-screen),
+.kea-page:has(.settings-screen) {
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .cloud-atmosphere__wash {
@@ -577,15 +624,16 @@ html.kea-motion .admin-tabs a:hover {
   position: relative;
   height: auto;
   width: 100%;
-  margin: 0 auto 0.2rem;
+  margin: 0 auto 0.35rem;
   display: flex;
   justify-content: center;
+  align-items: center;
   overflow: visible;
 }
 
 .welcome-screen h1,
 .language-screen h1 {
-  font-family: var(--serif);
+  font-family: var(--title);
   font-size: clamp(2.8rem, 9vw, 4.6rem);
   font-weight: 500;
   line-height: 1.1;
@@ -636,17 +684,24 @@ html.kea-motion .admin-tabs a:hover {
   color: #fff;
 }
 
-.welcome-screen__top {
-  position: absolute;
-  top: max(0.75rem, env(safe-area-inset-top));
-  left: max(1.25rem, env(safe-area-inset-left));
-  right: max(1.25rem, env(safe-area-inset-right));
-  z-index: 4;
+.welcome-screen__top,
+.welcome-screen__bird,
+.welcome-screen .kea-mark--welcome {
+  display: none !important;
+}
+
+.welcome-screen__logo {
+  display: block;
   width: auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0;
+  height: clamp(4.15rem, 11vh, 6.1rem);
+  max-width: min(10.2rem, 46vw);
+  margin: 0 auto;
+  object-fit: contain;
+  object-position: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .welcome-screen__hello {
@@ -754,13 +809,31 @@ html.kea-motion .admin-tabs a:hover {
   width: 2.6rem;
   height: 2.6rem;
   border-radius: 50%;
-  border: 1px solid var(--line);
+  border: 0;
   padding: 0;
   overflow: hidden;
-  background: rgba(255, 248, 240, 0.7);
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.92) 0 12%, transparent 34%),
+    radial-gradient(circle at 68% 24%, #7cf0ff 0%, transparent 42%),
+    radial-gradient(circle at 24% 76%, #b45bff 0%, transparent 50%),
+    radial-gradient(circle at 78% 70%, #ff7a32 0%, transparent 48%),
+    conic-gradient(
+      from 200deg,
+      #3a6dff,
+      #5ce1ff,
+      #3dcf8a,
+      #ffc15a,
+      #ff5d7a,
+      #c15bff,
+      #3a6dff
+    );
+  box-shadow:
+    inset 0 -3px 8px rgba(40, 16, 80, 0.28),
+    0 3px 10px rgba(40, 24, 90, 0.28);
   cursor: pointer;
-  color: var(--gold-strong);
+  color: #fff;
   font-weight: 600;
+  text-shadow: 0 1px 6px rgba(20, 12, 40, 0.35);
 }
 
 .user-menu__avatar--large {
@@ -815,9 +888,25 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .settings-screen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   justify-content: flex-start;
   align-items: stretch;
-  overflow-y: auto;
+  overflow: hidden;
+  height: 100%;
+  max-height: 100dvh;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
+.settings-screen .cloud-atmosphere {
+  position: absolute;
+  inset: 0;
+}
+
+.settings-screen .cloud-atmosphere__wash {
+  inset: 0;
 }
 
 .settings-screen__header {
@@ -828,6 +917,7 @@ html.kea-motion .admin-tabs a:hover {
   justify-content: space-between;
   align-items: center;
   gap: 0.6rem;
+  flex-shrink: 0;
 }
 
 .memory-library__nav {
@@ -849,6 +939,22 @@ html.kea-motion .admin-tabs a:hover {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 1.5rem;
+}
+
+.settings-screen__content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .settings-screen h1 {
@@ -901,6 +1007,54 @@ html.kea-motion .admin-tabs a:hover {
 .settings-tabs button.is-active {
   background: rgba(255, 255, 255, 0.9);
   font-weight: 600;
+}
+
+.settings-usage-link {
+  appearance: none;
+  display: inline-block;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.usage-meter {
+  margin: 0.35rem 0 0.85rem;
+}
+
+.usage-meter__track {
+  height: 0.72rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(110, 66, 44, 0.16);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(40, 20, 50, 0.08);
+}
+
+.usage-meter__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(196, 120, 72, 0.85),
+    rgba(140, 72, 48, 0.92)
+  );
+  min-width: 0;
+}
+
+.usage-meter__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ink);
 }
 
 .settings-choice {
@@ -984,6 +1138,14 @@ html.kea-motion .admin-tabs a:hover {
   color: var(--ink-muted);
 }
 
+.settings-card--listening .welcome-field + .settings-note {
+  margin-top: 0.7rem;
+}
+
+.settings-card--listening .settings-note + .welcome-field {
+  margin-top: 1rem;
+}
+
 .master-definition {
   display: block;
   width: 100%;
@@ -1002,6 +1164,32 @@ html.kea-motion .admin-tabs a:hover {
 .about-kea {
   min-height: 18rem;
   font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+.about-kea-admin__portrait,
+.about-kea-page__portrait {
+  display: block;
+  width: min(22rem, 100%);
+  height: auto;
+  margin: 0 auto 1.15rem;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 1.15rem;
+  border: 1px solid rgba(110, 66, 44, 0.16);
+  box-shadow: 0 10px 28px rgba(20, 12, 40, 0.18);
+  background: rgba(255, 248, 240, 0.28);
+}
+
+.about-kea-page {
+  position: relative;
+  z-index: 2;
+}
+
+.about-kea-page__story {
+  margin: 0 0 1rem;
+  color: var(--ink);
   font-size: 1.05rem;
   line-height: 1.55;
 }
@@ -1440,18 +1628,56 @@ html.kea-motion .admin-tabs a:hover {
   flex: 0 0 auto;
 }
 
-.welcome-screen--modal .welcome-screen__content h1,
-.welcome-screen--modal .welcome-screen__lede,
-.welcome-screen--modal .welcome-screen__actions--home,
-.welcome-screen--modal .welcome-screen__content .welcome-screen__pair,
-.welcome-screen--modal .welcome-screen__hello,
-.welcome-screen--modal .welcome-screen__content > .settings-note {
-  visibility: hidden;
+.welcome-screen.welcome-screen--modal {
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.welcome-screen.welcome-screen--modal .welcome-screen__content {
+  position: absolute;
+  top: max(4.6rem, env(safe-area-inset-top) + 3.4rem);
+  left: 0;
+  right: 0;
+  z-index: 35;
+  flex: 0 0 auto;
+  width: 100%;
+  padding-top: 0;
+  margin: 0;
   pointer-events: none;
 }
 
+.welcome-screen.welcome-screen--modal .welcome-screen__content h1,
+.welcome-screen.welcome-screen--modal .welcome-screen__lede,
+.welcome-screen.welcome-screen--modal .welcome-screen__actions--home,
+.welcome-screen.welcome-screen--modal .welcome-screen__content .welcome-screen__pair,
+.welcome-screen.welcome-screen--modal .welcome-screen__hello,
+.welcome-screen.welcome-screen--modal .welcome-screen__content > .settings-note {
+  display: none;
+}
+
+.welcome-screen.welcome-screen--modal .welcome-screen__logo {
+  height: clamp(3.8rem, 10vh, 5.6rem);
+}
+
+.welcome-screen .cloud-atmosphere__wisp--4,
+.welcome-screen .cloud-atmosphere__wisp--6,
+.welcome-screen .cloud-atmosphere__fog {
+  display: none;
+}
+
+.welcome-screen.welcome-screen--modal .auth-modal {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  place-items: center;
+  padding: max(0.75rem, env(safe-area-inset-top))
+    max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+}
+
 .auth-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 30;
   display: grid;
@@ -1462,6 +1688,16 @@ html.kea-motion .admin-tabs a:hover {
     max(0.75rem, env(safe-area-inset-left));
   background: rgba(32, 16, 40, 0.58);
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.auth-modal::-webkit-scrollbar,
+.auth-modal__card::-webkit-scrollbar,
+.rising-words::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .auth-modal__card {
@@ -1500,9 +1736,14 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .auth-modal .welcome-languages {
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
   margin: 0.45rem 0 0.35rem;
+}
+
+.auth-modal .welcome-languages .welcome-field {
+  width: 100%;
+  margin-bottom: 0;
 }
 
 .auth-modal .welcome-screen__onboard-title {
@@ -1695,15 +1936,16 @@ html.kea-motion .admin-tabs a:hover {
   margin-top: 0.35rem;
 }
 
-.auth-modal .auth-check-actions .kea-button {
+.auth-modal .auth-check-actions .kea-button:not(.kea-button--ghost) {
+  width: 100%;
+}
+
+.auth-modal .auth-check-actions .kea-button--ghost {
   width: 100%;
   min-height: 2.7rem;
   padding: 0.55rem 1rem;
   font-size: 0.78rem;
   letter-spacing: 0.14em;
-  border: 1px solid rgba(110, 66, 44, 0.28);
-  background: transparent;
-  color: var(--gold-strong);
 }
 
 .memory-library {
@@ -1731,7 +1973,7 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .memory-library h1 {
-  font-family: var(--serif);
+  font-family: var(--title);
   font-size: clamp(2rem, 8vw, 3.2rem);
   font-weight: 500;
 }
@@ -1798,6 +2040,15 @@ html.kea-motion .admin-tabs a:hover {
   font-size: 0.95rem;
   font-weight: 600;
   color: #134e2a;
+}
+
+.memory-library__pair {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #d10f28;
+  line-height: 1.45;
 }
 
 .memory-library__translation {
@@ -1922,8 +2173,9 @@ html.kea-motion .admin-tabs a:hover {
   margin: 0;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   overflow: visible;
+  flex: 0 0 auto;
 }
 
 .settings-screen__header,
@@ -1941,19 +2193,63 @@ html.kea-motion .admin-tabs a:hover {
 
 .companion-nav {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: nowrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 0.45rem;
+  width: 100%;
   min-width: 0;
+  overflow: visible;
 }
 
-.companion-nav__account {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
+.companion-nav__mark {
+  margin-right: auto;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  z-index: 5;
+}
+
+.kea-mark--header {
+  height: 3.05rem;
+  width: auto;
+  max-width: min(36vw, 8.2rem);
+  object-fit: contain;
+  object-position: left center;
+}
+
+.companion-nav .user-menu__avatar {
+  width: 2.4rem;
+  height: 2.4rem;
+  font-size: 0.82rem;
+}
+
+.companion-nav__clear {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: rgba(255, 248, 240, 0.35);
+  color: var(--gold-strong);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.companion-nav__clear svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: block;
+}
+
+.companion-nav__clear:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 .learn-grown-badge {
@@ -2033,7 +2329,7 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .word-memory h2 {
-  font-family: var(--serif);
+  font-family: var(--title);
   font-size: 1.35rem;
   font-weight: 500;
 }
@@ -2101,31 +2397,42 @@ html.kea-motion .admin-tabs a:hover {
 
 .rising-words {
   position: absolute;
-  inset: 0 0 6.8rem 0;
-  overflow: hidden;
-  pointer-events: none;
+  inset: 0.15rem 0 7.15rem 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  pointer-events: auto;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
   mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.4) 1.35rem,
-    #000 4.5rem,
-    #000 100%
+    transparent 1.7rem,
+    #000 2.2rem,
+    #000 calc(100% - 0.85rem),
+    transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
-    rgba(0, 0, 0, 0.4) 1.35rem,
-    #000 4.5rem,
-    #000 100%
+    transparent 1.7rem,
+    #000 2.2rem,
+    #000 calc(100% - 0.85rem),
+    transparent 100%
   );
 }
 
 .rising-words__line {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 1in;
+  position: relative !important;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 auto;
+  isolation: isolate;
+  animation: none !important;
+  transform: none !important;
   width: min(38rem, 92%);
   margin: 0 auto;
   display: flex;
@@ -2134,18 +2441,17 @@ html.kea-motion .admin-tabs a:hover {
   font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
   font-size: clamp(1.45rem, 3.4vw, 2.05rem);
   font-weight: 500;
-  line-height: 1.38;
+  line-height: 1.24;
   text-align: left;
   color: #fff;
   text-shadow: 0 1px 10px rgba(20, 12, 40, 0.45);
-  animation: words-rise 16s linear infinite both;
-  animation-delay: var(--rise-delay, 0s);
+  overflow-wrap: anywhere;
 }
 
 .rising-words__who {
   flex: 0 0 auto;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.15rem;
+  height: 2.15rem;
   margin-top: 0.12rem;
   border-radius: 50%;
   display: grid;
@@ -2158,9 +2464,26 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .rising-words__who--user {
-  background: rgba(255, 248, 240, 0.88);
-  color: #6b3a22;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.92) 0 12%, transparent 34%),
+    radial-gradient(circle at 68% 24%, #7cf0ff 0%, transparent 42%),
+    radial-gradient(circle at 24% 76%, #b45bff 0%, transparent 50%),
+    radial-gradient(circle at 78% 70%, #ff7a32 0%, transparent 48%),
+    conic-gradient(
+      from 200deg,
+      #3a6dff,
+      #5ce1ff,
+      #3dcf8a,
+      #ffc15a,
+      #ff5d7a,
+      #c15bff,
+      #3a6dff
+    );
+  color: #fff;
+  border: 0;
+  box-shadow:
+    inset 0 -2px 6px rgba(40, 16, 80, 0.28),
+    0 2px 8px rgba(40, 24, 90, 0.22);
 }
 
 .rising-words__who--user img {
@@ -2170,30 +2493,50 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .rising-words__who--kea {
-  background: linear-gradient(160deg, #6ee7ff 0%, #6b7bff 48%, #c45bff 100%);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  font-family: Georgia, 'Times New Roman', serif;
-  font-style: normal;
-  letter-spacing: -0.04em;
+  width: 2.35rem;
+  height: 2.35rem;
+  background: transparent;
+  border: 0;
+  overflow: visible;
+  padding: 0;
+  box-shadow: none;
+}
+
+.rising-words__who--kea img {
+  width: 2.35rem;
+  height: 2.35rem;
+  object-fit: contain;
+  background: transparent;
 }
 
 .rising-words__copy {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+}
+
+.rising-words__pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
 }
 
 .rising-words__spoken {
   margin: 0;
+  white-space: pre-line;
 }
 
 .rising-words__english {
-  margin: 0.18rem 0 0;
+  margin: 0;
   font-size: 0.82em;
   font-weight: 400;
   font-style: normal;
-  color: #fff;
-  opacity: 0.9;
+  line-height: 1.24;
+  color: #0a2d7a;
+  opacity: 1;
+  text-shadow: none;
 }
 
 .rising-words__line--user,
@@ -2203,7 +2546,7 @@ html.kea-motion .admin-tabs a:hover {
 
 .rising-words__line--user .rising-words__english,
 .rising-words__line--kea .rising-words__english {
-  color: #fff;
+  color: #0a2d7a;
 }
 
 .rising-words__rule {
@@ -2269,35 +2612,105 @@ html.kea-motion .admin-tabs a:hover {
 .voice-mic-wrap {
   position: absolute;
   left: 50%;
-  bottom: max(0.2rem, env(safe-area-inset-bottom));
-  z-index: 3;
+  bottom: max(0.35rem, env(safe-area-inset-bottom));
+  z-index: 12;
   transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
+  column-gap: 0.62rem;
+  width: min(26rem, 96vw);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.voice-mic-wrap .voice-mic {
+  pointer-events: auto;
+  justify-self: center;
+  z-index: 2;
 }
 
 .voice-mic {
   position: relative;
-  width: 7.2rem;
-  height: 7.2rem;
+  width: 6.4rem;
+  height: 6.4rem;
   border: 0;
-  padding: 0;
+  padding: 0.7rem;
   background: transparent;
   cursor: pointer;
+  overflow: visible;
+  touch-action: manipulation;
+}
+
+.voice-mic__prompt {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(100%, 9.6rem);
+  margin: 0;
+  padding: 0.42rem 0.72rem;
+  overflow: visible;
+  border-radius: 999px;
+  background: #f4d7c4;
+  color: #2a211c;
+  font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
+  font-size: clamp(0.82rem, 2.4vw, 0.98rem);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: none;
+  box-shadow: 0 2px 8px rgba(40, 24, 20, 0.14);
+}
+
+.voice-mic__prompt::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  width: 0.98rem;
+  height: 0.7rem;
+  background: #f4d7c4;
+  pointer-events: none;
+}
+
+.voice-mic__prompt--left {
+  justify-self: end;
+}
+
+.voice-mic__prompt--left::after {
+  right: -0.72rem;
+  transform: translateY(-50%);
+  clip-path: polygon(0 16%, 0 84%, 58% 70%, 100% 50%, 58% 30%);
+}
+
+.voice-mic__prompt--right {
+  justify-self: start;
+}
+
+.voice-mic__prompt--right::after {
+  left: -0.72rem;
+  transform: translateY(-50%);
+  clip-path: polygon(0 50%, 42% 30%, 100% 16%, 100% 84%, 42% 70%);
+}
+
+.voice-mic-wrap--live .voice-mic__prompt {
+  visibility: hidden;
 }
 
 .voice-mic__status {
-  margin-top: 0.1rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .voice-error {
   position: absolute;
-  bottom: 8rem;
+  bottom: 5.4rem;
   left: 50%;
   z-index: 3;
   width: min(28rem, 90%);
@@ -2398,7 +2811,7 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .voice-cast h2 {
-  font-family: var(--serif);
+  font-family: var(--title);
   font-size: 1.45rem;
   font-weight: 500;
 }
@@ -2518,6 +2931,29 @@ html.kea-motion .admin-tabs a:hover {
   text-align: right;
 }
 
+/* Settings Voice list: one cream pill, name + italic description on one line. */
+.settings-card .voice-cast__choice {
+  align-items: center;
+}
+
+.settings-card .voice-cast__pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.9rem;
+  row-gap: 0.15rem;
+  min-width: 0;
+}
+
+.settings-card .voice-cast__name {
+  flex: 0 0 auto;
+}
+
+.settings-card .voice-cast__style {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
 .voice-cast__whisper {
   margin: 0.7rem 0 0.85rem;
   font-size: 0.78rem;
@@ -2557,20 +2993,32 @@ html.kea-motion .admin-tabs a:hover {
   font-size: 0.82rem;
 }
 
-.rising-words--live {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 0.7rem;
-  padding: 0 1rem 1in;
+.rising-words--flowing .rising-words__line {
+  animation: none;
 }
 
-.rising-words--live .rising-words__line {
+.rising-words--parked {
+  gap: 0.92rem;
+  padding: 2.2rem 1rem 0.55rem;
+}
+
+.rising-words--parked::before,
+.rising-words--flowing::before {
+  content: '';
+  flex: 1 0 auto;
+}
+
+.rising-words--parked .rising-words__line {
   position: relative;
   bottom: auto;
-  animation: kea-msg-in 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: none !important;
   transform: none;
   opacity: 1;
+}
+
+.rising-words__end {
+  flex: 0 0 0.2rem;
+  height: 0.2rem;
 }
 
 .rising-words__line--active {
@@ -2582,39 +3030,64 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .voice-mic__icon {
-  width: 6.4rem;
-  height: 6.4rem;
+  position: relative;
+  z-index: 1;
+  width: 4.35rem;
+  height: 4.35rem;
+  object-fit: contain;
+  display: block;
+  margin: 0.12rem auto 0;
   filter: drop-shadow(0 0 12px rgba(110, 190, 255, 0.45));
+  pointer-events: none;
 }
 
-.voice-mic__wave {
-  opacity: 0.18;
-  transform-origin: 60px 68px;
+.voice-mic__waves {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
 }
 
-.voice-mic--waving .voice-mic__wave--l1,
-.voice-mic--waving .voice-mic__wave--r1 {
-  animation: mic-wave 1.05s ease-in-out infinite;
+.voice-mic__ring {
+  position: absolute;
+  left: 78%;
+  top: 20%;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid rgba(150, 230, 255, 0.9);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.35);
 }
 
-.voice-mic--waving .voice-mic__wave--l2,
-.voice-mic--waving .voice-mic__wave--r2 {
-  animation: mic-wave 1.05s ease-in-out 0.18s infinite;
+.voice-mic--waving .voice-mic__ring--1 {
+  animation: mic-rings 1.45s ease-out infinite;
+}
+
+.voice-mic--waving .voice-mic__ring--2 {
+  animation: mic-rings 1.45s ease-out 0.28s infinite;
+}
+
+.voice-mic--waving .voice-mic__ring--3 {
+  animation: mic-rings 1.45s ease-out 0.56s infinite;
 }
 
 .voice-mic--thinking .voice-mic__icon {
   opacity: 0.7;
 }
 
-@keyframes mic-wave {
-  0%,
-  100% {
-    opacity: 0.22;
-    transform: scale(0.92);
+@keyframes mic-rings {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.3);
   }
-  50% {
-    opacity: 1;
-    transform: scale(1.08);
+  70% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.4);
   }
 }
 
@@ -2686,7 +3159,7 @@ html.kea-motion .admin-tabs a:hover {
 }
 
 .admin-page h1 {
-  font-family: var(--serif);
+  font-family: var(--title);
   font-size: 2rem;
   font-weight: 600;
 }
@@ -2958,15 +3431,44 @@ html.kea-motion .admin-tabs a:hover {
   .conversation-screen__header-actions,
   .companion-nav {
     flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 0.35rem;
+    justify-content: flex-start;
+    gap: 0.3rem;
     max-width: none;
   }
 
   .memory-button {
+    flex: 0 1 auto;
+    min-width: 0;
     min-height: 2.1rem;
-    padding: 0.3rem 0.55rem;
-    font-size: 0.78rem;
+    padding: 0.3rem 0.45rem;
+    font-size: 0.74rem;
+  }
+
+  .kea-mark--header {
+    height: 2.85rem;
+    max-width: min(34vw, 7.4rem);
+  }
+
+  .learn-grown-badge {
+    min-width: 1.9rem;
+    height: 2.05rem;
+    font-size: 0.9rem;
+  }
+
+  .companion-nav .user-menu__avatar {
+    width: 2.1rem;
+    height: 2.1rem;
+    font-size: 0.75rem;
+  }
+
+  .companion-nav__clear {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+
+  .companion-nav__clear svg {
+    width: 1rem;
+    height: 1rem;
   }
 
   .transcript-review {
@@ -3138,6 +3640,105 @@ html.kea-motion .admin-tabs a:hover {
   color: #1f6b38;
 }
 
+.cost-chart {
+  margin-top: 0.85rem;
+}
+
+.cost-chart__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: rgba(255, 252, 246, 0.7);
+  border: 1px solid rgba(110, 66, 44, 0.14);
+  border-radius: 0.75rem;
+}
+
+.cost-chart__grid {
+  stroke: rgba(110, 66, 44, 0.12);
+  stroke-width: 1;
+}
+
+.cost-chart__axis {
+  fill: var(--ink-muted);
+  font-size: 11px;
+}
+
+.cost-chart__axis--left {
+  text-anchor: end;
+}
+
+.cost-chart__axis--right {
+  text-anchor: start;
+}
+
+.cost-chart__month {
+  fill: var(--ink-muted);
+  font-size: 11px;
+  text-anchor: middle;
+}
+
+.cost-chart__line {
+  fill: none;
+  stroke-width: 2.25;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.cost-chart__line--tokens,
+.cost-chart__dot--tokens {
+  stroke: #1f6b38;
+}
+
+.cost-chart__line--cost,
+.cost-chart__dot--cost {
+  stroke: #8a5a3c;
+}
+
+.cost-chart__line--revenue,
+.cost-chart__dot--revenue {
+  stroke: #2c7a7b;
+}
+
+.cost-chart__dot {
+  fill: #fff8f0;
+  stroke-width: 2;
+}
+
+.cost-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.1rem;
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.cost-chart__legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cost-chart__swatch {
+  width: 0.9rem;
+  height: 0.22rem;
+  border-radius: 99px;
+}
+
+.cost-chart__swatch--tokens {
+  background: #1f6b38;
+}
+
+.cost-chart__swatch--cost {
+  background: #8a5a3c;
+}
+
+.cost-chart__swatch--revenue {
+  background: #2c7a7b;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html.kea-motion .cloud-atmosphere__sun,
   html.kea-motion .cloud-atmosphere__wisp,
@@ -3146,7 +3747,7 @@ html.kea-motion .admin-tabs a:hover {
   html.kea-motion .cloud-atmosphere__wash,
   html.kea-motion .cloud-atmosphere__rainbow,
   html.kea-motion .rising-words__line,
-  html.kea-motion .voice-mic__wave,
+  html.kea-motion .voice-mic__ring,
   html.kea-motion .companion-screen::before,
   html.kea-motion .welcome-screen::before,
   html.kea-motion .kea-button {

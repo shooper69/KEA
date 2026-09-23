@@ -18,6 +18,7 @@ import {
 import { isLanguageCode } from '../config/languages'
 import { DEFAULT_VOICE_CHARACTER } from '../config/voices'
 import { PLACEHOLDER_VOCABULARY } from '../data/placeholders'
+import { requestClearTalkTranscript } from '../architecture/keaTalkMemory'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
   fetchCloudProfile,
@@ -63,7 +64,7 @@ const DEFAULT_PROFILE: StoredProfile = {
   notifyTalk: true,
   saveTranscripts: true,
   listenIdleSeconds: 10,
-  answerAfterSilenceSeconds: 5,
+  answerAfterSilenceSeconds: 3,
   skyTheme: 'clouds',
   chatKeep: 'device',
 }
@@ -335,6 +336,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     persistProfile(empty)
     setProfileState(empty)
     setVocabulary([])
+    requestClearTalkTranscript()
   }
 
   const emailIsAdmin = isAdminEmail(profile.email)

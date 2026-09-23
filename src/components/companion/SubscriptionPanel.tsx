@@ -15,9 +15,11 @@ import { confirmCheckoutSession, startKeaCheckout } from '../../services/keaPay'
 export function SubscriptionPanel({
   email,
   isAdmin,
+  onViewUsage,
 }: {
   email: string
   isAdmin: boolean
+  onViewUsage: () => void
 }) {
   const catalog = loadPlanCatalog()
   const [access, setAccess] = useState(() => getTalkAccess(isAdmin))
@@ -57,8 +59,11 @@ export function SubscriptionPanel({
           ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatDailyMinutes(access.dailyMinutesAllowed)}.`
           : access.status === 'expired'
             ? 'Your trial has expired. Choose a plan to keep talking.'
-            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day · ${access.minutesUsedToday.toFixed(1)} used today.`}
+            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`}
       </p>
+      <button type="button" className="settings-usage-link" onClick={onViewUsage}>
+        Click here to view Usage
+      </button>
       {isAdmin ? (
         <p className="settings-note">
           Admin accounts can talk without a paid plan, for testing.

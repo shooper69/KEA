@@ -1,43 +1,39 @@
-import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
-import {
-  getMasteredLearnCount,
-  subscribeLearnMemory,
-} from '../../architecture/companionMemory'
+import { Link, NavLink } from 'react-router-dom'
+import { requestClearTalkTranscript } from '../../architecture/keaTalkMemory'
+import { KeaMark } from './KeaMark'
 import { UserMenu } from './UserMenu'
 
 const LINKS = [
-  { to: '/conversation', label: 'Talk' },
   { to: '/learn', label: 'Learn List' },
   { to: '/topics', label: 'Topics' },
 ] as const
 
-function MasteredCount() {
-  const [count, setCount] = useState(getMasteredLearnCount)
-
-  useEffect(() => {
-    const refresh = () => setCount(getMasteredLearnCount())
-    const stop = subscribeLearnMemory(refresh)
-    window.addEventListener('kea-learn-memory', refresh)
-    return () => {
-      stop()
-      window.removeEventListener('kea-learn-memory', refresh)
-    }
-  }, [])
-
+function ClearChatIcon() {
   return (
-    <span
-      className="learn-grown-badge"
-      aria-label={`${count} words you now use with ease`}
-    >
-      {count}
-    </span>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.85"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.2 12a7.8 7.8 0 0 1 13.3-5.5L20 8.4M19.8 12a7.8 7.8 0 0 1-13.3 5.5L4 15.6M20 4.2v4.2h-4.2M4 19.8v-4.2h4.2"
+      />
+    </svg>
   )
 }
 
 export function CompanionNav() {
+  function clearChat() {
+    if (!window.confirm('Clear this chat?')) return
+    requestClearTalkTranscript()
+  }
+
   return (
     <nav className="companion-nav" aria-label="Kea">
+      <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
+        <KeaMark className="kea-mark--header" />
+      </Link>
       {LINKS.map((link) => (
         <NavLink
           key={link.to}
@@ -49,10 +45,16 @@ export function CompanionNav() {
           {link.label}
         </NavLink>
       ))}
-      <div className="companion-nav__account">
-        <UserMenu />
-        <MasteredCount />
-      </div>
+      <button
+        type="button"
+        className="companion-nav__clear"
+        aria-label="Clear chat"
+        title="Clear chat"
+        onClick={clearChat}
+      >
+        <ClearChatIcon />
+      </button>
+      <UserMenu />
     </nav>
   )
 }

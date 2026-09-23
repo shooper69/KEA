@@ -9,6 +9,8 @@ interface PasswordFieldProps {
   enterKeyHint?: 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'
   value: string
   onChange: (value: string) => void
+  required?: boolean
+  minLength?: number
 }
 
 export function PasswordField({
@@ -20,6 +22,8 @@ export function PasswordField({
   enterKeyHint,
   value,
   onChange,
+  required = false,
+  minLength,
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false)
   const inputId = useId()
@@ -39,6 +43,8 @@ export function PasswordField({
           enterKeyHint={enterKeyHint}
           placeholder={placeholder}
           value={value}
+          required={required}
+          minLength={minLength}
           onChange={(event) => onChange(event.target.value)}
           onFocus={(event) => {
             event.currentTarget.scrollIntoView({ block: 'center', behavior: 'smooth' })

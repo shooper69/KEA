@@ -1,4 +1,5 @@
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
+import { looksLikeSystemText } from './whisperText'
 import type { ChatTopic, LanguageCode, LearnListItem } from '../types'
 
 const LEARN_KEY = 'kea-learn-list'
@@ -158,6 +159,7 @@ function hasWord(haystack: string, needle: string) {
 }
 
 export function looksLikeLearnRequest(text: string) {
+  if (looksLikeSystemText(text)) return false
   return LEARN_REQUEST.test(text)
 }
 
@@ -168,14 +170,52 @@ function askedTerm(userText: string) {
   return normalizeTerm(userText.replace(/[?¿¡!.,]/g, '')).slice(0, 48)
 }
 
+export function splitTalkParagraphs(text: string): string[] {
+  return text
+    .trim()
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+}
+
+export function spaceFinalQuestion(text: string): string {
+  const trimmed = text.trim().replace(/\r\n/g, '\n')
+  if (!trimmed) return trimmed
+  if (/\n\s*\n\s*(?:¿|¡)?[^\n]+\?\s*$/.test(trimmed)) return trimmed
+  const chunks = trimmed.split(/(?<=[.!?…]["»”']?)(?:\s+|\n+)/)
+  if (chunks.length < 2) return trimmed
+  const last = chunks[chunks.length - 1]?.trim() ?? ''
+  if (!/[?？]\s*$/.test(last)) return trimmed
+  const body = chunks.slice(0, -1).join(' ').trim()
+  if (!body) return trimmed
+  return `${body}\n${last}`
+}
+
+export function alignCaptionParagraphs(spoken: string, caption: string): string[] {
+  const spokenParts = splitTalkParagraphs(spoken)
+  const raw = splitTalkParagraphs(caption)
+  if (!spokenParts.length) return raw
+  if (raw.length === spokenParts.length) return raw
+  const spaced = splitTalkParagraphs(spaceFinalQuestion(raw.join(' ')))
+  if (spaced.length === spokenParts.length) return spaced
+  if (spaced.length > spokenParts.length && spokenParts.length > 0) {
+    return [
+      ...spaced.slice(0, spokenParts.length - 1),
+      spaced.slice(spokenParts.length - 1).join(' '),
+    ]
+  }
+  return spaced
+}
+
 export function splitKeaReply(raw: string): {
   reply: string
   signals: LearnMemorySignals
 } {
   const match = raw.match(MEMORY_BLOCK)
   const empty: LearnMemorySignals = { add: [], used: [] }
-  if (!match) return { reply: raw.trim(), signals: empty }
-  const reply = raw.replace(MEMORY_BLOCK, '').trim()
+  if (!match) return { reply: spaceFinalQuestion(raw.trim()), signals: empty }
+  const reply = spaceFinalQuestion(raw.replace(MEMORY_BLOCK, '').trim())
   try {
     const parsed = JSON.parse(match[1] || '{}') as {
       add?: Array<{ term?: string; translation?: string }>
@@ -239,8 +279,14 @@ function graduateReady(items: LearnListItem[], mastered: MasteredLearnItem[]) {
 
 export function getLearnList(): LearnListItem[] {
   const graduated = graduateReady(readLearnList(), readMastered())
-  if (graduated.changed) persistLearn(graduated.items, graduated.mastered)
-  return graduated.items
+  const items = graduated.items.filter(
+    (item) =>
+      !looksLikeSystemText(item.term) &&
+      !looksLikeSystemText(item.translation),
+  )
+  const changed = graduated.changed || items.length !== graduated.items.length
+  if (changed) persistLearn(items, graduated.mastered)
+  return items
 }
 
 export function getMasteredLearnCount(): number {
@@ -248,13 +294,24 @@ export function getMasteredLearnCount(): number {
   return readMastered().length
 }
 
+function isSystemTopic(item: ChatTopic) {
+  return [item.title, item.nativeTitle, item.summary].some(
+    (value) => Boolean(value) && looksLikeSystemText(value),
+  )
+}
+
 export function getChatTopics(): ChatTopic[] {
-  const stored = readJson<ChatTopic[]>(TOPICS_KEY, []).map((item) => ({
-    ...item,
-    nativeTitle: item.nativeTitle || item.summary || '',
-  }))
+  const raw = readJson<ChatTopic[]>(TOPICS_KEY, [])
+  const stored = raw
+    .map((item) => ({
+      ...item,
+      nativeTitle: item.nativeTitle || item.summary || '',
+    }))
+    .filter((item) => !isSystemTopic(item))
   const merged = mergeById(stored, SAMPLE_TOPICS)
-  if (merged.length !== stored.length) saveChatTopics(merged)
+  if (merged.length !== raw.length || stored.length !== raw.length) {
+    saveChatTopics(merged)
+  }
   return merged.sort((a, b) => b.lastDiscussedAt.localeCompare(a.lastDiscussedAt))
 }
 
@@ -323,6 +380,12 @@ export function applyLearnTurn(options: {
   keaReply: string
   signals?: LearnMemorySignals
 }) {
+  if (
+    looksLikeSystemText(options.userText) ||
+    looksLikeSystemText(options.keaReply)
+  ) {
+    return
+  }
   const items = getLearnList()
   const addedIds = new Set<string>()
   const seenAdd = new Set<string>()
@@ -379,12 +442,13 @@ export function captureLearnRequest(
 }
 
 export function touchChatTopic(userText: string, keaReply: string) {
+  const learnt = topicLine(keaReply) || topicLine(userText)
+  const native = topicLine(userText)
+  if (!learnt && !native) return
   const now = new Date().toISOString()
   const topics = getChatTopics()
   const openId = sessionStorage.getItem(OPEN_TOPIC_KEY)
   let topic = topics.find((item) => item.id === openId)
-  const learnt = topicLine(keaReply) || topicLine(userText)
-  const native = topicLine(userText)
   if (!topic) {
     topic = {
       id: crypto.randomUUID(),
@@ -425,8 +489,13 @@ export function touchChatTopic(userText: string, keaReply: string) {
 
 function topicLine(text: string, max = 110) {
   const cleaned = text.replace(/\s+/g, ' ').trim()
-  if (!cleaned) return ''
-  const sentence = cleaned.split(/(?<=[.!?¿¡])\s+/)[0] || cleaned
+  if (!cleaned || looksLikeSystemText(cleaned)) return ''
+  const sentence =
+    cleaned
+      .split(/(?<=[.!?¿¡])\s+/)
+      .map((part) => part.trim())
+      .find((part) => part && !looksLikeSystemText(part)) || ''
+  if (!sentence) return ''
   if (sentence.length <= max) return sentence
   return `${sentence.slice(0, max).trim()}…`
 }

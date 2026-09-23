@@ -1,5 +1,11 @@
 import { getAverageReplyWords } from '../data/keaSpeech'
 import {
+  calendarMonthKey,
+  loadBilling,
+  minutesUsedInMonth,
+} from './keaBilling'
+import {
+  getPlan,
   loadPlanCatalog,
   type KeaPlan,
   type KeaPlanCatalog,
@@ -7,6 +13,7 @@ import {
 
 const RATES_KEY = 'kea-openai-rates-v1'
 const ASSUME_KEY = 'kea-cost-assumptions-v1'
+const MONTHLY_KEY = 'kea-cost-monthly-v1'
 
 export interface OpenAiRates {
   whisperPerMinute: number
@@ -81,10 +88,24 @@ export function saveCostAssumptions(value: CostAssumptions) {
 export interface DayCost {
   minutes: number
   turns: number
+  tokens: number
   whisper: number
   chat: number
   tts: number
   total: number
+}
+
+export interface MonthlyCostPoint {
+  month: string
+  tokens: number
+  cost: number
+  revenue: number
+  minutes: number
+}
+
+interface MonthlyCostStore {
+  startMonth: string
+  months: Record<string, MonthlyCostPoint>
 }
 
 export interface PlanCostRow {
@@ -140,11 +161,134 @@ export function costForMinutes(
   return {
     minutes: mins,
     turns,
+    tokens: inputTokens + outputTokens + ttsInputTokens + ttsAudioTokens,
     whisper,
     chat,
     tts,
     total: whisper + chat + tts,
   }
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function isMonthKey(value: string) {
+  return /^\d{4}-\d{2}$/.test(value)
+}
+
+export function calendarMonthKeys(startMonth: string, endMonth: string): string[] {
+  const start = isMonthKey(startMonth) ? startMonth : endMonth
+  const end = isMonthKey(endMonth) ? endMonth : start
+  const [sy, sm] = start.split('-').map(Number)
+  const [ey, em] = end.split('-').map(Number)
+  const keys: string[] = []
+  let year = sy
+  let month = sm
+  while (year < ey || (year === ey && month <= em)) {
+    keys.push(`${year}-${pad2(month)}`)
+    month += 1
+    if (month > 12) {
+      month = 1
+      year += 1
+    }
+    if (keys.length > 240) break
+  }
+  return keys.length ? keys : [end]
+}
+
+/** Catalog price of the plan stored on this device, else 0. Not a Stripe ledger. */
+export function recordedSubscriptionRevenue() {
+  const billing = loadBilling()
+  if (billing.status !== 'active' || !billing.planId) return 0
+  const plan = getPlan(billing.planId)
+  const price = Number(plan.monthlyPrice)
+  return Number.isFinite(price) && price > 0 ? price : 0
+}
+
+function emptyStore(startMonth: string): MonthlyCostStore {
+  return { startMonth, months: {} }
+}
+
+function loadMonthlyStore(): MonthlyCostStore {
+  const now = calendarMonthKey()
+  try {
+    const raw = localStorage.getItem(MONTHLY_KEY)
+    if (!raw) return emptyStore(now)
+    const parsed = JSON.parse(raw) as Partial<MonthlyCostStore>
+    const startMonth =
+      typeof parsed.startMonth === 'string' && isMonthKey(parsed.startMonth)
+        ? parsed.startMonth
+        : now
+    const months: Record<string, MonthlyCostPoint> = {}
+    if (parsed.months && typeof parsed.months === 'object') {
+      for (const [key, value] of Object.entries(parsed.months)) {
+        if (!isMonthKey(key) || !value || typeof value !== 'object') continue
+        const point = value as Partial<MonthlyCostPoint>
+        months[key] = {
+          month: key,
+          tokens: num(Number(point.tokens), 0),
+          cost: num(Number(point.cost), 0),
+          revenue: num(Number(point.revenue), 0),
+          minutes: num(Number(point.minutes), 0),
+        }
+      }
+    }
+    return { startMonth, months }
+  } catch {
+    return emptyStore(now)
+  }
+}
+
+function saveMonthlyStore(store: MonthlyCostStore) {
+  localStorage.setItem(MONTHLY_KEY, JSON.stringify(store))
+}
+
+export function measureMonth(
+  yyyyMm: string,
+  rates: OpenAiRates = loadOpenAiRates(),
+  assume: CostAssumptions = loadCostAssumptions(),
+  keaWords = getAverageReplyWords(),
+  includeRevenue = yyyyMm === calendarMonthKey(),
+): MonthlyCostPoint {
+  const minutes = Math.max(0, minutesUsedInMonth(yyyyMm))
+  const day = costForMinutes(minutes, rates, assume, keaWords)
+  return {
+    month: yyyyMm,
+    tokens: day.tokens,
+    cost: day.total,
+    revenue: includeRevenue ? recordedSubscriptionRevenue() : 0,
+    minutes,
+  }
+}
+
+/**
+ * Axis from the first recorded month (this month on first visit) through the
+ * current calendar month. The current month is always refreshed from talk
+ * usage and local billing; earlier months stay as saved snapshots.
+ */
+export function loadMonthlyCostSeries(
+  rates: OpenAiRates = loadOpenAiRates(),
+  assume: CostAssumptions = loadCostAssumptions(),
+  keaWords = getAverageReplyWords(),
+): MonthlyCostPoint[] {
+  const now = calendarMonthKey()
+  const store = loadMonthlyStore()
+  const startMonth = store.startMonth <= now ? store.startMonth : now
+  const months = { ...store.months }
+  const points = calendarMonthKeys(startMonth, now).map((month) => {
+    if (month === now) {
+      const live = measureMonth(month, rates, assume, keaWords, true)
+      months[month] = live
+      return live
+    }
+    if (months[month]) return months[month]
+    const recovered = measureMonth(month, rates, assume, keaWords, false)
+    months[month] = recovered
+    return recovered
+  })
+  saveMonthlyStore({ startMonth, months })
+  return points
 }
 
 function rowFor(

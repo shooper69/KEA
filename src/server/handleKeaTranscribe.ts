@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { cleanSpokenText } from '../architecture/whisperText.ts'
 
-const LEARNER_PROMPT =
-  'Language learner speaking casually. They may mix English and Spanish, have a strong accent, or mispronounce words. Transcribe faithfully. Do not translate. Do not rewrite into perfect grammar. Keep mixed-language speech as spoken.'
+const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 
 interface TranscribeRequest {
   audio?: string
@@ -132,7 +132,7 @@ export async function handleKeaTranscribe(
     return
   }
 
-  const text = data.text?.trim() ?? ''
+  const text = cleanSpokenText(data.text ?? '')
   res.statusCode = 200
   res.end(
     JSON.stringify({

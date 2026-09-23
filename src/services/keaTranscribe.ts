@@ -1,3 +1,5 @@
+import { cleanSpokenText } from '../architecture/whisperText'
+
 export interface WhisperTranscript {
   text: string
   confidence: number
@@ -31,7 +33,7 @@ export async function transcribeWithWhisper(blob: Blob): Promise<WhisperTranscri
     throw new Error(data.error ?? 'Could not transcribe speech')
   }
   return {
-    text: data.text?.trim() ?? '',
+    text: cleanSpokenText(data.text ?? ''),
     confidence: typeof data.confidence === 'number' ? data.confidence : 0,
     model: data.model || 'whisper-1',
   }

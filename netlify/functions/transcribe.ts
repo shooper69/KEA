@@ -1,5 +1,6 @@
-const LEARNER_PROMPT =
-  'Language learner speaking casually. They may mix English and Spanish, have a strong accent, or mispronounce words. Transcribe faithfully. Do not translate. Do not rewrite into perfect grammar. Keep mixed-language speech as spoken.'
+import { cleanSpokenText } from '../../src/architecture/whisperText'
+
+const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 
 type TranscribeEvent = {
   httpMethod: string
@@ -101,10 +102,12 @@ export async function handler(event: TranscribeEvent) {
     }
   }
 
+  const text = cleanSpokenText(data.text ?? '')
+
   return {
     statusCode: 200,
     body: JSON.stringify({
-      text: data.text?.trim() ?? '',
+      text,
       confidence: confidenceFromVerbose(data),
       model: 'whisper-1',
     }),

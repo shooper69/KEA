@@ -41,6 +41,9 @@ export function UserMenu() {
           <button type="button" role="menuitem" onClick={goSettings}>
             Settings
           </button>
+          <Link role="menuitem" to="/about" onClick={() => setOpen(false)}>
+            About
+          </Link>
           {isAdmin ? (
             <Link role="menuitem" to="/admin" onClick={() => setOpen(false)}>
               Admin

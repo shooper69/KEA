@@ -38,6 +38,16 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   const [learning, setLearning] = useState<LanguageCode | ''>('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const registerReady = Boolean(
+    name.trim() &&
+      isEmail(email) &&
+      password.length >= 6 &&
+      confirm.length >= 6 &&
+      password === confirm &&
+      spoken &&
+      learning &&
+      spoken !== learning,
+  )
 
   useEffect(() => {
     if (isPasswordRecoveryLocation()) {
@@ -52,18 +62,22 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     if (isSignedIn) navigate('/conversation', { replace: true })
   }, [isSignedIn, navigate])
 
-  const spokenLabel = SUPPORTED_LANGUAGES.find((item) => item.code === spoken)
-  const learningLabel = SUPPORTED_LANGUAGES.find((item) => item.code === learning)
-
   async function register() {
     const supabase = getSupabase()
     if (!supabase) return
-    if (!name.trim() || !isEmail(email) || !spoken || !learning || spoken === learning) {
-      setMessage('Fill in your name, email, and two different languages.')
+    if (
+      !name.trim() ||
+      !isEmail(email) ||
+      !password ||
+      !confirm ||
+      !spoken ||
+      !learning
+    ) {
+      setMessage('Every field is required.')
       return
     }
-    if (!password || !confirm) {
-      setMessage('Enter your password twice.')
+    if (spoken === learning) {
+      setMessage('Choose two different languages.')
       return
     }
     if (password.length < 6) {
@@ -234,6 +248,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               autoComplete="given-name"
               placeholder="First name"
               value={name}
+              required
               onChange={(event) => setName(event.target.value)}
             />
           </label>
@@ -244,6 +259,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               autoComplete="email"
               placeholder="Email"
               value={email}
+              required
               onChange={(event) => setEmail(event.target.value)}
             />
           </label>
@@ -252,6 +268,8 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             autoComplete="new-password"
             placeholder="Password"
             value={password}
+            required
+            minLength={6}
             onChange={setPassword}
           />
           <PasswordField
@@ -259,6 +277,8 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             autoComplete="new-password"
             placeholder="Enter password again"
             value={confirm}
+            required
+            minLength={6}
             onChange={setConfirm}
           />
           <div className="welcome-languages">
@@ -266,9 +286,12 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               <span className="visually-hidden">I speak</span>
               <select
                 value={spoken}
+                required
                 onChange={(event) => setSpoken(event.target.value as LanguageCode)}
               >
-                <option value="">I speak</option>
+                <option value="" disabled>
+                  I speak
+                </option>
                 {SUPPORTED_LANGUAGES.map((language) => (
                   <option key={language.code} value={language.code}>
                     {language.name} · {language.nativeName}
@@ -280,11 +303,14 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               <span className="visually-hidden">I am learning</span>
               <select
                 value={learning}
+                required
                 onChange={(event) =>
                   setLearning(event.target.value as LanguageCode)
                 }
               >
-                <option value="">I am learning</option>
+                <option value="" disabled>
+                  I am learning
+                </option>
                 {SUPPORTED_LANGUAGES.map((language) => (
                   <option key={`learn-${language.code}`} value={language.code}>
                     {language.name} · {language.nativeName}
@@ -293,16 +319,11 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               </select>
             </label>
           </div>
-          {spokenLabel && learningLabel ? (
-            <p className="welcome-screen__pair">
-              {spokenLabel.name} → {learningLabel.name}
-            </p>
-          ) : null}
           <div className="welcome-screen__actions auth-login-actions">
             <Button
               type="submit"
               className="auth-login-submit"
-              disabled={busy}
+              disabled={busy || !registerReady}
             >
               Create account
             </Button>

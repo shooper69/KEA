@@ -1,15 +1,29 @@
-export function heardKeaWake(text: string) {
-  const n = text
+function normalizeHeard(text: string) {
+  return text
     .toLowerCase()
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .replace(/[^a-z\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+const KEA_NAME = '(kea|kia|kiah|keya|kee+a|kier)'
+
+export function heardKeaWake(text: string) {
+  const n = normalizeHeard(text)
   if (!n) return false
-  if (/\byo\s*(kea|kia|kiah|keya|kee+a)\b/.test(n)) return true
-  if (/\b(hey|hi|ok|okay|hola)\s+(kea|kia|kiah|keya)\b/.test(n)) return true
+  if (new RegExp(`\\b(yo|yoh|ya|you|to|too|two|hey|hi|ok|okay|hola)\\s*${KEA_NAME}\\b`).test(n)) {
+    return true
+  }
+  if (new RegExp(`\\b(wake|call)\\s+${KEA_NAME}\\b`).test(n)) return true
   return false
+}
+
+export function heardKeaStop(text: string) {
+  const n = normalizeHeard(text)
+  if (!n) return false
+  return new RegExp(`\\b(stop|quit|end)\\s+${KEA_NAME}\\b`).test(n)
 }
 
 export interface KeaSpeechRecognition {

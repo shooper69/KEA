@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   getLearnList,
   subscribeLearnMemory,
 } from '../architecture/companionMemory'
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { KeaMark } from '../components/companion/KeaMark'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { useSession } from '../context/SessionContext'
 
@@ -43,9 +41,6 @@ export function LearnListPage() {
     <main className="companion-screen memory-library">
       <CloudAtmosphere presence="idle" />
       <header className="memory-library__header">
-        <Link to="/conversation" aria-label="Kea home">
-          <KeaMark className="kea-mark--header" />
-        </Link>
         <CompanionNav />
       </header>
       <div className="memory-library__content">
@@ -75,8 +70,8 @@ export function LearnListPage() {
           <ul className="memory-library__list">
             {words.map((item) => (
               <li key={item.id} className="memory-library__card">
-                <p className="memory-library__english">
-                  {item.term} = {item.translation}
+                <p className="memory-library__pair">
+                  {item.term} .... {item.translation}
                 </p>
               </li>
             ))}

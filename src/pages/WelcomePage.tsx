@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { KeaMark } from '../components/companion/KeaMark'
 import { AuthPanel } from '../components/companion/AuthPanel'
 import { PasswordField } from '../components/companion/PasswordField'
 import { SUPPORTED_LANGUAGES } from '../config/languages'
@@ -52,8 +51,6 @@ export function WelcomePage() {
       spoken !== learning &&
       (!isAdminEmail(mail) || adminUnlocked || password.length > 0),
   )
-  const spokenLabel = SUPPORTED_LANGUAGES.find((item) => item.code === spoken)
-  const learningLabel = SUPPORTED_LANGUAGES.find((item) => item.code === learning)
 
   useEffect(() => {
     if (!authReady) return
@@ -126,6 +123,7 @@ export function WelcomePage() {
           type="text"
           autoComplete="given-name"
           value={name}
+          required
           onChange={(event) => setName(event.target.value)}
         />
       </label>
@@ -138,6 +136,7 @@ export function WelcomePage() {
             type="email"
             autoComplete="email"
             value={mail}
+            required
             onChange={(event) => setMail(event.target.value)}
           />
         </label>
@@ -147,9 +146,12 @@ export function WelcomePage() {
           <span>I speak</span>
           <select
             value={spoken}
+            required
             onChange={(event) => setSpoken(event.target.value as LanguageCode)}
           >
-            <option value="">Choose language</option>
+            <option value="" disabled>
+              Choose language
+            </option>
             {SUPPORTED_LANGUAGES.map((language) => (
               <option key={language.code} value={language.code}>
                 {language.name} · {language.nativeName}
@@ -161,11 +163,14 @@ export function WelcomePage() {
           <span>I am learning</span>
           <select
             value={learning}
+            required
             onChange={(event) =>
               setLearning(event.target.value as LanguageCode)
             }
           >
-            <option value="">Choose language</option>
+            <option value="" disabled>
+              Choose language
+            </option>
             {SUPPORTED_LANGUAGES.map((language) => (
               <option key={`learn-${language.code}`} value={language.code}>
                 {language.name} · {language.nativeName}
@@ -174,11 +179,6 @@ export function WelcomePage() {
           </select>
         </label>
       </div>
-      {spokenLabel && learningLabel ? (
-        <p className="welcome-screen__pair">
-          {spokenLabel.name} → {learningLabel.name}
-        </p>
-      ) : null}
       {needsAdminPassword && !adminUnlocked && !needsProfileFinish ? (
         <PasswordField
           label="Password"
@@ -205,13 +205,9 @@ export function WelcomePage() {
       className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}`}
     >
       <CloudAtmosphere presence="idle" tempo="sunrise" />
-      <header className="welcome-screen__top">
-        <span />
-        <span />
-      </header>
       <div className="welcome-screen__content">
         <div className="welcome-screen__brand">
-          <KeaMark className="kea-mark--welcome" />
+          <img className="welcome-screen__logo" src="/kea-05.png" alt="Kea" />
         </div>
         <h1>Chat with Kea</h1>
         <p className="welcome-screen__lede">
@@ -228,9 +224,8 @@ export function WelcomePage() {
           car, walking the dog, doing the dishes.
         </p>
         <p className="welcome-screen__lede">
-          No games, no fluff, no structured lesson plan. Just an anything goes
-          companion, available in your chosen language, whenever you want to
-          chat.
+          Just an anything goes chatty companion, speaking in the languages of
+          your choice and helping you when you make mistakes.
         </p>
 
         {!authReady ? (

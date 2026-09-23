@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   analyseCosts,
   loadCostAssumptions,
+  loadMonthlyCostSeries,
   loadOpenAiRates,
   saveCostAssumptions,
   saveOpenAiRates,
   type CostAssumptions,
+  type MonthlyCostPoint,
   type OpenAiRates,
 } from '../architecture/keaCostModel'
 import { formatUsd, loadPlanCatalog } from '../architecture/keaPlans'
@@ -19,6 +21,138 @@ function pct(value: number) {
   return `${Math.round(value * 100)}%`
 }
 
+function formatTokens(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
+  if (value >= 10_000) return `${Math.round(value / 1000)}k`
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
+  return `${Math.round(value)}`
+}
+
+function monthLabel(yyyyMm: string) {
+  const [year, month] = yyyyMm.split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleString('en', {
+    month: 'short',
+    year: '2-digit',
+  })
+}
+
+function CostTrendChart({ points }: { points: MonthlyCostPoint[] }) {
+  const width = 720
+  const height = 260
+  const pad = { left: 56, right: 56, top: 18, bottom: 36 }
+  const innerW = width - pad.left - pad.right
+  const innerH = height - pad.top - pad.bottom
+  const maxTokens = Math.max(1, ...points.map((p) => p.tokens))
+  const maxMoney = Math.max(1, ...points.map((p) => Math.max(p.cost, p.revenue)))
+  const last = points[points.length - 1]
+  const n = points.length
+
+  function xAt(index: number) {
+    if (n <= 1) return pad.left + innerW / 2
+    return pad.left + (index / (n - 1)) * innerW
+  }
+
+  function yTokens(value: number) {
+    return pad.top + innerH * (1 - value / maxTokens)
+  }
+
+  function yMoney(value: number) {
+    return pad.top + innerH * (1 - value / maxMoney)
+  }
+
+  function line(key: 'tokens' | 'cost' | 'revenue', yOf: (v: number) => number) {
+    return points
+      .map((point, index) => `${xAt(index).toFixed(1)},${yOf(point[key]).toFixed(1)}`)
+      .join(' ')
+  }
+
+  const ticks = 4
+
+  return (
+    <div className="cost-chart">
+      <svg
+        className="cost-chart__svg"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Token usage, cost, and revenue by calendar month"
+      >
+        {Array.from({ length: ticks + 1 }, (_, i) => {
+          const y = pad.top + (innerH * i) / ticks
+          const tokenTick = maxTokens * (1 - i / ticks)
+          const moneyTick = maxMoney * (1 - i / ticks)
+          return (
+            <g key={i}>
+              <line
+                className="cost-chart__grid"
+                x1={pad.left}
+                x2={width - pad.right}
+                y1={y}
+                y2={y}
+              />
+              <text className="cost-chart__axis cost-chart__axis--left" x={pad.left - 8} y={y + 4}>
+                {formatTokens(tokenTick)}
+              </text>
+              <text
+                className="cost-chart__axis cost-chart__axis--right"
+                x={width - pad.right + 8}
+                y={y + 4}
+              >
+                {money(moneyTick)}
+              </text>
+            </g>
+          )
+        })}
+        <polyline className="cost-chart__line cost-chart__line--tokens" points={line('tokens', yTokens)} />
+        <polyline className="cost-chart__line cost-chart__line--cost" points={line('cost', yMoney)} />
+        <polyline className="cost-chart__line cost-chart__line--revenue" points={line('revenue', yMoney)} />
+        {points.map((point, index) => (
+          <g key={point.month}>
+            <circle
+              className="cost-chart__dot cost-chart__dot--tokens"
+              cx={xAt(index)}
+              cy={yTokens(point.tokens)}
+              r={3.5}
+            />
+            <circle
+              className="cost-chart__dot cost-chart__dot--cost"
+              cx={xAt(index)}
+              cy={yMoney(point.cost)}
+              r={3.5}
+            />
+            <circle
+              className="cost-chart__dot cost-chart__dot--revenue"
+              cx={xAt(index)}
+              cy={yMoney(point.revenue)}
+              r={3.5}
+            />
+            <text
+              className="cost-chart__month"
+              x={xAt(index)}
+              y={height - 10}
+            >
+              {monthLabel(point.month)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <ul className="cost-chart__legend">
+        <li>
+          <span className="cost-chart__swatch cost-chart__swatch--tokens" />
+          Used {formatTokens(last?.tokens ?? 0)} tokens
+        </li>
+        <li>
+          <span className="cost-chart__swatch cost-chart__swatch--cost" />
+          Cost {money(last?.cost ?? 0)}
+        </li>
+        <li>
+          <span className="cost-chart__swatch cost-chart__swatch--revenue" />
+          Revenue {money(last?.revenue ?? 0)}
+        </li>
+      </ul>
+    </div>
+  )
+}
+
 export function AdminCostAnalysisPage() {
   const [rates, setRates] = useState(loadOpenAiRates)
   const [assume, setAssume] = useState(loadCostAssumptions)
@@ -28,6 +162,12 @@ export function AdminCostAnalysisPage() {
     () => analyseCosts(catalog, rates, assume, keaWords),
     [assume, catalog, keaWords, rates],
   )
+  const [series, setSeries] = useState<MonthlyCostPoint[]>(() =>
+    loadMonthlyCostSeries(rates, assume, keaWords),
+  )
+  useEffect(() => {
+    setSeries(loadMonthlyCostSeries(rates, assume, keaWords))
+  }, [assume, keaWords, rates])
 
   function patchRates(patch: Partial<OpenAiRates>) {
     const next = { ...rates, ...patch }
@@ -42,6 +182,9 @@ export function AdminCostAnalysisPage() {
   }
 
   const rows = [report.trial, ...report.plans]
+  const startLabel = series[0] ? monthLabel(series[0].month) : monthLabel(
+    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+  )
 
   return (
     <>
@@ -55,6 +198,18 @@ export function AdminCostAnalysisPage() {
           tier prices or daily minutes on Subscription tiers and this table
           follows.
         </p>
+      </section>
+      <section className="settings-card">
+        <h2>Used, cost, and revenue</h2>
+        <p className="settings-note">
+          Months from {startLabel} (when this chart first recorded on this
+          device) through the current month. New months appear as the calendar
+          moves. Token usage and cost come from talk minutes stored on this
+          device, using the same Whisper / chat / TTS model as the table below.
+          Revenue is the catalog price of a plan recorded on this device, or $0
+          if there is no subscription.
+        </p>
+        <CostTrendChart points={series} />
       </section>
       <section className="settings-card">
         <h2>OpenAI rates</h2>

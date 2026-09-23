@@ -2,8 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyLearnTurn,
   splitKeaReply,
+  splitTalkParagraphs,
   touchChatTopic,
 } from '../architecture/companionMemory'
+import {
+  TALK_CLEARED_EVENT,
+  loadTalkTranscript,
+  saveTalkTranscript,
+  withHomeGreeting,
+} from '../architecture/keaTalkMemory'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import {
   DEFAULT_VOICE_CHARACTER,
@@ -40,7 +47,7 @@ const RESTART_LISTEN_MS = 80
 const MIN_SPEECH_MS = 280
 const MAX_RECORD_MS = 22000
 const SPEECH_RMS = 0.04
-const DEFAULT_ANSWER_SILENCE_MS = 5000
+const DEFAULT_ANSWER_SILENCE_MS = 3000
 
 function readCharacter(): VoicePersonalityId {
   try {
@@ -84,6 +91,7 @@ interface UseVoiceConversationOptions {
   targetLanguage: LanguageCode
   nativeLanguage: NativeLanguageCode
   level: LearnerLevel
+  firstName?: string
   listenIdleSeconds?: number
   answerAfterSilenceSeconds?: number
 }
@@ -92,11 +100,14 @@ export function useVoiceConversation({
   targetLanguage,
   nativeLanguage,
   level,
+  firstName = '',
   listenIdleSeconds = 10,
-  answerAfterSilenceSeconds = 5,
+  answerAfterSilenceSeconds = 3,
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
-  const [messages, setMessages] = useState<TranscriptMessage[]>([])
+  const [messages, setMessages] = useState<TranscriptMessage[]>(() =>
+    withHomeGreeting(loadTalkTranscript(), targetLanguage, firstName),
+  )
   const [error, setError] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
   const [characterId, setCharacterId] = useState<VoicePersonalityId>(readCharacter)
@@ -111,6 +122,7 @@ export function useVoiceConversation({
   const listenIdleTimerRef = useRef<number | null>(null)
   const lastActivityAtRef = useRef(0)
   const fatalListenRef = useRef(false)
+  const sendingRef = useRef(false)
   const restartTimerRef = useRef<number | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -139,7 +151,37 @@ export function useVoiceConversation({
 
   useEffect(() => {
     historyRef.current = messages
+    saveTalkTranscript(messages)
   }, [messages])
+
+  useEffect(() => {
+    function persist() {
+      saveTalkTranscript(historyRef.current)
+    }
+    window.addEventListener('pagehide', persist)
+    document.addEventListener('visibilitychange', persist)
+    function onVisible() {
+      if (document.visibilityState !== 'visible') return
+      persist()
+      const stream = streamRef.current
+      const dead =
+        !stream || stream.getTracks().every((track) => track.readyState === 'ended')
+      if (handsFreeRef.current && dead) {
+        fatalListenRef.current = true
+        handsFreeRef.current = false
+        setHandsFree(false)
+        busyRef.current = false
+        teardownAudio()
+        setStatus('idle')
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('pagehide', persist)
+      document.removeEventListener('visibilitychange', persist)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   const clearListenIdleTimer = useCallback(() => {
     if (listenIdleTimerRef.current !== null) {
@@ -233,8 +275,10 @@ export function useVoiceConversation({
   const captionSpanish = useCallback(
     (id: string, text: string) => {
       if (targetLanguage !== 'es' || !text.trim()) return
-      void translateSpanishToEnglish(text)
-        .then((english) => {
+      const parts = splitTalkParagraphs(text)
+      void Promise.all(parts.map((part) => translateSpanishToEnglish(part)))
+        .then((englishParts) => {
+          const english = englishParts.join('\n')
           setMessages((current) =>
             current.map((item) => (item.id === id ? { ...item, english } : item)),
           )
@@ -248,6 +292,7 @@ export function useVoiceConversation({
 
   const processRecording = useCallback(async (blob: Blob) => {
     if (fatalListenRef.current || !handsFreeRef.current) return
+    if (sendingRef.current) return
     if (blob.size < 800) {
       busyRef.current = false
       if (handsFreeRef.current && !busyRef.current) startListeningRef.current()
@@ -408,6 +453,7 @@ export function useVoiceConversation({
         lang: getLanguage(targetLanguage).speechLocale,
         onend: () => {
           busyRef.current = false
+          sendingRef.current = false
           setMessages((current) =>
             current.map((item) => ({ ...item, active: false })),
           )
@@ -420,6 +466,7 @@ export function useVoiceConversation({
         },
         onerror: () => {
           busyRef.current = false
+          sendingRef.current = false
           if (handsFreeRef.current) {
             window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
           } else setStatus('idle')
@@ -431,6 +478,8 @@ export function useVoiceConversation({
 
   const sendToKea = useCallback(
     async (userText: string) => {
+      if (sendingRef.current) return
+      sendingRef.current = true
       busyRef.current = true
       clearListenIdleTimer()
       setStatus('thinking')
@@ -472,6 +521,7 @@ export function useVoiceConversation({
         speakReply(reply)
       } catch (caught) {
         busyRef.current = false
+        sendingRef.current = false
         handsFreeRef.current = false
         setStatus('idle')
         setHandsFree(false)
@@ -492,36 +542,61 @@ export function useVoiceConversation({
     sendToKeaRef.current = sendToKea
   }, [sendToKea])
 
-  const start = useCallback(async () => {
+  const startingRef = useRef(false)
+
+  const start = useCallback(async (greeting?: string) => {
+    if (startingRef.current || handsFreeRef.current) return
+    startingRef.current = true
     setError(null)
     fatalListenRef.current = false
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      startingRef.current = false
       setError('This browser cannot record the microphone for Whisper.')
       patchVoiceDiagnostics({ recognitionAvailable: false })
       return
     }
+    // Drop the wake-word recognizer before opening Whisper's mic.
+    handsFreeRef.current = true
+    setHandsFree(true)
+    await new Promise((resolve) => window.setTimeout(resolve, 220))
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
       patchVoiceDiagnostics({ recognitionAvailable: true })
-      handsFreeRef.current = true
-      setHandsFree(true)
+      if (greeting?.trim()) {
+        const text = greeting.trim()
+        const keaMessage: TranscriptMessage = {
+          id: crypto.randomUUID(),
+          speaker: 'kea',
+          text,
+          active: true,
+        }
+        historyRef.current = [...historyRef.current, keaMessage]
+        setMessages((current) => [...current, keaMessage])
+        speakReply(text)
+        return
+      }
       startListening()
     } catch {
       fatalListenRef.current = true
-      setError('Microphone permission is needed for Kea to listen.')
+      handsFreeRef.current = false
+      setHandsFree(false)
+      setError('Microphone permission is needed for Kea to listen. Tap the kea, then allow the microphone.')
       patchVoiceDiagnostics({
         recognitionAvailable: false,
         lastRecognitionError: 'not-allowed',
       })
+    } finally {
+      startingRef.current = false
     }
-  }, [startListening])
+  }, [speakReply, startListening])
 
   const stop = useCallback(() => {
     fatalListenRef.current = true
     handsFreeRef.current = false
     setHandsFree(false)
     busyRef.current = false
+    sendingRef.current = false
     stoppingRecordRef.current = true
     clearListenIdleTimer()
     clearRestartTimer()
@@ -531,10 +606,40 @@ export function useVoiceConversation({
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
+  const seedHomeGreeting = useCallback(
+    (current: TranscriptMessage[]) =>
+      withHomeGreeting(current, targetLanguage, firstName),
+    [firstName, targetLanguage],
+  )
+
+  useEffect(() => {
+    setMessages((current) => seedHomeGreeting(current))
+  }, [seedHomeGreeting])
+
+  const clearMessages = useCallback(() => {
+    stop()
+    const next = seedHomeGreeting([])
+    historyRef.current = next
+    setMessages(next)
+    saveTalkTranscript(next)
+  }, [seedHomeGreeting, stop])
+
+  useEffect(() => {
+    function onTalkCleared() {
+      stop()
+      const next = seedHomeGreeting([])
+      historyRef.current = next
+      setMessages(next)
+    }
+    window.addEventListener(TALK_CLEARED_EVENT, onTalkCleared)
+    return () => window.removeEventListener(TALK_CLEARED_EVENT, onTalkCleared)
+  }, [seedHomeGreeting, stop])
+
   const toggle = useCallback(() => {
-    if (handsFree || status !== 'idle') stop()
+    if (startingRef.current) return
+    if (handsFreeRef.current || status !== 'idle') stop()
     else void start()
-  }, [handsFree, start, status, stop])
+  }, [start, status, stop])
 
   return {
     status,
@@ -557,6 +662,7 @@ export function useVoiceConversation({
     toggle,
     start,
     stop,
+    clearMessages,
     pauseSpeech,
     resumeSpeech,
     stopSpeech: stopKeaSpeech,

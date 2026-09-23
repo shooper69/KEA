@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { KeaMark } from '../components/companion/KeaMark'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { PasswordField } from '../components/companion/PasswordField'
 import { changeAdminPassword, isAdminEmail } from '../architecture/adminAuth'
@@ -17,6 +16,12 @@ import {
 import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
 import { SubscriptionPanel } from '../components/companion/SubscriptionPanel'
+import { UsagePanel } from '../components/companion/UsagePanel'
+import {
+  DEFAULT_ANSWER_SILENCE_SECONDS,
+  getAnswerSilenceSeconds,
+  saveAnswerSilenceSeconds,
+} from '../data/keaAnswerSilence'
 import type { ChatKeep, SkyTheme } from '../types'
 
 function PlayIcon() {
@@ -75,10 +80,10 @@ export function SettingsPage() {
     notifyTalk,
     saveTranscripts,
     listenIdleSeconds,
-    answerAfterSilenceSeconds,
     skyTheme,
     chatKeep,
   } = useSession()
+  const [answerSilence, setAnswerSilence] = useState(getAnswerSilenceSeconds)
   const fileRef = useRef<HTMLInputElement>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [nextPassword, setNextPassword] = useState('')
@@ -89,16 +94,18 @@ export function SettingsPage() {
   const [draftEmail, setDraftEmail] = useState(email)
   const [tab, setTab] = useState<
     | 'choices'
-    | 'profile'
     | 'listening'
     | 'memory'
     | 'notifications'
+    | 'profile'
     | 'security'
     | 'subscription'
+    | 'usage'
   >('choices')
   const [searchParams] = useSearchParams()
   useEffect(() => {
-    if (searchParams.get('tab') === 'subscription') setTab('subscription')
+    const next = searchParams.get('tab')
+    if (next === 'subscription' || next === 'usage') setTab(next)
   }, [searchParams])
   const catalog = loadVoiceCatalog()
   const userVoices = enabledUserVoices(catalog)
@@ -116,9 +123,6 @@ export function SettingsPage() {
     <main className="companion-screen settings-screen">
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
-        <Link to="/conversation" aria-label="Kea home">
-          <KeaMark className="kea-mark--header" />
-        </Link>
         <CompanionNav />
       </header>
       <div className="settings-screen__content">
@@ -132,12 +136,13 @@ export function SettingsPage() {
           {(
             [
               ['choices', 'Choices'],
-              ['profile', 'Profile'],
               ['listening', 'Listening'],
-              ['subscription', 'Subscriptions'],
               ['memory', 'Memory'],
               ['notifications', 'Notifications'],
+              ['profile', 'Profile'],
               ['security', 'Security'],
+              ['subscription', 'Subscriptions'],
+              ['usage', 'Usage'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -285,7 +290,7 @@ export function SettingsPage() {
           </>
         ) : null}
         {tab === 'listening' ? (
-        <section className="settings-card">
+        <section className="settings-card settings-card--listening">
           <h2>Listening</h2>
           <label className="welcome-field">
             <span>Turn the microphone off after</span>
@@ -308,14 +313,15 @@ export function SettingsPage() {
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
-              value={answerAfterSilenceSeconds}
-              onChange={(event) =>
-                setProfile({
-                  answerAfterSilenceSeconds: Number(event.target.value),
-                })
-              }
+              value={answerSilence}
+              onChange={(event) => {
+                const next = Number(event.target.value)
+                setAnswerSilence(next)
+                saveAnswerSilenceSeconds(next)
+                setProfile({ answerAfterSilenceSeconds: next })
+              }}
             >
-              {[2, 3, 4, 5, 6, 8, 10].map((seconds) => (
+              {[1, 2, 3, 4, 5, 6, 8, 10].map((seconds) => (
                 <option key={seconds} value={seconds}>
                   {seconds} seconds of silence
                 </option>
@@ -323,14 +329,20 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Default is 5 seconds after you stop speaking. Then Kea replies as
-            quickly as she can.
+            Default is {DEFAULT_ANSWER_SILENCE_SECONDS} seconds after you stop
+            speaking. Then Kea replies as quickly as she can. An admin can set
+            this for everyone in About Kea.
           </p>
         </section>
         ) : null}
         {tab === 'subscription' ? (
-          <SubscriptionPanel email={email} isAdmin={isAdmin} />
+          <SubscriptionPanel
+            email={email}
+            isAdmin={isAdmin}
+            onViewUsage={() => setTab('usage')}
+          />
         ) : null}
+        {tab === 'usage' ? <UsagePanel isAdmin={isAdmin} /> : null}
         {tab === 'profile' ? (
         <section className="settings-card">
           <h2>Profile</h2>

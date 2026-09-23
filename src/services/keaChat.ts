@@ -5,6 +5,15 @@ import { getAverageReplyWords } from '../data/keaSpeech'
 import type { LearnerLevel } from '../types'
 import type { TranscriptMessage } from '../types'
 
+const MAX_HISTORY_TURNS = 16
+const MAX_TURN_CHARS = 480
+
+function clipTurn(text: string) {
+  const trimmed = text.trim()
+  if (trimmed.length <= MAX_TURN_CHARS) return trimmed
+  return trimmed.slice(-MAX_TURN_CHARS).replace(/^\S*\s+/, '')
+}
+
 export async function askKea(options: {
   nativeLanguage: string
   targetLanguage: string
@@ -12,13 +21,19 @@ export async function askKea(options: {
   history: TranscriptMessage[]
   userText: string
 }): Promise<string> {
-  const messages = [
-    ...options.history.map((item) => ({
+  const history = options.history
+    .filter((item) => item.text.trim())
+    .slice(-MAX_HISTORY_TURNS)
+    .map((item) => ({
       role: item.speaker === 'kea' ? ('assistant' as const) : ('user' as const),
-      content: item.text,
-    })),
-    { role: 'user' as const, content: options.userText },
-  ]
+      content: clipTurn(item.text),
+    }))
+  const userText = clipTurn(options.userText)
+  const last = history[history.length - 1]
+  const messages =
+    last?.role === 'user' && last.content === userText
+      ? history
+      : [...history, { role: 'user' as const, content: userText }]
 
   const response = await fetch('/api/chat', {
     method: 'POST',

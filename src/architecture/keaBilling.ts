@@ -30,12 +30,32 @@ export interface TalkAccess {
   minutesLeftToday: number
 }
 
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
+}
+
 function todayKey() {
   const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${USAGE_PREFIX}${y}-${m}-${d}`
+  return `${USAGE_PREFIX}${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+}
+
+export function calendarMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`
+}
+
+function monthUsagePrefix(yyyyMm = calendarMonthKey()) {
+  return `${USAGE_PREFIX}${yyyyMm}-`
+}
+
+function secondsFromUsageRaw(raw: string | null) {
+  if (!raw) return 0
+  try {
+    const parsed = JSON.parse(raw) as { seconds?: number }
+    const seconds = Number(parsed?.seconds)
+    return Number.isFinite(seconds) ? seconds : 0
+  } catch {
+    return 0
+  }
 }
 
 function emptyBilling(): BillingState {
@@ -116,13 +136,67 @@ export function activatePlan(planId: PlanId, stripeSessionId = '') {
 }
 
 export function minutesUsedToday() {
+  return secondsFromUsageRaw(localStorage.getItem(todayKey())) / 60
+}
+
+/** Sum of stored talk seconds for every day in the given calendar month (YYYY-MM). */
+export function minutesUsedInMonth(yyyyMm = calendarMonthKey()) {
+  const prefix = monthUsagePrefix(yyyyMm)
+  let seconds = 0
   try {
-    const raw = localStorage.getItem(todayKey())
-    const parsed = raw ? (JSON.parse(raw) as { seconds?: number }) : null
-    const seconds = Number(parsed?.seconds)
-    return Number.isFinite(seconds) ? seconds / 60 : 0
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key?.startsWith(prefix)) continue
+      seconds += secondsFromUsageRaw(localStorage.getItem(key))
+    }
   } catch {
     return 0
+  }
+  return seconds / 60
+}
+
+/** Sum of stored talk seconds for every day in the current calendar month. */
+export function minutesUsedThisMonth() {
+  return minutesUsedInMonth()
+}
+
+export function daysInCurrentMonth() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+}
+
+export interface MonthlyCreditUsage {
+  minutesUsed: number
+  minutesAllowed: number
+  usedPercent: number
+  remainingPercent: number
+  unlimited: boolean
+  dailyMinutesAllowed: number
+}
+
+/**
+ * Monthly credits are the daily talk cap × days in this calendar month.
+ * Usage is the sum of stored daily talk seconds (there is no separate Stripe
+ * usage ledger). Unlimited / admin (daily cap 0) has no monthly ceiling.
+ */
+export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
+  const access = getTalkAccess(isAdmin)
+  const minutesUsed = minutesUsedThisMonth()
+  const unlimited = access.dailyMinutesAllowed <= 0
+  const minutesAllowed = unlimited
+    ? 0
+    : access.dailyMinutesAllowed * daysInCurrentMonth()
+  const usedPercent =
+    unlimited || minutesAllowed <= 0
+      ? 0
+      : Math.min(100, Math.round((minutesUsed / minutesAllowed) * 100))
+  return {
+    minutesUsed,
+    minutesAllowed,
+    usedPercent,
+    remainingPercent: unlimited ? 100 : Math.max(0, 100 - usedPercent),
+    unlimited,
+    dailyMinutesAllowed: access.dailyMinutesAllowed,
   }
 }
 

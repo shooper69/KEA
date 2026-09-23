@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   DEFAULT_ABOUT_KEA,
+  KEA_BIRD_SRC,
   getAboutKea,
   resetAboutKea,
   saveAboutKea,
@@ -21,16 +22,27 @@ import {
   MIN_AVERAGE_REPLY_WORDS,
   saveAverageReplyWords,
 } from '../data/keaSpeech'
+import {
+  DEFAULT_ANSWER_SILENCE_SECONDS,
+  clampAnswerSilenceSeconds,
+  getAnswerSilenceSeconds,
+  MAX_ANSWER_SILENCE_SECONDS,
+  MIN_ANSWER_SILENCE_SECONDS,
+  resetAnswerSilenceSeconds,
+  saveAnswerSilenceSeconds,
+} from '../data/keaAnswerSilence'
 
 export function AdminAboutPage() {
   const [about, setAbout] = useState(getAboutKea)
   const [saved, setSaved] = useState(false)
   const [averageWords, setAverageWords] = useState(getAverageReplyWords)
   const [masteryUses, setMasteryUses] = useState(getLearnMasteryUses)
+  const [answerSilence, setAnswerSilence] = useState(getAnswerSilenceSeconds)
 
   return (
     <section className="settings-card">
       <h2>About Kea</h2>
+      <img className="about-kea-admin__portrait" src={KEA_BIRD_SRC} alt="Kea" />
       <p className="settings-note">
         This is Kea, written in the first person. She reads it on every turn.
         When someone asks who she is, she answers as this person. Keep adding
@@ -106,6 +118,40 @@ export function AdminAboutPage() {
           <span className="kea-length__unit">times</span>
         </div>
       </label>
+      <label className="welcome-field kea-length">
+        <span>Wait before Kea answers</span>
+        <p className="settings-note">
+          After the user stops talking, Kea waits this long, then replies.
+          Default is {DEFAULT_ANSWER_SILENCE_SECONDS} seconds.
+        </p>
+        <div className="kea-length__row">
+          <input
+            type="range"
+            min={MIN_ANSWER_SILENCE_SECONDS}
+            max={MAX_ANSWER_SILENCE_SECONDS}
+            value={answerSilence}
+            aria-valuetext={`${answerSilence} seconds`}
+            onChange={(event) => {
+              const next = clampAnswerSilenceSeconds(Number(event.target.value))
+              setAnswerSilence(next)
+              saveAnswerSilenceSeconds(next)
+            }}
+          />
+          <input
+            type="number"
+            min={MIN_ANSWER_SILENCE_SECONDS}
+            max={MAX_ANSWER_SILENCE_SECONDS}
+            value={answerSilence}
+            aria-label="Seconds of silence before Kea answers"
+            onChange={(event) => {
+              const next = clampAnswerSilenceSeconds(Number(event.target.value))
+              setAnswerSilence(next)
+              saveAnswerSilenceSeconds(next)
+            }}
+          />
+          <span className="kea-length__unit">seconds</span>
+        </div>
+      </label>
       <textarea
         className="master-definition about-kea"
         aria-label="About Kea"
@@ -123,6 +169,7 @@ export function AdminAboutPage() {
             saveAboutKea(about)
             saveAverageReplyWords(averageWords)
             saveLearnMasteryUses(masteryUses)
+            saveAnswerSilenceSeconds(answerSilence)
             setSaved(true)
           }}
         >
@@ -138,6 +185,8 @@ export function AdminAboutPage() {
             saveAverageReplyWords(DEFAULT_AVERAGE_REPLY_WORDS)
             setMasteryUses(DEFAULT_LEARN_MASTERY_USES)
             saveLearnMasteryUses(DEFAULT_LEARN_MASTERY_USES)
+            resetAnswerSilenceSeconds()
+            setAnswerSilence(DEFAULT_ANSWER_SILENCE_SECONDS)
             setSaved(true)
           }}
         >

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, NavLink, Outlet } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { KeaMark } from '../components/companion/KeaMark'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import {
   getVoiceDiagnostics,
@@ -15,10 +14,10 @@ import {
   resetMasterDefinition,
   saveMasterDefinition,
 } from '../data/keaMasterDefinition'
-import { PLACEHOLDER_USERS, PLACEHOLDER_VOCABULARY } from '../data/placeholders'
+import { PLACEHOLDER_USERS } from '../data/placeholders'
 
 export function AdminPage() {
-  const { isAdmin, firstName } = useSession()
+  const { isAdmin } = useSession()
 
   if (!isAdmin) {
     return <Navigate to="/settings" replace />
@@ -28,14 +27,15 @@ export function AdminPage() {
     <main className="companion-screen settings-screen">
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
-        <Link to="/conversation" aria-label="Kea home">
-          <KeaMark className="kea-mark--header" />
-        </Link>
         <CompanionNav />
       </header>
       <div className="settings-screen__content">
-        <h1>Admin</h1>
-        <p className="settings-note">Hello {firstName || 'Simon'}.</p>
+        <div className="settings-title-row">
+          <h1>Admin</h1>
+          <Link to="/conversation" className="settings-close" aria-label="Close admin">
+            ×
+          </Link>
+        </div>
         <nav className="admin-tabs" aria-label="Admin sections">
           <NavLink to="/admin" end>
             Overview
@@ -145,10 +145,6 @@ export function AdminOverview() {
         <article className="settings-card">
           <h2>Users</h2>
           <p>{PLACEHOLDER_USERS.length}</p>
-        </article>
-        <article className="settings-card">
-          <h2>Vocabulary</h2>
-          <p>{PLACEHOLDER_VOCABULARY.length}</p>
         </article>
       </div>
       <section className="settings-card">
