@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { requestClearTalkTranscript } from '../../architecture/keaTalkMemory'
+import { requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
 import { KeaMark } from './KeaMark'
 import { UserMenu } from './UserMenu'
 
@@ -25,12 +25,17 @@ function ClearChatIcon() {
   )
 }
 
-export function CompanionNav() {
+interface CompanionNavProps {
+  /** Optional mic name shown under the profile avatar (admin chat). */
+  micLabel?: string
+}
+
+export function CompanionNav({ micLabel = '' }: CompanionNavProps) {
   const [clearOpen, setClearOpen] = useState(false)
 
   function confirmClear() {
     setClearOpen(false)
-    requestClearTalkTranscript()
+    requestClearTalkAndSoftReset()
   }
 
   return (
@@ -59,7 +64,7 @@ export function CompanionNav() {
         >
           <ClearChatIcon />
         </button>
-        <UserMenu />
+        <UserMenu micLabel={micLabel} />
       </nav>
       {clearOpen ? (
         <div
@@ -74,7 +79,10 @@ export function CompanionNav() {
             onClick={(event) => event.stopPropagation()}
           >
             <p id="kea-clear-chat-title" className="kea-confirm__title">
-              Clear this chat?
+              Clear this chat and reset Kea?
+            </p>
+            <p className="kea-confirm__note">
+              Stops listening and speech. You stay signed in.
             </p>
             <div className="kea-confirm__actions">
               <button

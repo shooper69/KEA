@@ -4,6 +4,8 @@ import {
   getTalkAccess,
   type TalkBlockReason,
 } from '../../architecture/keaBilling'
+import { getOffer } from '../../data/keaOffers'
+import { OfferPopup } from './OfferPopup'
 
 export function PaywallModal({
   reason,
@@ -12,6 +14,11 @@ export function PaywallModal({
   reason: TalkBlockReason
   onClose: () => void
 }) {
+  const offer = getOffer('limit')
+  if (offer.enabled) {
+    return <OfferPopup offer={offer} tone="limit" onClose={onClose} />
+  }
+
   const expired = reason === 'trial-expired'
   return (
     <div className="paywall" role="dialog" aria-modal="true" aria-labelledby="paywall-title">

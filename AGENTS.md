@@ -1,6 +1,6 @@
 # Kea CLI guardrails
 
-This repository is **Kea only**.
+This repository is **Kea only** for CLI, hosting, and databases.
 
 | Service | Identity |
 | --- | --- |
@@ -26,3 +26,7 @@ npm run kea:github -- auth status
 ```
 
 Wrappers refuse tokens that can see another product’s projects or teams. Do not call `supabase`, `netlify`, or `gh` in this folder without those wrappers.
+
+## Reading other repos (source only)
+
+If the user **explicitly** allows it in chat, agents may read source in another local folder (e.g. Investech) to adapt patterns into Kea. Do not use that product’s CLIs, tokens, env, or databases. Ship only Kea-owned code and Kea identities above.

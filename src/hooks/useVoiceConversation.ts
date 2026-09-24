@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyLearnTurn,
+  extractNativeIntrusions,
   splitKeaReply,
   splitTalkParagraphs,
   touchChatTopic,
@@ -18,7 +19,11 @@ import {
   getVoicePersonality,
 } from '../config/voices'
 import { openKeaMicrophone } from '../architecture/keaMicrophone'
-import { getLanguage } from '../config/languages'
+import {
+  getLanguage,
+  HOME_GREETING_ID,
+  isHomeGreetingMessage,
+} from '../config/languages'
 import {
   listVoices,
   pauseSpeech,
@@ -478,7 +483,7 @@ export function useVoiceConversation({
   }, [startListening])
 
   const speakReply = useCallback(
-    (text: string) => {
+    (text: string, afterSpeech?: () => void) => {
       busyRef.current = true
       setStatus('speaking')
       setMessages((current) =>
@@ -489,28 +494,27 @@ export function useVoiceConversation({
       )
       patchVoiceDiagnostics({ lastSpeechOutput: text, recognitionRunning: false })
       logSpeech('speaking')
+      const finish = () => {
+        busyRef.current = false
+        sendingRef.current = false
+        setMessages((current) =>
+          current.map((item) => ({ ...item, active: false })),
+        )
+        if (afterSpeech) {
+          afterSpeech()
+          return
+        }
+        if (handsFreeRef.current) {
+          logSpeech('listening again')
+          window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+        } else {
+          setStatus('idle')
+        }
+      }
       void speakKeaLine(text, {
         lang: getLanguage(targetLanguage).speechLocale,
-        onend: () => {
-          busyRef.current = false
-          sendingRef.current = false
-          setMessages((current) =>
-            current.map((item) => ({ ...item, active: false })),
-          )
-          if (handsFreeRef.current) {
-            logSpeech('listening again')
-            window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
-          } else {
-            setStatus('idle')
-          }
-        },
-        onerror: () => {
-          busyRef.current = false
-          sendingRef.current = false
-          if (handsFreeRef.current) {
-            window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
-          } else setStatus('idle')
-        },
+        onend: finish,
+        onerror: finish,
       })
     },
     [targetLanguage],
@@ -523,10 +527,12 @@ export function useVoiceConversation({
       busyRef.current = true
       clearListenIdleTimer()
       setStatus('thinking')
+      const userHighlights = extractNativeIntrusions(userText)
       const userMessage: TranscriptMessage = {
         id: crypto.randomUUID(),
         speaker: 'user',
         text: userText,
+        highlights: userHighlights.length ? userHighlights : undefined,
       }
       historyRef.current = [...historyRef.current, userMessage]
       setMessages((current) => [...current, userMessage])
@@ -547,6 +553,7 @@ export function useVoiceConversation({
           speaker: 'kea',
           text: reply,
           active: true,
+          highlights: extractNativeIntrusions(reply),
         }
         setMessages((current) => [...current, keaMessage])
         captionSpanish(keaMessage.id, reply)
@@ -583,10 +590,16 @@ export function useVoiceConversation({
   }, [sendToKea])
 
   const startingRef = useRef(false)
+  const listenWhenMicReadyRef = useRef(false)
 
-  const start = useCallback(async (greeting?: string, englishCaption?: string) => {
+  const start = useCallback(async (
+    greeting?: string,
+    englishCaption?: string,
+    kind?: 'welcome' | 'welcome-back',
+  ) => {
     if (startingRef.current || handsFreeRef.current) return
     startingRef.current = true
+    listenWhenMicReadyRef.current = false
     setError(null)
     fatalListenRef.current = false
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
@@ -598,8 +611,44 @@ export function useVoiceConversation({
     // Drop the wake-word recognizer before opening Whisper's mic.
     handsFreeRef.current = true
     setHandsFree(true)
-    await new Promise((resolve) => window.setTimeout(resolve, 220))
+
+    const hasGreeting = Boolean(greeting?.trim())
+    if (hasGreeting) {
+      const text = greeting!.trim()
+      const english = englishCaption?.trim() || undefined
+      const isWelcome = kind === 'welcome'
+      const keaMessage: TranscriptMessage = {
+        id: isWelcome ? HOME_GREETING_ID : crypto.randomUUID(),
+        speaker: 'kea',
+        text,
+        english: targetLanguage === 'en' ? undefined : english,
+        active: true,
+      }
+      setMessages((current) => {
+        const next = isWelcome
+          ? [keaMessage, ...current.filter((item) => !isHomeGreetingMessage(item))]
+          : [...current, keaMessage]
+        historyRef.current = next
+        return next
+      })
+      // Speak immediately; open the mic in parallel so the first line is not delayed.
+      speakReply(text, () => {
+        if (!handsFreeRef.current) {
+          setStatus('idle')
+          return
+        }
+        if (streamRef.current) {
+          logSpeech('listening again')
+          window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+          return
+        }
+        listenWhenMicReadyRef.current = true
+      })
+    }
+
     try {
+      // Brief settle so wake-word can release its tracks.
+      await new Promise((resolve) => window.setTimeout(resolve, 40))
       const { stream, info } = await openKeaMicrophone()
       streamRef.current = stream
       setMicLabel(info.label)
@@ -612,23 +661,12 @@ export function useVoiceConversation({
           `Chrome is using “${info.label}”, which is usually silent. Click the lock icon by the URL → Microphone → choose your Samson Meteor (or built-in mic), then tap Kea again.`,
         )
       }
-      if (greeting?.trim()) {
-        const text = greeting.trim()
-        const english = englishCaption?.trim() || undefined
-        const keaMessage: TranscriptMessage = {
-          id: crypto.randomUUID(),
-          speaker: 'kea',
-          text,
-          english: targetLanguage === 'en' ? undefined : english,
-          active: true,
-        }
-        historyRef.current = [...historyRef.current, keaMessage]
-        setMessages((current) => [...current, keaMessage])
-        speakReply(text)
-        return
+      if (!hasGreeting || listenWhenMicReadyRef.current) {
+        listenWhenMicReadyRef.current = false
+        startListening()
       }
-      startListening()
     } catch {
+      listenWhenMicReadyRef.current = false
       fatalListenRef.current = true
       handsFreeRef.current = false
       setHandsFree(false)

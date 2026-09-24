@@ -13,6 +13,31 @@ The first creates `profiles`, `learn_list`, and `conversation_topics` with RLS s
 
 The second confirms `simonghooper@gmail.com` in Auth and keeps that admin account confirmed, so the admin can sign in without clicking a confirmation email. Other users still confirm by email.
 
+## Deliverability (junk / Apple Mail)
+
+Confirmation mail is sent by Resend as `Kea <noreply@kea.chat>`. Junk usually means DNS is incomplete or the message was opened in Junk (Apple disables buttons, links, and images there — that cannot be overridden by the sender).
+
+In DNS for `kea.chat` (Porkbun), SPF must authorize Resend. Today the apex TXT is only:
+
+`v=spf1 include:_spf.porkbun.com ~all`
+
+That fails SPF for mail sent via Resend, so Apple/Gmail often junk it. Change it to:
+
+`v=spf1 include:_spf.porkbun.com include:amazonses.com ~all`
+
+(Resend sends through Amazon SES; keep Porkbun if you still send other mail from that host.) Also keep Resend’s DKIM (`resend._domainkey`) and DMARC verified in the Resend dashboard.
+
+In [Resend → Domains → kea.chat](https://resend.com/domains) confirm:
+
+1. SPF includes Resend
+2. DKIM (`resend._domainkey`) is verified
+3. DMARC exists (even `v=DMARC1; p=none;` helps)
+4. Domain status is **Verified**
+
+In the email, keep a plain copy-paste confirm URL under the button so people can still confirm when Apple blocks the button.
+
+After changing templates: `npm run kea:auth-emails` (writes files and syncs to Kea Production Auth).
+
 ## Auth + Resend
 
 Dashboard → Authentication:

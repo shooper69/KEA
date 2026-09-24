@@ -24,12 +24,12 @@ export function AdminPage() {
   }
 
   return (
-    <main className="companion-screen settings-screen">
+    <main className="companion-screen settings-screen admin-screen">
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
         <CompanionNav />
       </header>
-      <div className="settings-screen__content">
+      <div className="settings-screen__content admin-screen__content">
         <div className="settings-title-row">
           <h1>Admin</h1>
           <Link to="/conversation" className="settings-close" aria-label="Close admin">
@@ -39,6 +39,8 @@ export function AdminPage() {
         <nav className="admin-tabs" aria-label="Admin sections">
           <NavLink to="/admin/about">About Kea</NavLink>
           <NavLink to="/admin/costs">Cost analysis</NavLink>
+          <NavLink to="/admin/offers">Offers</NavLink>
+          <NavLink to="/admin/leave-funnel">Leave funnel</NavLink>
           <NavLink to="/admin" end>
             Overview
           </NavLink>

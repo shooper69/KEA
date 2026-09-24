@@ -64,6 +64,17 @@ async function unlockMicLabels() {
   probe.getTracks().forEach((track) => track.stop())
 }
 
+async function ensureMicLabels() {
+  const existing = await listAudioInputs()
+  if (existing.some((item) => item.label.trim())) return existing
+  try {
+    await unlockMicLabels()
+  } catch {
+    return existing
+  }
+  return listAudioInputs()
+}
+
 function baseAudioConstraints(): MediaTrackConstraints {
   return {
     echoCancellation: true,
@@ -97,28 +108,27 @@ function infoFromStream(
 export async function pickKeaMicrophone(): Promise<KeaMicInfo | null> {
   if (!navigator.mediaDevices?.getUserMedia) return null
   try {
-    await unlockMicLabels()
+    const inputs = await ensureMicLabels()
+    if (inputs.length === 0) return null
+    const saved = readSavedMicId()
+    const ranked = [...inputs].sort((a, b) => {
+      const savedBoost = (id: string) => (saved && id === saved ? 1000 : 0)
+      return (
+        scoreMic(b.label, b.deviceId) +
+        savedBoost(b.deviceId) -
+        (scoreMic(a.label, a.deviceId) + savedBoost(a.deviceId))
+      )
+    })
+    const best = ranked.find((item) => scoreMic(item.label, item.deviceId) >= 0)
+    const chosen = best ?? ranked[0]
+    if (!chosen) return null
+    return {
+      deviceId: chosen.deviceId,
+      label: chosen.label || 'Microphone',
+      virtual: isVirtualLabel(chosen.label, chosen.deviceId),
+    }
   } catch {
     return null
-  }
-  const inputs = await listAudioInputs()
-  if (inputs.length === 0) return null
-  const saved = readSavedMicId()
-  const ranked = [...inputs].sort((a, b) => {
-    const savedBoost = (id: string) => (saved && id === saved ? 1000 : 0)
-    return (
-      scoreMic(b.label, b.deviceId) +
-      savedBoost(b.deviceId) -
-      (scoreMic(a.label, a.deviceId) + savedBoost(a.deviceId))
-    )
-  })
-  const best = ranked.find((item) => scoreMic(item.label, item.deviceId) >= 0)
-  const chosen = best ?? ranked[0]
-  if (!chosen) return null
-  return {
-    deviceId: chosen.deviceId,
-    label: chosen.label || 'Microphone',
-    virtual: isVirtualLabel(chosen.label, chosen.deviceId),
   }
 }
 
@@ -134,15 +144,28 @@ export async function openKeaMicrophone(): Promise<{
     throw new Error('Microphone API unavailable')
   }
 
+  const saved = readSavedMicId()
+  if (saved) {
+    try {
+      const stream = await openWithConstraints({
+        ...baseAudioConstraints(),
+        deviceId: { exact: saved },
+      })
+      const info = infoFromStream(stream, saved)
+      if (!info.virtual) return { stream, info }
+      stream.getTracks().forEach((track) => track.stop())
+    } catch {
+      // Fall through to full device scan.
+    }
+  }
+
   let inputs: MediaDeviceInfo[] = []
   try {
-    await unlockMicLabels()
-    inputs = await listAudioInputs()
+    inputs = await ensureMicLabels()
   } catch {
     inputs = []
   }
 
-  const saved = readSavedMicId()
   const ranked = [...inputs].sort((a, b) => {
     const savedBoost = (id: string) => (saved && id === saved ? 1000 : 0)
     return (

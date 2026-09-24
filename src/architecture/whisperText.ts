@@ -32,6 +32,11 @@ const HALLUCINATIONS = [
   /^please like and subscribe\.?$/i,
   /^don't forget to subscribe\.?$/i,
   /^i'?ll see you in the next (video|one)\.?$/i,
+  // Room-noise / empty-room fillers Whisper invents
+  /^(silence|quiet|blank|music|applause|laughter|coughing|breathing)([,\s]+\1){1,}\.?$/i,
+  /^(silence[\s,.]+){2,}silence\.?$/i,
+  /^(uh+|um+|hmm+|ah+|oh+)([,\s]+\1){2,}\.?$/i,
+  /^\[?(silence|inaudible|music|blank)\]?\.?$/i,
 ]
 
 const MIN_TRANSCRIPT_CONFIDENCE = 0.32
@@ -50,6 +55,15 @@ export function looksLikeWhisperHallucination(text: string) {
   const trimmed = text.replace(/\s+/g, ' ').trim()
   if (!trimmed) return true
   if (HALLUCINATIONS.some((pattern) => pattern.test(trimmed))) return true
+  // Same word repeated many times (e.g. "silence silence silence…")
+  const tokens = trimmed
+    .toLowerCase()
+    .split(/[\s,.;:!?]+/)
+    .filter(Boolean)
+  if (tokens.length >= 4) {
+    const first = tokens[0]
+    if (tokens.every((token) => token === first)) return true
+  }
   // Single letter only (keep short real words like "Si", "no", "ok")
   const bare = trimmed.replace(/[^\p{L}\p{N}]+/gu, '')
   if (bare.length <= 1) return true

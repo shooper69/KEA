@@ -75,6 +75,8 @@ export interface TranscriptMessage {
   speaker: TranscriptSpeaker
   text: string
   english?: string
+  /** Native-language words mixed into a target-language utterance (shown in red). */
+  highlights?: string[]
   interim?: boolean
   active?: boolean
   confidence?: number

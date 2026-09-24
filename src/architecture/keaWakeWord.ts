@@ -8,53 +8,46 @@ function normalizeHeard(text: string) {
     .trim()
 }
 
-const KEA_NAME = '(kea|kia|kiah|keya|kee+a|kier|kaya|kiya)'
+/** Clear forms of the bird's name — avoid common words like kaya / key alone. */
+const KEA_TOKEN = '(kea|kia|kiah|keya|kee+a)'
 
+/**
+ * Strict wake match. Background noise + Whisper often invent short words;
+ * old patterns (yoga, yorkie, "ok a", "you a") caused false starts.
+ */
 export function heardKeaWake(text: string) {
   const n = normalizeHeard(text)
   if (!n) return false
-  // Whole short utterance is basically the wake phrase
-  if (
-    /^(yo|yoh|ya|yah|you|hey|hi|ok|okay|hola|oye|oi|oh|ja|yao)?\s*(kea|kia|kiah|keya|kee+a|kier|kaya|kiya|key)\s*[.!]*$/.test(
-      n,
-    )
-  ) {
-    return true
-  }
-  // One-token mishearings of "Yo Kea"
-  if (
-    /\b(yokea|yokeya|yokia|yokiah|yokaya|yakeya|yakea|yoga|yoki|yokee|yokey|okeya|okea|yokay|yorkie|ukulele)\b/.test(
-      n,
-    )
-  ) {
-    return true
-  }
-  // Split mishears: "yo key", "you kea", "joke a", "yoke a"
-  if (/\b(yo|yoh|ya|you|joke|yoke|ok|okay)\s+(kea|kia|keya|key|kier|kaya|a)\b/.test(n)) {
-    return true
-  }
+
+  // Wake phrases are short. Long noise transcripts must not match.
+  const words = n.split(/\s+/).filter(Boolean)
+  if (words.length > 4) return false
+
+  // Lone name
+  if (new RegExp(`^${KEA_TOKEN}$`).test(n)) return true
+
+  // "Yo Kea", "Hey Kea", "OK Kea", "Wake Kea", "Hola Kea"
   if (
     new RegExp(
-      `\\b(yo|yoh|ya|yah|you|to|too|two|hey|hi|ok|okay|hola|oye|oi|oh)\\s*${KEA_NAME}\\b`,
+      `^(yo|yoh|yah|hey|hi|ok|okay|hola|oye|oi|wake|call)\\s+${KEA_TOKEN}$`,
     ).test(n)
   ) {
     return true
   }
-  if (new RegExp(`\\b(wake|call)\\s+${KEA_NAME}\\b`).test(n)) return true
-  // Lone "kea" / "kia" only when that is essentially the whole phrase
-  if (/^(kea|kia|kiah|keya|kaya|kiya)$/.test(n)) return true
-  // Compact glued forms: "yokea", "yokiaa"
+
+  // Compact glued forms only (no loose "joke a" / "you a")
   const compact = n.replace(/\s+/g, '')
-  if (compact.length <= 18 && /yo+k[eia]|ok+e[ea]|heykea|wakekea/.test(compact)) {
+  if (compact.length <= 12 && /^(yo+|ok+|okay|hey|hi|wake)+k(ea|ia|iah|eya|ee+a)$/.test(compact)) {
     return true
   }
+
   return false
 }
 
 export function heardKeaStop(text: string) {
   const n = normalizeHeard(text)
   if (!n) return false
-  return new RegExp(`\\b(stop|quit|end)\\s+${KEA_NAME}\\b`).test(n)
+  return new RegExp(`\\b(stop|quit|end)\\s+${KEA_TOKEN}\\b`).test(n)
 }
 
 export interface KeaSpeechRecognition {

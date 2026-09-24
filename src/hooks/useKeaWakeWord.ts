@@ -7,6 +7,7 @@ import {
   speechRecognitionPings,
 } from '../architecture/keaWakeWord'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
+import { looksLikeWhisperHallucination } from '../architecture/whisperText'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 
 interface UseKeaWakeWordOptions {
@@ -14,14 +15,17 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_RMS_FLOOR = 0.024
-const SPEECH_HOLD_MS = 220
-const SHOT_COOLDOWN_MS = 2000
-const WAKE_SILENCE_MS = 450
-const MIN_SPEECH_BURST_MS = 400
-const MAX_UTTERANCE_MS = 2500
-const WAKE_PROMPT = 'Kea. Kia. Keya. Wake Kea. Hey Kea. OK Kea. Yo Kea.'
-const MIN_WAKE_BLOB = 1200
+const SPEECH_RMS_FLOOR = 0.04
+const SPEECH_HOLD_MS = 420
+const SHOT_COOLDOWN_MS = 3500
+const WAKE_SILENCE_MS = 520
+const MIN_SPEECH_BURST_MS = 650
+const MAX_UTTERANCE_MS = 2200
+/** Do not prime Whisper with "Kea" — that invents wake words from room noise. */
+const WAKE_PROMPT =
+  'Transcribe clearly spoken words only. If there is only noise or silence, return an empty transcript.'
+const MIN_WAKE_BLOB = 2200
+const MIN_WAKE_CONFIDENCE = 0.45
 
 function pickRecorderMime(): string {
   const types = [
@@ -33,9 +37,10 @@ function pickRecorderMime(): string {
   return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
 }
 
-function logWake(event: string, detail?: unknown) {
+function logWake(event: string, detail?: unknown, extra?: unknown) {
   if (detail === undefined) console.info(`[Kea wake] ${event}`)
-  else console.info(`[Kea wake] ${event}`, detail)
+  else if (extra === undefined) console.info(`[Kea wake] ${event}`, detail)
+  else console.info(`[Kea wake] ${event}`, detail, extra)
 }
 
 /**
@@ -242,13 +247,29 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           return
         }
         const result = await transcribeWithWhisper(blob, { prompt: WAKE_PROMPT })
-        logWake('transcript', result.text || '(empty)')
+        logWake('transcript', result.text || '(empty)', result.confidence)
         patchVoiceDiagnostics({
           lastTranscript: result.text,
           recognitionLanguage: 'wake-whisper',
           lastRecognitionError: '',
         })
         if (dead || waking || cancelled || !enabledRef.current) return
+        if (!result.text.trim()) {
+          logWake('empty transcript — ignore')
+          return
+        }
+        if (looksLikeWhisperHallucination(result.text)) {
+          logWake('noise hallucination — ignore', result.text)
+          return
+        }
+        if (
+          result.confidence > 0 &&
+          result.confidence <= 1 &&
+          result.confidence < MIN_WAKE_CONFIDENCE
+        ) {
+          logWake('low confidence — ignore', result.confidence)
+          return
+        }
         if (heardKeaWake(result.text)) {
           fireWake()
           return
@@ -293,6 +314,9 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             const said = alts.join(' ')
             heard = `${heard} ${said}`.replace(/\s+/g, ' ').trim().slice(-160)
             logWake('mobile heard', heard)
+            if (looksLikeWhisperHallucination(said) || looksLikeWhisperHallucination(heard)) {
+              return
+            }
             if (heardKeaWake(said) || heardKeaWake(heard)) {
               fireWake()
               return
@@ -374,7 +398,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
               const ambient = ambientSum / ambientN
               speechRms = Math.max(
                 SPEECH_RMS_FLOOR,
-                Math.min(0.055, ambient * 3 + 0.01),
+                Math.min(0.09, ambient * 4.2 + 0.018),
               )
             }
             return

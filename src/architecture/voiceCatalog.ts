@@ -23,6 +23,8 @@ export interface ManagedVoice {
 
 export interface VoiceCatalog {
   defaultId: string
+  /** Voice used for the welcome/marketing page spoken intro. */
+  marketingIntroId: string
   voices: ManagedVoice[]
 }
 
@@ -131,7 +133,12 @@ function seedCatalog(): VoiceCatalog {
     userDescription: item.userDescription,
     enabled: item.enabled,
   }))
-  return { defaultId: openaiId('coral'), voices }
+  const friendlyCompanion = openaiId('coral')
+  return {
+    defaultId: friendlyCompanion,
+    marketingIntroId: friendlyCompanion,
+    voices,
+  }
 }
 
 function readStored(): VoiceCatalog | null {
@@ -181,11 +188,45 @@ export function loadVoiceCatalog(): VoiceCatalog {
   for (const seed of seedCatalog().voices) {
     if (!byId.has(seed.id)) base.voices.push(seed)
   }
+  const friendlyCompanion = openaiId('coral')
   if (!base.voices.some((item) => item.id === base.defaultId)) {
-    base.defaultId = base.voices.find((item) => item.enabled)?.id ?? base.voices[0]?.id ?? ''
+    base.defaultId =
+      base.voices.find((item) => item.enabled)?.id ??
+      base.voices[0]?.id ??
+      ''
+  }
+  if (
+    !base.marketingIntroId ||
+    !base.voices.some((item) => item.id === base.marketingIntroId)
+  ) {
+    base.marketingIntroId = base.voices.some((item) => item.id === friendlyCompanion)
+      ? friendlyCompanion
+      : base.defaultId
   }
   if (!stored) saveVoiceCatalog(base)
+  else if (!(stored as VoiceCatalog).marketingIntroId) saveVoiceCatalog(base)
   return base
+}
+
+/** Soft Friendly Companion (Coral) — warm, thoughtful and supportive — or admin override. */
+export function getMarketingIntroVoice(
+  catalog = loadVoiceCatalog(),
+): ManagedVoice | null {
+  const friendlyCompanion = openaiId('coral')
+  const chosen =
+    catalog.voices.find((item) => item.id === catalog.marketingIntroId) ||
+    catalog.voices.find((item) => item.id === friendlyCompanion) ||
+    catalog.voices.find((item) => item.id === catalog.defaultId) ||
+    catalog.voices[0]
+  return chosen ?? null
+}
+
+export function setMarketingIntroVoiceId(id: string) {
+  const catalog = loadVoiceCatalog()
+  if (!catalog.voices.some((item) => item.id === id)) return catalog
+  const next = { ...catalog, marketingIntroId: id }
+  saveVoiceCatalog(next)
+  return next
 }
 
 export function enabledUserVoices(catalog: VoiceCatalog): ManagedVoice[] {

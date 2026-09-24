@@ -8,8 +8,6 @@ interface VoiceMicProps {
   status: VoicePresenceState
   hint?: string
   wakePhrase?: boolean
-  /** Admin-only mic name shown under the Kea image. */
-  micLabel?: string
   onToggle: () => void
 }
 
@@ -28,7 +26,6 @@ export function VoiceMic({
   live,
   status,
   wakePhrase = true,
-  micLabel = '',
   onToggle,
 }: VoiceMicProps) {
   const waving = status === 'listening' || status === 'speaking'
@@ -79,11 +76,6 @@ export function VoiceMic({
           </span>
           <img className="voice-mic__icon" src={KEA_MIC_SRC} alt="" />
         </button>
-        {micLabel ? (
-          <p className="voice-mic-device" aria-live="polite">
-            {micLabel}
-          </p>
-        ) : null}
       </div>
       <p
         className={`voice-mic__prompt voice-mic__prompt--right${

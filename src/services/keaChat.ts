@@ -44,7 +44,7 @@ export async function askKea(options: {
       level: options.level,
       masterDefinition: getMasterDefinition(),
       aboutKea: getAboutKea(),
-      memoryBlock: memoryPromptBlock(),
+      memoryBlock: memoryPromptBlock(userText),
       averageReplyWords: getAverageReplyWords(),
       messages,
     }),

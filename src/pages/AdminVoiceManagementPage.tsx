@@ -37,6 +37,8 @@ export function AdminVoiceManagementPage() {
     [catalog.voices, query],
   )
   const enabledCount = countEnabled(catalog)
+  const marketingVoice =
+    catalog.voices.find((item) => item.id === catalog.marketingIntroId) || null
 
   function commit(next: VoiceCatalog) {
     saveVoiceCatalog(next)
@@ -89,6 +91,50 @@ export function AdminVoiceManagementPage() {
         {enabledCount} of {MAX_USER_VOICES} enabled for users.
       </p>
       {notice ? <p className="error-text">{notice}</p> : null}
+
+      <div className="voice-manage__marketing">
+        <h3 className="voice-manage__heading">Marketing page intro</h3>
+        <p className="settings-note">
+          Voice that speaks the welcome-page intro after someone chooses their
+          native language. Defaults to Friendly Companion — warm, thoughtful
+          and supportive.
+        </p>
+        <label className="welcome-field">
+          <span>Intro voice</span>
+          <select
+            value={catalog.marketingIntroId}
+            onChange={(event) => {
+              commit({ ...catalog, marketingIntroId: event.target.value })
+              setNotice('')
+            }}
+          >
+            {catalog.voices.map((voice) => {
+              const label =
+                voice.userName.trim() || voice.actualName || voice.id
+              const desc = voice.userDescription.trim()
+              return (
+                <option key={voice.id} value={voice.id}>
+                  {label}
+                  {desc ? ` — ${desc}` : ''}
+                  {voice.provider === 'openai' ? ` (${voice.actualName})` : ''}
+                </option>
+              )
+            })}
+          </select>
+        </label>
+        {marketingVoice ? (
+          <div className="voice-manage__actions">
+            <button
+              type="button"
+              className="kea-button kea-button--ghost"
+              onClick={() => void play(marketingVoice)}
+            >
+              {playingId === marketingVoice.id ? 'Playing…' : 'Preview intro voice'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
       <label className="welcome-field">
         <span>Find a voice</span>
         <input
@@ -104,9 +150,13 @@ export function AdminVoiceManagementPage() {
             key={voice.id}
             voice={voice}
             isDefault={catalog.defaultId === voice.id}
+            isMarketingIntro={catalog.marketingIntroId === voice.id}
             playing={playingId === voice.id}
             onPatch={(patch) => patchVoice(voice.id, patch)}
             onDefault={() => commit({ ...catalog, defaultId: voice.id })}
+            onMarketingIntro={() =>
+              commit({ ...catalog, marketingIntroId: voice.id })
+            }
             onPlay={() => void play(voice)}
             onStop={stopKeaSpeech}
           />
@@ -119,9 +169,13 @@ export function AdminVoiceManagementPage() {
             key={voice.id}
             voice={voice}
             isDefault={catalog.defaultId === voice.id}
+            isMarketingIntro={catalog.marketingIntroId === voice.id}
             playing={playingId === voice.id}
             onPatch={(patch) => patchVoice(voice.id, patch)}
             onDefault={() => commit({ ...catalog, defaultId: voice.id })}
+            onMarketingIntro={() =>
+              commit({ ...catalog, marketingIntroId: voice.id })
+            }
             onPlay={() => void play(voice)}
             onStop={stopKeaSpeech}
           />
@@ -152,22 +206,28 @@ function filterGroup(
 function VoiceRow({
   voice,
   isDefault,
+  isMarketingIntro,
   playing,
   onPatch,
   onDefault,
+  onMarketingIntro,
   onPlay,
   onStop,
 }: {
   voice: ManagedVoice
   isDefault: boolean
+  isMarketingIntro: boolean
   playing: boolean
   onPatch: (patch: Partial<ManagedVoice>) => void
   onDefault: () => void
+  onMarketingIntro: () => void
   onPlay: () => void
   onStop: () => void
 }) {
   return (
-    <li className={`voice-manage__row${voice.enabled ? ' is-enabled' : ''}${isDefault ? ' is-default' : ''}`}>
+    <li
+      className={`voice-manage__row${voice.enabled ? ' is-enabled' : ''}${isDefault ? ' is-default' : ''}${isMarketingIntro ? ' is-marketing' : ''}`}
+    >
       <p className="voice-manage__actual">{voice.actualName}</p>
       <p className="voice-manage__meta">
         {voice.provider === 'openai' ? 'OpenAI' : 'Browser'}
@@ -206,6 +266,15 @@ function VoiceRow({
             onChange={onDefault}
           />
           Default voice
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="kea-marketing-intro-voice"
+            checked={isMarketingIntro}
+            onChange={onMarketingIntro}
+          />
+          Marketing intro
         </label>
       </div>
       <div className="voice-manage__actions">

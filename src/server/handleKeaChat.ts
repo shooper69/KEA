@@ -13,7 +13,7 @@ interface ChatTurn {
 }
 
 interface ChatRequest {
-  mode?: 'chat' | 'translate'
+  mode?: 'chat' | 'translate' | 'plain-translate'
   nativeLanguage?: string
   targetLanguage?: string
   level?: string
@@ -71,40 +71,54 @@ export async function handleKeaChat(
     payload.averageReplyWords ?? DEFAULT_AVERAGE_REPLY_WORDS,
   )
   const isTranslate = payload.mode === 'translate'
-  const openaiMessages = isTranslate
+  const isPlainTranslate = payload.mode === 'plain-translate'
+  const targetName = payload.targetLanguage?.trim() || 'English'
+
+  if ((isTranslate || isPlainTranslate) && !payload.text?.trim()) {
+    res.statusCode = 400
+    res.end(JSON.stringify({ error: 'Nothing to translate' }))
+    return
+  }
+
+  const openaiMessages = isPlainTranslate
     ? [
         {
           role: 'system' as const,
-          content:
-            'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
+          content: `Translate into natural spoken ${targetName}. Keep first person (I, me, my). Return only the translation — no labels, quotes, or commentary.`,
         },
         {
           role: 'user' as const,
           content: payload.text?.trim() ?? '',
         },
       ]
-    : [
-        {
-          role: 'system' as const,
-          content: buildKeaSystemPrompt({
-            nativeLanguage: payload.nativeLanguage ?? 'English',
-            targetLanguage: payload.targetLanguage ?? 'Spanish',
-            level: payload.level ?? 'intermediate',
-            masterDefinition:
-              payload.masterDefinition?.trim() || DEFAULT_KEA_MASTER_DEFINITION,
-            aboutKea: payload.aboutKea,
-            memoryBlock: payload.memoryBlock,
-            averageReplyWords,
-          }),
-        },
-        ...(payload.messages ?? []),
-      ]
-
-  if (isTranslate && !payload.text?.trim()) {
-    res.statusCode = 400
-    res.end(JSON.stringify({ error: 'Nothing to translate' }))
-    return
-  }
+    : isTranslate
+      ? [
+          {
+            role: 'system' as const,
+            content:
+              'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
+          },
+          {
+            role: 'user' as const,
+            content: payload.text?.trim() ?? '',
+          },
+        ]
+      : [
+          {
+            role: 'system' as const,
+            content: buildKeaSystemPrompt({
+              nativeLanguage: payload.nativeLanguage ?? 'English',
+              targetLanguage: payload.targetLanguage ?? 'Spanish',
+              level: payload.level ?? 'intermediate',
+              masterDefinition:
+                payload.masterDefinition?.trim() || DEFAULT_KEA_MASTER_DEFINITION,
+              aboutKea: payload.aboutKea,
+              memoryBlock: payload.memoryBlock,
+              averageReplyWords,
+            }),
+          },
+          ...(payload.messages ?? []),
+        ]
 
   const openaiResponse = await fetch(
     'https://api.openai.com/v1/chat/completions',
@@ -116,10 +130,12 @@ export async function handleKeaChat(
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        temperature: isTranslate ? 0.2 : 0.7,
-        max_tokens: isTranslate
-          ? 200
-          : maxTokensForAverageWords(averageReplyWords) + 120,
+        temperature: isTranslate || isPlainTranslate ? 0.2 : 0.7,
+        max_tokens: isPlainTranslate
+          ? 400
+          : isTranslate
+            ? 200
+            : maxTokensForAverageWords(averageReplyWords) + 120,
         messages: openaiMessages,
       }),
     },
@@ -149,6 +165,10 @@ export async function handleKeaChat(
 
   res.statusCode = 200
   res.end(
-    JSON.stringify(isTranslate ? { translation: reply } : { reply }),
+    JSON.stringify(
+      isTranslate || isPlainTranslate
+        ? { translation: reply }
+        : { reply },
+    ),
   )
 }

@@ -37,9 +37,11 @@ export function SpeakButton({
   return (
     <button
       type="button"
-      className={`speak-button ${className}`}
+      className={`speak-button ${className}`.trim()}
       aria-label={label}
+      title={label}
       onClick={(event) => {
+        event.preventDefault()
         event.stopPropagation()
         void speakKeaLine(text, {
           lang: getLanguage(languageCode).speechLocale,

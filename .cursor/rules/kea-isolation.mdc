@@ -7,7 +7,7 @@ alwaysApply: true
 
 Write the product name as **Kea**, never KEA. The GitHub path `shooper69/KEA` is the repo id only.
 
-Kea is a separate product. Do nothing that is related to Remelife or Investech: no orgs, projects, CLIs, env, users, databases, or “borrowed” logins.
+Kea is a separate product. Do nothing that is related to Remelife or Investech **runtime**: no orgs, projects, CLIs, env, users, databases, or “borrowed” logins.
 
 ## Only these identities
 
@@ -19,6 +19,16 @@ Kea is a separate product. Do nothing that is related to Remelife or Investech: 
 
 - Run the machine-wide `supabase` or `netlify` CLI in this repo (those logins are other products)
 - List, link, query, or mention other products’ orgs as a way to reach Kea
-- Copy schema, env, users, or code across products
+- Copy schema, env, users, secrets, or production credentials across products
+- Wire Kea’s live services to another product’s databases, teams, or tokens
+
+## Code reference from other products (explicit only)
+
+When the user **explicitly** grants permission in this chat (for example: “you may read investech-web for the website tracker”), you may:
+
+- Read that repo’s **source** to understand patterns
+- Re-implement or adapt equivalent behaviour **inside Kea** (new Kea-owned files under this repo)
+
+You still must **not** use that other product’s CLIs, tokens, orgs, Supabase/Netlify projects, env, users, or databases. Permission to read code is not permission to share infrastructure.
 
 Use the signed-in **Kea Production** dashboard, or `npm run kea:supabase` / `kea:netlify` / `kea:github` after Kea-only tokens exist. If `npm run guard` fails, stop.

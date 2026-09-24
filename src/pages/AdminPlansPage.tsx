@@ -6,14 +6,28 @@ import {
   type KeaPlan,
   type KeaPlanCatalog,
 } from '../architecture/keaPlans'
+import {
+  DEFAULT_DISCOUNT_CODES,
+  loadDiscountCodes,
+  newDiscountCode,
+  saveDiscountCodes,
+  type KeaDiscountCode,
+} from '../architecture/keaDiscountCodes'
 
 export function AdminPlansPage() {
   const [catalog, setCatalog] = useState<KeaPlanCatalog>(loadPlanCatalog)
+  const [discounts, setDiscounts] = useState<KeaDiscountCode[]>(loadDiscountCodes)
   const [saved, setSaved] = useState(false)
 
   function commit(next: KeaPlanCatalog) {
     setCatalog(next)
     savePlanCatalog(next)
+    setSaved(true)
+  }
+
+  function commitDiscounts(next: KeaDiscountCode[]) {
+    setDiscounts(next)
+    saveDiscountCodes(next)
     setSaved(true)
   }
 
@@ -24,6 +38,12 @@ export function AdminPlansPage() {
         plan.id === id ? { ...plan, ...patch } : plan,
       ),
     })
+  }
+
+  function patchDiscount(id: string, patch: Partial<KeaDiscountCode>) {
+    commitDiscounts(
+      discounts.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    )
   }
 
   return (
@@ -155,13 +175,82 @@ export function AdminPlansPage() {
           </label>
         </article>
       ))}
+
+      <h2 style={{ marginTop: '1.4rem' }}>Discount codes</h2>
+      <p className="settings-note">
+        Codes people can enter under Settings → Subscriptions. “Exit popup” is
+        the Superlearner 60% offer from the leave funnel.
+      </p>
+      {discounts.map((item, index) => (
+        <article
+          key={item.id}
+          className="settings-card discount-admin-row"
+          style={{ marginTop: '0.75rem' }}
+        >
+          <h3>{item.title.trim() || `Code ${index + 1}`}</h3>
+          <label className="welcome-field">
+            <span>Title (admin note)</span>
+            <input
+              value={item.title}
+              placeholder="Exit popup"
+              onChange={(event) =>
+                patchDiscount(item.id, { title: event.target.value })
+              }
+            />
+          </label>
+          <label className="welcome-field">
+            <span>Code people type</span>
+            <input
+              value={item.code}
+              placeholder="Superlearner"
+              onChange={(event) =>
+                patchDiscount(item.id, { code: event.target.value })
+              }
+            />
+          </label>
+          <label className="welcome-field">
+            <span>Percent off (100 = free)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={item.percentOff}
+              onChange={(event) =>
+                patchDiscount(item.id, {
+                  percentOff: Math.round(Number(event.target.value) || 0),
+                })
+              }
+            />
+          </label>
+          {discounts.length > 1 ? (
+            <button
+              type="button"
+              className="kea-button kea-button--ghost"
+              onClick={() =>
+                commitDiscounts(discounts.filter((row) => row.id !== item.id))
+              }
+            >
+              Remove this code
+            </button>
+          ) : null}
+        </article>
+      ))}
+      <button
+        type="button"
+        className="kea-button"
+        style={{ marginTop: '0.75rem' }}
+        onClick={() => commitDiscounts([...discounts, newDiscountCode()])}
+      >
+        Add another discount code
+      </button>
+
       <p className="settings-note">{saved ? 'Saved on this device.' : ''}</p>
       <button
         type="button"
         className="kea-button kea-button--ghost"
         onClick={() => {
-          const next = structuredClone(DEFAULT_PLAN_CATALOG)
-          commit(next)
+          commit(structuredClone(DEFAULT_PLAN_CATALOG))
+          commitDiscounts(structuredClone(DEFAULT_DISCOUNT_CODES))
         }}
       >
         Restore original tiers

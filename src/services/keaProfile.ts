@@ -84,6 +84,17 @@ export async function upsertCloudProfile(
 }
 
 export function keaAuthRedirect() {
+  const host = window.location.hostname
+  // Confirmations opened on a phone must land on the live app, not localhost.
+  if (
+    host === 'kea.chat' ||
+    host === 'www.kea.chat' ||
+    host.endsWith('.kea.chat') ||
+    host.includes('keachat') ||
+    import.meta.env.PROD
+  ) {
+    return 'https://kea.chat/'
+  }
   return `${window.location.origin}/`
 }
 

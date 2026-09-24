@@ -2,7 +2,7 @@ export const KEA_ORIGIN = 'https://kea.chat'
 
 export const KEA_NAME = 'Kea'
 
-export const KEA_TAGLINE = 'Chat with Kea'
+export const KEA_TAGLINE = 'Chat with Kea & learn a language'
 
 export const KEA_DESCRIPTION =
   'Kea is a hands-free conversational companion that helps you learn languages naturally through real conversation, remembered topics, and a personalised Learn List. Not a course, not a tutor — a friend you talk with.'

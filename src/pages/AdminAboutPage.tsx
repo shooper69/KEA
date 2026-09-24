@@ -31,10 +31,18 @@ import {
   resetAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
+import {
+  DEFAULT_WELCOME_TITLE,
+  getWelcomeTitle,
+  resetWelcomeTitle,
+  saveWelcomeTitle,
+} from '../data/keaWelcomeTitle'
 
 export function AdminAboutPage() {
   const [about, setAbout] = useState(getAboutKea)
   const [saved, setSaved] = useState(false)
+  const [welcomeTitle, setWelcomeTitle] = useState(getWelcomeTitle)
+  const [welcomeSaved, setWelcomeSaved] = useState(false)
   const [averageWords, setAverageWords] = useState(getAverageReplyWords)
   const [masteryUses, setMasteryUses] = useState(getLearnMasteryUses)
   const [answerSilence, setAnswerSilence] = useState(getAnswerSilenceSeconds)
@@ -48,6 +56,46 @@ export function AdminAboutPage() {
         When someone asks who she is, she answers as this person. Keep adding
         to it; she will use whatever you save here.
       </p>
+      <label className="welcome-field">
+        <span>Marketing page title</span>
+        <p className="settings-note">
+          Headline on the welcome page under the Kea mark. Default is “
+          {DEFAULT_WELCOME_TITLE}”.
+        </p>
+        <input
+          type="text"
+          value={welcomeTitle}
+          maxLength={120}
+          onChange={(event) => {
+            setWelcomeTitle(event.target.value)
+            setWelcomeSaved(false)
+          }}
+        />
+      </label>
+      <div className="welcome-screen__actions">
+        <button
+          type="button"
+          className="kea-button"
+          onClick={() => {
+            saveWelcomeTitle(welcomeTitle)
+            setWelcomeTitle(getWelcomeTitle())
+            setWelcomeSaved(true)
+          }}
+        >
+          {welcomeSaved ? 'Title saved' : 'Save title'}
+        </button>
+        <button
+          type="button"
+          className="kea-button kea-button--ghost"
+          onClick={() => {
+            resetWelcomeTitle()
+            setWelcomeTitle(DEFAULT_WELCOME_TITLE)
+            setWelcomeSaved(true)
+          }}
+        >
+          Restore title
+        </button>
+      </div>
       <label className="welcome-field kea-length">
         <span>Average length of answers</span>
         <p className="settings-note">

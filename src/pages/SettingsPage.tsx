@@ -17,6 +17,13 @@ import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
 import { SubscriptionPanel } from '../components/companion/SubscriptionPanel'
 import { UsagePanel } from '../components/companion/UsagePanel'
+import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
+import { OfferPopup } from '../components/companion/OfferPopup'
+import {
+  dismissHomeOffer,
+  getOffer,
+  shouldShowPopup1,
+} from '../data/keaOffers'
 import {
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
@@ -25,7 +32,7 @@ import {
   listAudioInputs,
   savePreferredMicId,
 } from '../architecture/keaMicrophone'
-import type { ChatKeep, SkyTheme } from '../types'
+import type { ChatKeep, LanguageCode, SkyTheme } from '../types'
 
 function PlayIcon() {
   return (
@@ -87,6 +94,16 @@ export function SettingsPage() {
     chatKeep,
   } = useSession()
   const [answerSilence, setAnswerSilence] = useState(getAnswerSilenceSeconds)
+  const [draftListenIdle, setDraftListenIdle] = useState(listenIdleSeconds)
+  const [draftAnswerSilence, setDraftAnswerSilence] = useState(answerSilence)
+  const [listeningSaved, setListeningSaved] = useState('')
+  const [draftNative, setDraftNative] = useState(nativeLanguage)
+  const [draftTarget, setDraftTarget] = useState(languageCode)
+  const [languagesSaved, setLanguagesSaved] = useState('')
+  const [draftNotifyTalk, setDraftNotifyTalk] = useState(notifyTalk)
+  const [draftNotifyMemory, setDraftNotifyMemory] = useState(notifyMemory)
+  const [notificationsSaved, setNotificationsSaved] = useState('')
+  const [micSheetOpen, setMicSheetOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [nextPassword, setNextPassword] = useState('')
@@ -111,6 +128,17 @@ export function SettingsPage() {
     const next = searchParams.get('tab')
     if (next === 'subscription' || next === 'usage') setTab(next)
   }, [searchParams])
+  const [popup1Open, setPopup1Open] = useState(false)
+  useEffect(() => {
+    function maybeShow() {
+      setPopup1Open(
+        tab === 'subscription' && shouldShowPopup1('subscriptions'),
+      )
+    }
+    maybeShow()
+    window.addEventListener('kea-offers-changed', maybeShow)
+    return () => window.removeEventListener('kea-offers-changed', maybeShow)
+  }, [tab])
   const catalog = loadVoiceCatalog()
   const userVoices = enabledUserVoices(catalog)
   const [userVoiceId, setUserVoiceId] = useState(
@@ -126,6 +154,24 @@ export function SettingsPage() {
       return ''
     }
   })
+
+  useEffect(() => {
+    setDraftListenIdle(listenIdleSeconds)
+  }, [listenIdleSeconds])
+
+  useEffect(() => {
+    setDraftAnswerSilence(answerSilence)
+  }, [answerSilence])
+
+  useEffect(() => {
+    setDraftNative(nativeLanguage)
+    setDraftTarget(languageCode)
+  }, [nativeLanguage, languageCode])
+
+  useEffect(() => {
+    setDraftNotifyTalk(notifyTalk)
+    setDraftNotifyMemory(notifyMemory)
+  }, [notifyTalk, notifyMemory])
 
   useEffect(() => {
     if (tab !== 'listening') return
@@ -151,6 +197,17 @@ export function SettingsPage() {
     }
   }, [tab])
 
+  const micOptions = [
+    { value: '', label: 'Automatic (prefer real mic)' },
+    ...micDevices.map((device) => ({
+      value: device.deviceId,
+      label: device.label,
+    })),
+  ]
+  const micLabel =
+    micOptions.find((item) => item.value === preferredMicId)?.label ||
+    'Automatic (prefer real mic)'
+
   async function onPhoto(file: File | undefined) {
     if (!file) return
     const photoDataUrl = await readPhoto(file)
@@ -158,7 +215,11 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="companion-screen settings-screen">
+    <main
+      className={`companion-screen settings-screen${
+        popup1Open ? ' has-offer-dock' : ''
+      }`}
+    >
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
         <CompanionNav />
@@ -301,22 +362,18 @@ export function SettingsPage() {
             <label className="welcome-field">
               <span>Your language</span>
               <select
-                value={nativeLanguage ?? ''}
+                value={draftNative ?? ''}
                 onChange={(event) => {
-                  const next = event.target.value as NonNullable<
-                    typeof nativeLanguage
-                  >
+                  const next = event.target.value as LanguageCode
                   if (!next) return
-                  setProfile({
-                    nativeLanguage: next,
-                    ...(languageCode === next
-                      ? {
-                          targetLanguage:
-                            SUPPORTED_LANGUAGES.find((item) => item.code !== next)
-                              ?.code ?? null,
-                        }
-                      : {}),
-                  })
+                  setDraftNative(next)
+                  setLanguagesSaved('')
+                  if (draftTarget === next) {
+                    setDraftTarget(
+                      SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                        ?.code ?? null,
+                    )
+                  }
                 }}
               >
                 <option value="" disabled>
@@ -332,22 +389,18 @@ export function SettingsPage() {
             <label className="welcome-field">
               <span>Kea&apos;s reply language</span>
               <select
-                value={languageCode ?? ''}
+                value={draftTarget ?? ''}
                 onChange={(event) => {
-                  const next = event.target.value as NonNullable<
-                    typeof languageCode
-                  >
+                  const next = event.target.value as LanguageCode
                   if (!next) return
-                  setProfile({
-                    targetLanguage: next,
-                    ...(nativeLanguage === next
-                      ? {
-                          nativeLanguage:
-                            SUPPORTED_LANGUAGES.find((item) => item.code !== next)
-                              ?.code ?? null,
-                        }
-                      : {}),
-                  })
+                  setDraftTarget(next)
+                  setLanguagesSaved('')
+                  if (draftNative === next) {
+                    setDraftNative(
+                      SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                        ?.code ?? null,
+                    )
+                  }
                 }}
               >
                 <option value="" disabled>
@@ -360,36 +413,47 @@ export function SettingsPage() {
                 ))}
               </select>
             </label>
+            {languagesSaved ? <p className="settings-note">{languagesSaved}</p> : null}
+            <button
+              type="button"
+              className="kea-button settings-save"
+              onClick={() => {
+                if (!draftNative || !draftTarget || draftNative === draftTarget) {
+                  setLanguagesSaved('Pick two different languages.')
+                  return
+                }
+                setProfile({
+                  nativeLanguage: draftNative,
+                  targetLanguage: draftTarget,
+                })
+                setLanguagesSaved('Saved.')
+              }}
+            >
+              Save
+            </button>
           </section>
         ) : null}
         {tab === 'listening' ? (
         <section className="settings-card settings-card--listening">
           <h2>Listening</h2>
-          <label className="welcome-field">
+          <div className="welcome-field">
             <span>Microphone for Kea</span>
-            <select
-              value={preferredMicId}
-              onChange={(event) => {
-                const next = event.target.value
-                setPreferredMicId(next)
-                savePreferredMicId(next)
-              }}
+            <button
+              type="button"
+              className="settings-picker"
+              onClick={() => setMicSheetOpen(true)}
             >
-              <option value="">Automatic (prefer real mic)</option>
-              {micDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              {micLabel}
+            </button>
+          </div>
           <label className="welcome-field">
             <span>Turn the microphone off after</span>
             <select
-              value={listenIdleSeconds}
-              onChange={(event) =>
-                setProfile({ listenIdleSeconds: Number(event.target.value) })
-              }
+              value={draftListenIdle}
+              onChange={(event) => {
+                setDraftListenIdle(Number(event.target.value))
+                setListeningSaved('')
+              }}
             >
               {[5, 8, 10, 15, 20, 30, 45, 60].map((seconds) => (
                 <option key={seconds} value={seconds}>
@@ -401,12 +465,10 @@ export function SettingsPage() {
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
-              value={answerSilence}
+              value={draftAnswerSilence}
               onChange={(event) => {
-                const next = Number(event.target.value)
-                setAnswerSilence(next)
-                saveAnswerSilenceSeconds(next)
-                setProfile({ answerAfterSilenceSeconds: next })
+                setDraftAnswerSilence(Number(event.target.value))
+                setListeningSaved('')
               }}
             >
               {[1, 2, 3, 4, 5, 6, 8, 10].map((seconds) => (
@@ -416,7 +478,36 @@ export function SettingsPage() {
               ))}
             </select>
           </label>
+          {listeningSaved ? <p className="settings-note">{listeningSaved}</p> : null}
+          <button
+            type="button"
+            className="kea-button settings-save"
+            onClick={() => {
+              savePreferredMicId(preferredMicId)
+              saveAnswerSilenceSeconds(draftAnswerSilence)
+              setAnswerSilence(draftAnswerSilence)
+              setProfile({
+                listenIdleSeconds: draftListenIdle,
+                answerAfterSilenceSeconds: draftAnswerSilence,
+              })
+              setListeningSaved('Saved.')
+            }}
+          >
+            Save
+          </button>
         </section>
+        ) : null}
+        {micSheetOpen ? (
+          <KeaOptionSheet
+            title="Microphone for Kea"
+            options={micOptions}
+            value={preferredMicId}
+            onChange={(next) => {
+              setPreferredMicId(next)
+              setListeningSaved('')
+            }}
+            onClose={() => setMicSheetOpen(false)}
+          />
         ) : null}
         {tab === 'subscription' ? (
           <SubscriptionPanel
@@ -504,19 +595,41 @@ export function SettingsPage() {
           <label className="settings-toggle">
             <input
               type="checkbox"
-              checked={notifyTalk}
-              onChange={(event) => setProfile({ notifyTalk: event.target.checked })}
+              checked={draftNotifyTalk}
+              onChange={(event) => {
+                setDraftNotifyTalk(event.target.checked)
+                setNotificationsSaved('')
+              }}
             />
             Remind me to talk
           </label>
           <label className="settings-toggle">
             <input
               type="checkbox"
-              checked={notifyMemory}
-              onChange={(event) => setProfile({ notifyMemory: event.target.checked })}
+              checked={draftNotifyMemory}
+              onChange={(event) => {
+                setDraftNotifyMemory(event.target.checked)
+                setNotificationsSaved('')
+              }}
             />
             Remind me of Learn List items
           </label>
+          {notificationsSaved ? (
+            <p className="settings-note">{notificationsSaved}</p>
+          ) : null}
+          <button
+            type="button"
+            className="kea-button settings-save"
+            onClick={() => {
+              setProfile({
+                notifyTalk: draftNotifyTalk,
+                notifyMemory: draftNotifyMemory,
+              })
+              setNotificationsSaved('Saved.')
+            }}
+          >
+            Save
+          </button>
         </section>
         ) : null}
         {tab === 'security' ? (
@@ -661,6 +774,16 @@ export function SettingsPage() {
           </>
         ) : null}
       </div>
+      {popup1Open ? (
+        <OfferPopup
+          offer={getOffer('home')}
+          tone="home"
+          onClose={() => {
+            dismissHomeOffer()
+            setPopup1Open(false)
+          }}
+        />
+      ) : null}
     </main>
   )
 }

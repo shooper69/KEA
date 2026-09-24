@@ -24,6 +24,7 @@ export function speakText(
     voiceURI?: string
     onend?: () => void
     onerror?: () => void
+    onCharIndex?: (charIndex: number) => void
   },
 ) {
   if (typeof window === 'undefined' || !window.speechSynthesis) {
@@ -42,7 +43,16 @@ export function speakText(
         .getVoices()
         .find((item) => item.lang.startsWith(options.lang.slice(0, 2)))
   if (voice) utterance.voice = voice
-  utterance.onend = () => options.onend?.()
+  utterance.onboundary = (event) => {
+    if (typeof event.charIndex === 'number') {
+      options.onCharIndex?.(event.charIndex)
+    }
+  }
+  utterance.onstart = () => options.onCharIndex?.(0)
+  utterance.onend = () => {
+    options.onCharIndex?.(text.length)
+    options.onend?.()
+  }
   utterance.onerror = (event) => {
     if (event.error === 'interrupted' || event.error === 'canceled') {
       options.onend?.()

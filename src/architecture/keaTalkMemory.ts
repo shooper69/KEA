@@ -26,12 +26,17 @@ export function withHomeGreeting(
 ): TranscriptMessage[] {
   if (messages.length === 0) return []
   const greeting = createHomeGreetingMessage(languageCode, firstName)
-  const first = messages[0]
-  if (isHomeGreetingMessage(first)) {
+  const existingIndex = messages.findIndex(isHomeGreetingMessage)
+  if (existingIndex === 0) {
+    const first = messages[0]
     if (first.text === greeting.text && first.english === greeting.english) {
       return messages
     }
     return [greeting, ...messages.slice(1)]
+  }
+  if (existingIndex > 0) {
+    const rest = messages.filter((_, index) => index !== existingIndex)
+    return [greeting, ...rest]
   }
   return [greeting, ...messages]
 }
@@ -52,6 +57,9 @@ export function loadTalkTranscript(): TranscriptMessage[] {
         interim: false,
         pending: false,
         active: false,
+        highlights: Array.isArray(item.highlights)
+          ? item.highlights.filter((h): h is string => typeof h === 'string')
+          : undefined,
       }))
   } catch {
     return []
@@ -76,6 +84,7 @@ export function saveTalkTranscript(messages: TranscriptMessage[]) {
         speaker: item.speaker,
         text: item.text,
         english: item.english,
+        highlights: item.highlights?.length ? item.highlights : undefined,
       }))
     if (compact.length === 0) {
       localStorage.removeItem(TALK_KEY)
@@ -101,4 +110,22 @@ export function clearTalkTranscript() {
 export function requestClearTalkTranscript() {
   clearTalkTranscript()
   window.dispatchEvent(new Event(TALK_CLEARED_EVENT))
+}
+
+/**
+ * Clear the chat and soft-reset runtime (mic, speech, AudioContext) without signing out.
+ * Full navigation remounts the app so stuck mobile listeners cannot linger.
+ */
+export function requestClearTalkAndSoftReset() {
+  clearTalkTranscript()
+  try {
+    window.speechSynthesis?.cancel()
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event(TALK_CLEARED_EVENT))
+  const next = `${window.location.origin}/conversation`
+  window.setTimeout(() => {
+    window.location.assign(next)
+  }, 0)
 }

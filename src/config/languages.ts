@@ -182,7 +182,12 @@ export function createHomeGreetingMessage(
   }
 }
 
-const HOME_GREETING_ENGLISH = /^Hi( [^,]+)?, how are you today\?$/
+const HOME_GREETING_ENGLISH = [
+  /^Hi( [^,]+)?, how are you today\?$/i,
+  /^Hello( [^!]+)?! Nice to hear you\.$/i,
+  /^Hey( [^,]+)?, how's your day going\?$/i,
+  /^Hi( [^!]+)?! Nice to hear you\.$/i,
+]
 const HOME_GREETING_SPOKEN_END = [
   /¿cómo estás hoy\??$/i,
   /comment vas-tu aujourd'hui \?$/i,
@@ -194,12 +199,21 @@ const HOME_GREETING_SPOKEN_END = [
   /jak się dziś masz\?$/i,
   /как си днес\?$/i,
   /how are you today\?$/i,
+  /qué gusto oírte\.?$/i,
+  /¿qué tal tu día\?$/i,
+  /content de t'entendre\.?$/i,
+  /schön, dich zu hören\.?$/i,
+  /nice to hear you\.?$/i,
+  /how's your day going\?$/i,
 ]
 
 export function isHomeGreetingMessage(message: TranscriptMessage | undefined): boolean {
   if (!message || message.speaker !== 'kea') return false
   if (message.id === HOME_GREETING_ID) return true
-  if (message.english && HOME_GREETING_ENGLISH.test(message.english.trim())) return true
+  const english = message.english?.trim()
+  if (english && HOME_GREETING_ENGLISH.some((pattern) => pattern.test(english))) {
+    return true
+  }
   const spoken = message.text.trim()
   return HOME_GREETING_SPOKEN_END.some((pattern) => pattern.test(spoken))
 }

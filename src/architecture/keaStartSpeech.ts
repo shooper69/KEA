@@ -78,11 +78,39 @@ const WELCOME_VARIANTS: Record<
       english: name ? `Hey ${name}! Nice to hear you.` : 'Hey! Nice to hear you.',
     }),
   ],
-  ru: [
+  it: [
+    (name) => ({
+      spoken: name ? `Ciao ${name}, come stai oggi?` : 'Ciao, come stai oggi?',
+      english: name ? `Hi ${name}, how are you today?` : 'Hi, how are you today?',
+    }),
+  ],
+  pt: [
+    (name) => ({
+      spoken: name ? `Olá ${name}, como estás hoje?` : 'Olá, como estás hoje?',
+      english: name ? `Hi ${name}, how are you today?` : 'Hi, how are you today?',
+    }),
+  ],
+  nl: [
     (name) => ({
       spoken: name
-        ? `Привет, ${name}, как дела сегодня?`
-        : 'Привет, как дела сегодня?',
+        ? `Hoi ${name}, hoe gaat het vandaag?`
+        : 'Hoi, hoe gaat het vandaag?',
+      english: name ? `Hi ${name}, how are you today?` : 'Hi, how are you today?',
+    }),
+  ],
+  pl: [
+    (name) => ({
+      spoken: name
+        ? `Cześć ${name}, jak się dziś masz?`
+        : 'Cześć, jak się dziś masz?',
+      english: name ? `Hi ${name}, how are you today?` : 'Hi, how are you today?',
+    }),
+  ],
+  bg: [
+    (name) => ({
+      spoken: name
+        ? `Здравей, ${name}, как си днес?`
+        : 'Здравей, как си днес?',
       english: name ? `Hi ${name}, how are you today?` : 'Hi, how are you today?',
     }),
   ],

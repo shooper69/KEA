@@ -69,8 +69,10 @@ export function LearnListPage() {
           </span>
         </p>
         <p className="memory-library__lede">
-          The following is a list of words and phrases that you have struggled
-          with. They leave once Kea has heard you use them well {need} times.
+          Words you reached for in your own language while speaking. Your
+          language is first, then the word to learn. Say “test me on the Learn
+          List” and Kea will quiz you with each word in a sentence. Words leave
+          after you use them naturally {need} times.
         </p>
         <label className="memory-library__search">
           <span className="visually-hidden">Search Learn List</span>
@@ -78,7 +80,7 @@ export function LearnListPage() {
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search terms"
+            placeholder="Search words"
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
@@ -86,15 +88,29 @@ export function LearnListPage() {
         </label>
         {words.length === 0 ? (
           <p className="memory-library__empty">
-            Nothing here yet. Ask Kea how to say something, or ask a grammar
-            question, and it will land on this list.
+            Nothing here yet. When you drop an English word into a Spanish
+            sentence, it lands here automatically.
           </p>
         ) : (
           <ul className="memory-library__list">
             {words.map((item) => (
               <li key={item.id} className="memory-library__card">
                 <p className="memory-library__pair">
-                  {item.term} .... {item.translation}
+                  <span className="memory-library__native">{item.term}</span>
+                  {item.translation ? (
+                    <>
+                      <span className="memory-library__sep" aria-hidden="true">
+                        {' '}
+                        ·{' '}
+                      </span>
+                      <span className="memory-library__target">
+                        {item.translation}
+                      </span>
+                    </>
+                  ) : null}
+                </p>
+                <p className="memory-library__count">
+                  Used well {item.practiceCount}/{need}
                 </p>
               </li>
             ))}

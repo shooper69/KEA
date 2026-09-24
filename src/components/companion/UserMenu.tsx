@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '../../context/SessionContext'
 
-export function UserMenu() {
+interface UserMenuProps {
+  /** Optional mic name shown under the profile avatar (admin chat). */
+  micLabel?: string
+}
+
+export function UserMenu({ micLabel = '' }: UserMenuProps) {
   const { firstName, email, photoDataUrl, isAdmin, isSignedIn, signOut } =
     useSession()
   const [open, setOpen] = useState(false)
@@ -57,6 +62,11 @@ export function UserMenu() {
           <span>{(firstName || 'K').slice(0, 1).toUpperCase()}</span>
         )}
       </button>
+      {micLabel ? (
+        <p className="user-menu__mic" aria-live="polite" title={micLabel}>
+          {micLabel}
+        </p>
+      ) : null}
       {open ? (
         <div className="user-menu__dropdown" role="menu">
           <p className="user-menu__email">{email}</p>
@@ -67,7 +77,12 @@ export function UserMenu() {
             About
           </Link>
           {isAdmin ? (
-            <Link role="menuitem" to="/admin" onClick={() => setOpen(false)}>
+            <Link
+              role="menuitem"
+              to="/admin"
+              className="user-menu__admin"
+              onClick={() => setOpen(false)}
+            >
               Admin
             </Link>
           ) : null}

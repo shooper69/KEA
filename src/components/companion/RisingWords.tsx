@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { KEA_FLY_SRC } from '../../data/keaAbout'
 import {
   alignCaptionParagraphs,
+  highlightNativeIntrusions,
   splitTalkParagraphs,
 } from '../../architecture/companionMemory'
 import { looksLikeSystemText } from '../../architecture/whisperText'
@@ -15,6 +16,29 @@ interface RisingWordsProps {
   targetLanguage: LanguageCode
 }
 
+function SpokenWithHighlights({
+  text,
+  highlights,
+}: {
+  text: string
+  highlights?: string[]
+}) {
+  const parts = highlightNativeIntrusions(text, highlights ?? [])
+  return (
+    <p className="rising-words__spoken">
+      {parts.map((part, index) =>
+        part.highlight ? (
+          <span key={`${index}-${part.text}`} className="rising-words__loan">
+            {part.text}
+          </span>
+        ) : (
+          <span key={`${index}-${part.text.slice(0, 12)}`}>{part.text}</span>
+        ),
+      )}
+    </p>
+  )
+}
+
 function TalkMessageCopy({
   message,
   targetLanguage,
@@ -26,12 +50,13 @@ function TalkMessageCopy({
   const englishParts = message.english
     ? alignCaptionParagraphs(message.text, message.english)
     : []
+  const highlights = message.highlights ?? []
   return (
     <div className="rising-words__copy">
       {spokenParts.map((part, index) => (
         <div className="rising-words__pair" key={`${message.id}-${index}`}>
           <div className="rising-words__spoken-row">
-            <p className="rising-words__spoken">{part}</p>
+            <SpokenWithHighlights text={part} highlights={highlights} />
             <SpeakButton
               text={part}
               languageCode={targetLanguage}
@@ -53,14 +78,36 @@ export function RisingWords({
   targetLanguage,
 }: RisingWordsProps) {
   const initial = (userName || 'Y').slice(0, 1).toUpperCase()
+  const rootRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
+  const [filling, setFilling] = useState(false)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    const root = rootRef.current
+    if (!root) return
+
+    const measure = () => {
+      const overflows = root.scrollHeight > root.clientHeight + 4
+      setFilling(overflows)
+      if (overflows) {
+        root.scrollTop = root.scrollHeight
+      }
+    }
+
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(root)
+    return () => observer.disconnect()
   }, [messages])
 
   return (
-    <div className="rising-words rising-words--parked" aria-label="Conversation">
+    <div
+      ref={rootRef}
+      className={`rising-words rising-words--parked${
+        filling ? ' rising-words--filling' : ''
+      }`}
+      aria-label="Conversation"
+    >
       {messages
         .filter((message) => !looksLikeSystemText(message.text))
         .map((message) => (
