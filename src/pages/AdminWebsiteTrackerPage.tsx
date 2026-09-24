@@ -29,8 +29,20 @@ export function AdminWebsiteTrackerPage() {
           Authorization: `Bearer ${session.access_token}`,
         },
       })
-      const json = (await res.json()) as WebsiteTrackerDashboardData & {
-        error?: string
+      const raw = await res.text()
+      let json: WebsiteTrackerDashboardData & { error?: string }
+      try {
+        json = JSON.parse(raw) as WebsiteTrackerDashboardData & {
+          error?: string
+        }
+      } catch {
+        setError(
+          res.status === 404 || raw.trimStart().startsWith('<!')
+            ? 'Tracker API is not reachable (got HTML instead of JSON). On localhost restart Vite; on kea.chat set SUPABASE_SERVICE_ROLE_KEY and redeploy.'
+            : `Invalid tracker response (${res.status}).`,
+        )
+        setData(null)
+        return
       }
       if (!res.ok) {
         setError(json.error || `Failed (${res.status})`)

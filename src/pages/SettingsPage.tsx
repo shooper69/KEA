@@ -18,7 +18,6 @@ import { getSupabase } from '../lib/supabase'
 import { SubscriptionPanel } from '../components/companion/SubscriptionPanel'
 import { UsagePanel } from '../components/companion/UsagePanel'
 import {
-  DEFAULT_ANSWER_SILENCE_SECONDS,
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
@@ -98,6 +97,7 @@ export function SettingsPage() {
   const [draftEmail, setDraftEmail] = useState(email)
   const [tab, setTab] = useState<
     | 'choices'
+    | 'languages'
     | 'listening'
     | 'memory'
     | 'notifications'
@@ -171,9 +171,13 @@ export function SettingsPage() {
           </Link>
         </div>
         <div className="settings-tabs" role="tablist" aria-label="Settings">
+          {isAdmin ? (
+            <Link to="/admin">Admin</Link>
+          ) : null}
           {(
             [
               ['choices', 'Choices'],
+              ['languages', 'Languages'],
               ['listening', 'Listening'],
               ['memory', 'Memory'],
               ['notifications', 'Notifications'],
@@ -194,9 +198,6 @@ export function SettingsPage() {
               {label}
             </button>
           ))}
-          {isAdmin ? (
-            <Link to="/admin">Admin</Link>
-          ) : null}
         </div>
         {tab === 'choices' ? (
           <>
@@ -235,50 +236,6 @@ export function SettingsPage() {
           </label>
         </section>
         ) : null}
-        <section className="settings-card">
-          <h2>Languages</h2>
-          <p className="settings-note">
-            These are the languages you chose when you created your account.
-          </p>
-          <label className="welcome-field">
-            <span>I speak</span>
-            <select
-              value={nativeLanguage ?? ''}
-              onChange={(event) =>
-                setProfile({
-                  nativeLanguage: event.target.value as NonNullable<
-                    typeof nativeLanguage
-                  >,
-                })
-              }
-            >
-              <option value="">I speak</option>
-              {SUPPORTED_LANGUAGES.map((language) => (
-                <option key={language.code} value={language.code}>
-                  {language.name} · {language.nativeName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="welcome-field">
-            <span>I am learning</span>
-            <select
-              value={languageCode ?? ''}
-              onChange={(event) =>
-                setProfile({
-                  targetLanguage: event.target.value as NonNullable<typeof languageCode>,
-                })
-              }
-            >
-              <option value="">I am learning</option>
-              {SUPPORTED_LANGUAGES.map((language) => (
-                <option key={`t-${language.code}`} value={language.code}>
-                  {language.name} · {language.nativeName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
         <section className="settings-card">
           <h2>Voice</h2>
           <p className="settings-note">
@@ -334,6 +291,77 @@ export function SettingsPage() {
         </section>
           </>
         ) : null}
+        {tab === 'languages' ? (
+          <section className="settings-card">
+            <h2>Languages</h2>
+            <p className="settings-note">
+              Choose the language you use, and the language Kea replies in.
+              They should be different.
+            </p>
+            <label className="welcome-field">
+              <span>Your language</span>
+              <select
+                value={nativeLanguage ?? ''}
+                onChange={(event) => {
+                  const next = event.target.value as NonNullable<
+                    typeof nativeLanguage
+                  >
+                  if (!next) return
+                  setProfile({
+                    nativeLanguage: next,
+                    ...(languageCode === next
+                      ? {
+                          targetLanguage:
+                            SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                              ?.code ?? null,
+                        }
+                      : {}),
+                  })
+                }}
+              >
+                <option value="" disabled>
+                  Choose your language
+                </option>
+                {SUPPORTED_LANGUAGES.map((language) => (
+                  <option key={language.code} value={language.code}>
+                    {language.name} · {language.nativeName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="welcome-field">
+              <span>Kea&apos;s reply language</span>
+              <select
+                value={languageCode ?? ''}
+                onChange={(event) => {
+                  const next = event.target.value as NonNullable<
+                    typeof languageCode
+                  >
+                  if (!next) return
+                  setProfile({
+                    targetLanguage: next,
+                    ...(nativeLanguage === next
+                      ? {
+                          nativeLanguage:
+                            SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                              ?.code ?? null,
+                        }
+                      : {}),
+                  })
+                }}
+              >
+                <option value="" disabled>
+                  Choose Kea&apos;s reply language
+                </option>
+                {SUPPORTED_LANGUAGES.map((language) => (
+                  <option key={`reply-${language.code}`} value={language.code}>
+                    {language.name} · {language.nativeName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : null}
         {tab === 'listening' ? (
         <section className="settings-card settings-card--listening">
           <h2>Listening</h2>
@@ -355,11 +383,6 @@ export function SettingsPage() {
               ))}
             </select>
           </label>
-          <p className="settings-note">
-            On PC, pick your Samson Meteor — not Voicemod or EaseUS. If Chrome
-            still uses the wrong one, click the lock icon by the URL → Microphone
-            → choose the same device.
-          </p>
           <label className="welcome-field">
             <span>Turn the microphone off after</span>
             <select
@@ -375,9 +398,6 @@ export function SettingsPage() {
               ))}
             </select>
           </label>
-          <p className="settings-note">
-            Default is 10 seconds of quiet. Speaking resets the timer.
-          </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
@@ -396,11 +416,6 @@ export function SettingsPage() {
               ))}
             </select>
           </label>
-          <p className="settings-note">
-            Default is {DEFAULT_ANSWER_SILENCE_SECONDS} seconds after you stop
-            speaking. Then Kea replies as quickly as she can. An admin can set
-            this for everyone in About Kea.
-          </p>
         </section>
         ) : null}
         {tab === 'subscription' ? (
@@ -583,7 +598,7 @@ export function SettingsPage() {
               ) : null}
               <button
                 type="button"
-                className="kea-button"
+                className="kea-button settings-save"
                 onClick={() => {
                   void (async () => {
                     if (nextPassword.trim().length < 6) {

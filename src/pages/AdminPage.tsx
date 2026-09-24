@@ -37,14 +37,14 @@ export function AdminPage() {
           </Link>
         </div>
         <nav className="admin-tabs" aria-label="Admin sections">
+          <NavLink to="/admin/about">About Kea</NavLink>
+          <NavLink to="/admin/costs">Cost analysis</NavLink>
           <NavLink to="/admin" end>
             Overview
           </NavLink>
-          <NavLink to="/admin/about">About Kea</NavLink>
+          <NavLink to="/admin/tiers">Tiers</NavLink>
           <NavLink to="/admin/voice-management">Voice Management</NavLink>
           <NavLink to="/admin/voices">Voice Tester</NavLink>
-          <NavLink to="/admin/tiers">Tiers</NavLink>
-          <NavLink to="/admin/costs">Cost analysis</NavLink>
           <NavLink to="/admin/website-tracker">Website Tracker</NavLink>
         </nav>
         <Outlet />
