@@ -91,7 +91,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     let speechHold = 0
     let silenceHold = 0
     let speechBurstMs = 0
-    let hadSpeech = false
     let listeningShot = false
     let lastShotAt = 0
     let cancelled = false
@@ -194,7 +193,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       if (Date.now() - lastShotAt < SHOT_COOLDOWN_MS) {
         stopRecorder()
         chunks = []
-        hadSpeech = false
         speechHold = 0
         silenceHold = 0
         speechBurstMs = 0
@@ -203,7 +201,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
 
       listeningShot = true
       lastShotAt = Date.now()
-      hadSpeech = false
       speechHold = 0
       silenceHold = 0
       speechBurstMs = 0
@@ -387,7 +384,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             speechBurstMs += delta
             silenceHold = 0
             if (speechHold >= SPEECH_HOLD_MS) {
-              hadSpeech = true
               if (mobile) startMobileShot()
               else beginUtterance()
             }
@@ -408,7 +404,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             } else if (!recordingUtterance) {
               speechBurstMs = Math.max(0, speechBurstMs - delta * 1.2)
               if (speechBurstMs < 80) {
-                hadSpeech = false
                 silenceHold = 0
               }
             }
@@ -436,7 +431,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         stopRecognition()
         stopRecorder()
         listeningShot = false
-        hadSpeech = false
         speechHold = 0
         silenceHold = 0
         speechBurstMs = 0
