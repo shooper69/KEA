@@ -41,6 +41,27 @@ export function spokenHomeGreeting(languageCode: string, firstName: string): str
   return make(name)
 }
 
+/** Short reply when the user taps Kea or says the wake word — always in the learning language. */
+const WAKE_ACK_SPOKEN: Record<string, string> = {
+  en: "Yes, I'm here",
+  es: 'Sí, estoy aquí',
+  fr: 'Oui, je suis là',
+  de: 'Ja, ich bin da',
+  ru: 'Да, я здесь',
+  it: 'Sì, sono qui',
+  pt: 'Sim, estou aqui',
+}
+
+const WAKE_ACK_ENGLISH = "Yes, I'm here"
+
+export function spokenWakeAck(languageCode: string): string {
+  return WAKE_ACK_SPOKEN[languageCode] ?? WAKE_ACK_SPOKEN.en
+}
+
+export function wakeAckEnglishCaption(languageCode: string): string | undefined {
+  return languageCode === 'en' ? undefined : WAKE_ACK_ENGLISH
+}
+
 export function createHomeGreetingMessage(
   languageCode: LanguageCode | string,
   firstName: string,

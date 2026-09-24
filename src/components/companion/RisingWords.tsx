@@ -5,15 +5,23 @@ import {
   splitTalkParagraphs,
 } from '../../architecture/companionMemory'
 import { looksLikeSystemText } from '../../architecture/whisperText'
-import type { TranscriptMessage } from '../../types'
+import { SpeakButton } from './SpeakButton'
+import type { LanguageCode, TranscriptMessage } from '../../types'
 
 interface RisingWordsProps {
   messages: TranscriptMessage[]
   live?: boolean
   userName?: string
+  targetLanguage: LanguageCode
 }
 
-function TalkMessageCopy({ message }: { message: TranscriptMessage }) {
+function TalkMessageCopy({
+  message,
+  targetLanguage,
+}: {
+  message: TranscriptMessage
+  targetLanguage: LanguageCode
+}) {
   const spokenParts = splitTalkParagraphs(message.text)
   const englishParts = message.english
     ? alignCaptionParagraphs(message.text, message.english)
@@ -22,7 +30,14 @@ function TalkMessageCopy({ message }: { message: TranscriptMessage }) {
     <div className="rising-words__copy">
       {spokenParts.map((part, index) => (
         <div className="rising-words__pair" key={`${message.id}-${index}`}>
-          <p className="rising-words__spoken">{part}</p>
+          <div className="rising-words__spoken-row">
+            <p className="rising-words__spoken">{part}</p>
+            <SpeakButton
+              text={part}
+              languageCode={targetLanguage}
+              label="Listen to this paragraph"
+            />
+          </div>
           {englishParts[index] ? (
             <p className="rising-words__english">{englishParts[index]}</p>
           ) : null}
@@ -35,6 +50,7 @@ function TalkMessageCopy({ message }: { message: TranscriptMessage }) {
 export function RisingWords({
   messages,
   userName = '',
+  targetLanguage,
 }: RisingWordsProps) {
   const initial = (userName || 'Y').slice(0, 1).toUpperCase()
   const endRef = useRef<HTMLDivElement>(null)
@@ -63,7 +79,7 @@ export function RisingWords({
               <span>{initial}</span>
             </span>
           )}
-          <TalkMessageCopy message={message} />
+          <TalkMessageCopy message={message} targetLanguage={targetLanguage} />
         </div>
       ))}
       <div ref={endRef} className="rising-words__end" />

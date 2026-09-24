@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { requestClearTalkTranscript } from '../../architecture/keaTalkMemory'
 import { KeaMark } from './KeaMark'
 import { UserMenu } from './UserMenu'
 
 const LINKS = [
+  { to: '/conversation', label: 'Chat' },
   { to: '/learn', label: 'Learn List' },
   { to: '/topics', label: 'Topics' },
 ] as const
@@ -24,37 +26,71 @@ function ClearChatIcon() {
 }
 
 export function CompanionNav() {
-  function clearChat() {
-    if (!window.confirm('Clear this chat?')) return
+  const [clearOpen, setClearOpen] = useState(false)
+
+  function confirmClear() {
+    setClearOpen(false)
     requestClearTalkTranscript()
   }
 
   return (
-    <nav className="companion-nav" aria-label="Kea">
-      <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
-        <KeaMark className="kea-mark--header" />
-      </Link>
-      {LINKS.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          className={({ isActive }) =>
-            `memory-button${isActive ? ' is-active' : ''}`
-          }
+    <>
+      <nav className="companion-nav" aria-label="Kea">
+        <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
+          <KeaMark className="kea-mark--header" />
+        </Link>
+        {LINKS.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            className={({ isActive }) =>
+              `memory-button${isActive ? ' is-active' : ''}`
+            }
+          >
+            {link.label}
+          </NavLink>
+        ))}
+        <button
+          type="button"
+          className="companion-nav__clear"
+          aria-label="Clear chat"
+          title="Clear chat"
+          onClick={() => setClearOpen(true)}
         >
-          {link.label}
-        </NavLink>
-      ))}
-      <button
-        type="button"
-        className="companion-nav__clear"
-        aria-label="Clear chat"
-        title="Clear chat"
-        onClick={clearChat}
-      >
-        <ClearChatIcon />
-      </button>
-      <UserMenu />
-    </nav>
+          <ClearChatIcon />
+        </button>
+        <UserMenu />
+      </nav>
+      {clearOpen ? (
+        <div
+          className="kea-confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kea-clear-chat-title"
+          onClick={() => setClearOpen(false)}
+        >
+          <div
+            className="kea-confirm__card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p id="kea-clear-chat-title" className="kea-confirm__title">
+              Clear this chat?
+            </p>
+            <div className="kea-confirm__actions">
+              <button
+                type="button"
+                className="kea-button kea-button--ghost"
+                onClick={() => setClearOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="button" className="kea-button" onClick={confirmClear}>
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }

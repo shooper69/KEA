@@ -45,7 +45,7 @@ export async function handler(event: TranscribeEvent) {
     }
   }
 
-  let payload: { audio?: string; mimeType?: string }
+  let payload: { audio?: string; mimeType?: string; prompt?: string }
   try {
     const raw = event.isBase64Encoded
       ? Buffer.from(event.body ?? '', 'base64').toString('utf8')
@@ -81,7 +81,11 @@ export async function handler(event: TranscribeEvent) {
   form.append('model', 'whisper-1')
   form.append('response_format', 'verbose_json')
   form.append('temperature', '0')
-  form.append('prompt', LEARNER_PROMPT)
+  const prompt =
+    typeof payload.prompt === 'string' && payload.prompt.trim()
+      ? payload.prompt.trim().slice(0, 800)
+      : LEARNER_PROMPT
+  form.append('prompt', prompt)
 
   const openaiResponse = await fetch(
     'https://api.openai.com/v1/audio/transcriptions',

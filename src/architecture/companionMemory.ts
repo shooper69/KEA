@@ -289,9 +289,23 @@ export function getLearnList(): LearnListItem[] {
   return items
 }
 
-export function getMasteredLearnCount(): number {
+export function getMasteredLearnCount(languageCode?: LanguageCode | null): number {
   getLearnList()
-  return readMastered().length
+  const mastered = readMastered()
+  if (!languageCode) return mastered.length
+  return mastered.filter((item) => item.languageCode === languageCode).length
+}
+
+export function getLearnListStats(languageCode?: LanguageCode | null) {
+  const onList = languageCode
+    ? getLearnList().filter((item) => item.languageCode === languageCode)
+    : getLearnList()
+  const removed = getMasteredLearnCount(languageCode)
+  return {
+    onList: onList.length,
+    removed,
+    ever: onList.length + removed,
+  }
 }
 
 function isSystemTopic(item: ChatTopic) {

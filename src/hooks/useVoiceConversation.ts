@@ -7,6 +7,7 @@ import {
 } from '../architecture/companionMemory'
 import {
   TALK_CLEARED_EVENT,
+  clearTalkTranscript,
   loadTalkTranscript,
   saveTalkTranscript,
   withHomeGreeting,
@@ -16,6 +17,7 @@ import {
   DEFAULT_VOICE_CHARACTER,
   getVoicePersonality,
 } from '../config/voices'
+import { openKeaMicrophone } from '../architecture/keaMicrophone'
 import { getLanguage } from '../config/languages'
 import {
   listVoices,
@@ -25,6 +27,7 @@ import {
 import { askKea, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 import { speakKeaLine, stopKeaSpeech } from '../services/keaSpeak'
+import { isUsableSpeechTranscript } from '../architecture/whisperText'
 import type {
   LanguageCode,
   LearnerLevel,
@@ -44,9 +47,10 @@ const NATIVE_NAMES: Record<NativeLanguageCode, string> = {
 
 const CHARACTER_KEY = 'kea-voice-character'
 const RESTART_LISTEN_MS = 80
-const MIN_SPEECH_MS = 280
+const MIN_SPEECH_MS = 480
 const MAX_RECORD_MS = 22000
-const SPEECH_RMS = 0.04
+/** Floor for speech; live threshold is raised from ambient noise. */
+const SPEECH_RMS_FLOOR = 0.02
 const DEFAULT_ANSWER_SILENCE_MS = 3000
 
 function readCharacter(): VoicePersonalityId {
@@ -113,8 +117,10 @@ export function useVoiceConversation({
   const [characterId, setCharacterId] = useState<VoicePersonalityId>(readCharacter)
   const [rate, setRate] = useState(() => getVoicePersonality(readCharacter()).rate)
   const [handsFree, setHandsFree] = useState(false)
+  const [micLabel, setMicLabel] = useState('')
 
   const handsFreeRef = useRef(false)
+  const speechRmsRef = useRef(SPEECH_RMS_FLOOR)
   const busyRef = useRef(false)
   const historyRef = useRef<TranscriptMessage[]>([])
   const statusRef = useRef<VoicePresenceState>('idle')
@@ -153,35 +159,6 @@ export function useVoiceConversation({
     historyRef.current = messages
     saveTalkTranscript(messages)
   }, [messages])
-
-  useEffect(() => {
-    function persist() {
-      saveTalkTranscript(historyRef.current)
-    }
-    window.addEventListener('pagehide', persist)
-    document.addEventListener('visibilitychange', persist)
-    function onVisible() {
-      if (document.visibilityState !== 'visible') return
-      persist()
-      const stream = streamRef.current
-      const dead =
-        !stream || stream.getTracks().every((track) => track.readyState === 'ended')
-      if (handsFreeRef.current && dead) {
-        fatalListenRef.current = true
-        handsFreeRef.current = false
-        setHandsFree(false)
-        busyRef.current = false
-        teardownAudio()
-        setStatus('idle')
-      }
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.removeEventListener('pagehide', persist)
-      document.removeEventListener('visibilitychange', persist)
-      document.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [])
 
   const clearListenIdleTimer = useCallback(() => {
     if (listenIdleTimerRef.current !== null) {
@@ -227,6 +204,61 @@ export function useVoiceConversation({
     streamRef.current = null
   }, [stopAnalyser])
 
+  const pauseForBackground = useCallback(() => {
+    saveTalkTranscript(historyRef.current)
+    stopKeaSpeech()
+    clearListenIdleTimer()
+    clearRestartTimer()
+    stoppingRecordRef.current = true
+    busyRef.current = false
+    sendingRef.current = false
+    fatalListenRef.current = false
+    handsFreeRef.current = false
+    setHandsFree(false)
+    teardownAudio()
+    setStatus('idle')
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
+
+  const restoreTranscript = useCallback(() => {
+    const stored = withHomeGreeting(
+      loadTalkTranscript(),
+      targetLanguage,
+      firstName,
+    )
+    setMessages((current) => {
+      if (stored.length === 0) return current
+      if (current.length > stored.length) {
+        saveTalkTranscript(current)
+        return current
+      }
+      historyRef.current = stored
+      return stored
+    })
+  }, [firstName, targetLanguage])
+
+  useEffect(() => {
+    function onLeave() {
+      pauseForBackground()
+    }
+    function onVisibility() {
+      if (document.visibilityState !== 'visible') {
+        onLeave()
+        return
+      }
+      restoreTranscript()
+      setStatus('idle')
+      patchVoiceDiagnostics({ recognitionRunning: false })
+    }
+    window.addEventListener('pagehide', onLeave)
+    document.addEventListener('freeze', onLeave)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', onLeave)
+      document.removeEventListener('freeze', onLeave)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [pauseForBackground, restoreTranscript])
   useEffect(() => {
     const refresh = () => setVoices(listVoices())
     refresh()
@@ -254,13 +286,12 @@ export function useVoiceConversation({
     handsFreeRef.current = false
     setHandsFree(false)
     stoppingRecordRef.current = true
-    if (recorderRef.current && recorderRef.current.state === 'recording') {
-      recorderRef.current.stop()
-    }
-    stopAnalyser(true)
+    busyRef.current = false
+    fatalListenRef.current = false
+    teardownAudio()
     setStatus('idle')
     patchVoiceDiagnostics({ recognitionRunning: false })
-  }, [clearListenIdleTimer, clearRestartTimer, stopAnalyser])
+  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   const armListenIdle = useCallback(() => {
     clearListenIdleTimer()
@@ -306,7 +337,8 @@ export function useVoiceConversation({
       logSpeech('whisper')
       const result = await transcribeWithWhisper(blob)
       logSpeech('transcript', result)
-      if (!result.text.trim()) {
+      if (!isUsableSpeechTranscript(result.text, result.confidence)) {
+        logSpeech('ignored noise/hallucination', result)
         busyRef.current = false
         if (handsFreeRef.current) startListeningRef.current()
         else setStatus('idle')
@@ -373,6 +405,10 @@ export function useVoiceConversation({
       analyserRef.current = analyser
       const samples = new Uint8Array(analyser.fftSize)
       let last = performance.now()
+      let ambientSum = 0
+      let ambientSamples = 0
+      const ambientUntil = performance.now() + 280
+      speechRmsRef.current = SPEECH_RMS_FLOOR
       const finishForAnswer = () => {
         if (recorder.state !== 'recording') return
         stopAnalyser()
@@ -396,11 +432,23 @@ export function useVoiceConversation({
         const rms = Math.sqrt(sum / samples.length)
         const delta = now - last
         last = now
-        if (rms > SPEECH_RMS) {
+        if (now < ambientUntil && speechMsRef.current === 0) {
+          ambientSum += rms
+          ambientSamples += 1
+          if (ambientSamples > 4) {
+            const ambient = ambientSum / ambientSamples
+            speechRmsRef.current = Math.max(
+              SPEECH_RMS_FLOOR,
+              Math.min(0.05, ambient * 2.4 + 0.006),
+            )
+          }
+        }
+        if (rms > speechRmsRef.current) {
           speechMsRef.current += delta
           silenceMsRef.current = 0
           lastActivityAtRef.current = now
           armListenIdle()
+          window.dispatchEvent(new Event('kea-user-activity'))
         } else if (speechMsRef.current > MIN_SPEECH_MS) {
           silenceMsRef.current += delta
           if (silenceMsRef.current >= answerSilenceMsRef.current) {
@@ -409,7 +457,7 @@ export function useVoiceConversation({
           }
         }
         if (now - recordStartedAtRef.current >= MAX_RECORD_MS) {
-          finishForAnswer()
+          if (speechMsRef.current > MIN_SPEECH_MS) finishForAnswer()
         }
       }
       rafRef.current = requestAnimationFrame(tick)
@@ -544,7 +592,7 @@ export function useVoiceConversation({
 
   const startingRef = useRef(false)
 
-  const start = useCallback(async (greeting?: string) => {
+  const start = useCallback(async (greeting?: string, englishCaption?: string) => {
     if (startingRef.current || handsFreeRef.current) return
     startingRef.current = true
     setError(null)
@@ -560,15 +608,26 @@ export function useVoiceConversation({
     setHandsFree(true)
     await new Promise((resolve) => window.setTimeout(resolve, 220))
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const { stream, info } = await openKeaMicrophone()
       streamRef.current = stream
-      patchVoiceDiagnostics({ recognitionAvailable: true })
+      setMicLabel(info.label)
+      patchVoiceDiagnostics({
+        recognitionAvailable: true,
+        recognitionLanguage: `whisper-1 · ${info.label}`,
+      })
+      if (info.virtual) {
+        setError(
+          `Chrome is using “${info.label}”, which is usually silent. Click the lock icon by the URL → Microphone → choose your Samson Meteor (or built-in mic), then tap Kea again.`,
+        )
+      }
       if (greeting?.trim()) {
         const text = greeting.trim()
+        const english = englishCaption?.trim() || undefined
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',
           text,
+          english: targetLanguage === 'en' ? undefined : english,
           active: true,
         }
         historyRef.current = [...historyRef.current, keaMessage]
@@ -581,6 +640,7 @@ export function useVoiceConversation({
       fatalListenRef.current = true
       handsFreeRef.current = false
       setHandsFree(false)
+      setMicLabel('')
       setError('Microphone permission is needed for Kea to listen. Tap the kea, then allow the microphone.')
       patchVoiceDiagnostics({
         recognitionAvailable: false,
@@ -589,12 +649,13 @@ export function useVoiceConversation({
     } finally {
       startingRef.current = false
     }
-  }, [speakReply, startListening])
+  }, [speakReply, startListening, targetLanguage])
 
   const stop = useCallback(() => {
     fatalListenRef.current = true
     handsFreeRef.current = false
     setHandsFree(false)
+    setMicLabel('')
     busyRef.current = false
     sendingRef.current = false
     stoppingRecordRef.current = true
@@ -618,22 +679,20 @@ export function useVoiceConversation({
 
   const clearMessages = useCallback(() => {
     stop()
-    const next = seedHomeGreeting([])
-    historyRef.current = next
-    setMessages(next)
-    saveTalkTranscript(next)
-  }, [seedHomeGreeting, stop])
+    historyRef.current = []
+    setMessages([])
+    clearTalkTranscript()
+  }, [stop])
 
   useEffect(() => {
     function onTalkCleared() {
       stop()
-      const next = seedHomeGreeting([])
-      historyRef.current = next
-      setMessages(next)
+      historyRef.current = []
+      setMessages([])
     }
     window.addEventListener(TALK_CLEARED_EVENT, onTalkCleared)
     return () => window.removeEventListener(TALK_CLEARED_EVENT, onTalkCleared)
-  }, [seedHomeGreeting, stop])
+  }, [stop])
 
   const toggle = useCallback(() => {
     if (startingRef.current) return
@@ -659,6 +718,7 @@ export function useVoiceConversation({
     rate,
     setRate,
     handsFree,
+    micLabel,
     toggle,
     start,
     stop,

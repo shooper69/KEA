@@ -10,6 +10,32 @@ const SYSTEM_LEAKS = [
   'kea_memory',
 ]
 
+/** Common Whisper inventions for silence / keyboard / room noise. */
+const HALLUCINATIONS = [
+  /^thank you for watching\.?$/i,
+  /^thanks for watching\.?$/i,
+  /^thank you so much for watching\.?$/i,
+  /^thanks so much for watching\.?$/i,
+  /^thank you for listening\.?$/i,
+  /^thanks for listening\.?$/i,
+  /^thanks for tuning in\.?$/i,
+  /^please subscribe\.?$/i,
+  /^like and subscribe\.?$/i,
+  /^subscribe to (my|the) channel\.?$/i,
+  /^see you (next time|later)\.?$/i,
+  /^thanks for watching and .*subscribe/i,
+  /^subtitles by\b/i,
+  /^amara\.org/i,
+  /^www\./i,
+  /^mbc\b/i,
+  /^you\.?$/i,
+  /^please like and subscribe\.?$/i,
+  /^don't forget to subscribe\.?$/i,
+  /^i'?ll see you in the next (video|one)\.?$/i,
+]
+
+const MIN_TRANSCRIPT_CONFIDENCE = 0.32
+
 export function looksLikeSystemText(text: string) {
   const lower = text.toLowerCase().replace(/\s+/g, ' ').trim()
   if (!lower) return false
@@ -20,6 +46,35 @@ export function looksLikeSystemText(text: string) {
   )
 }
 
+export function looksLikeWhisperHallucination(text: string) {
+  const trimmed = text.replace(/\s+/g, ' ').trim()
+  if (!trimmed) return true
+  if (HALLUCINATIONS.some((pattern) => pattern.test(trimmed))) return true
+  // Single letter only (keep short real words like "Si", "no", "ok")
+  const bare = trimmed.replace(/[^\p{L}\p{N}]+/gu, '')
+  if (bare.length <= 1) return true
+  return false
+}
+
+/** Drop silence hallucinations and low-confidence noise transcripts. */
+export function isUsableSpeechTranscript(
+  text: string,
+  confidence = 1,
+): boolean {
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return false
+  if (looksLikeSystemText(cleaned)) return false
+  if (looksLikeWhisperHallucination(cleaned)) return false
+  const conf = Number.isFinite(confidence)
+    ? Math.min(1, Math.max(0, confidence))
+    : 1
+  // Confidence above 1 from a bad metric is treated as unknown → allow text.
+  if (confidence > 0 && confidence <= 1 && conf < MIN_TRANSCRIPT_CONFIDENCE) {
+    return false
+  }
+  return true
+}
+
 export function cleanSpokenText(raw: string): string {
   const pieces = raw
     .replace(/\s+/g, ' ')
@@ -28,7 +83,10 @@ export function cleanSpokenText(raw: string): string {
     .map((part) => part.trim())
     .filter(Boolean)
     .filter((part) => !looksLikeSystemText(part))
+    .filter((part) => !looksLikeWhisperHallucination(part))
   const text = pieces.join(' ').trim()
-  if (!text || looksLikeSystemText(text)) return ''
+  if (!text || looksLikeSystemText(text) || looksLikeWhisperHallucination(text)) {
+    return ''
+  }
   return text
 }

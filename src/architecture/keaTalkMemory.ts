@@ -18,14 +18,14 @@ function isMessage(value: unknown): value is TranscriptMessage {
   )
 }
 
-/** Put the home greeting first. Empty talk gets only this row; history is prepended unless the first row is already that greeting. */
+/** Put the home greeting first when there is history. Empty talk stays empty (clear chat, fresh visit). */
 export function withHomeGreeting(
   messages: TranscriptMessage[],
   languageCode: LanguageCode,
   firstName: string,
 ): TranscriptMessage[] {
+  if (messages.length === 0) return []
   const greeting = createHomeGreetingMessage(languageCode, firstName)
-  if (messages.length === 0) return [greeting]
   const first = messages[0]
   if (isHomeGreetingMessage(first)) {
     if (first.text === greeting.text && first.english === greeting.english) {

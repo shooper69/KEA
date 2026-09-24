@@ -3,9 +3,27 @@ import {
   loadPlanCatalog,
   type PlanId,
 } from './keaPlans'
+import { isAdminEmail } from './adminAuth'
 
 const BILLING_KEY = 'kea-billing-v1'
 const USAGE_PREFIX = 'kea-usage-'
+const PROFILE_STORAGE_KEY = 'kea-profile'
+
+function storedProfileIsAdmin() {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY)
+    if (!raw) return false
+    const email = String((JSON.parse(raw) as { email?: string }).email ?? '')
+    return isAdminEmail(email)
+  } catch {
+    return false
+  }
+}
+
+/** Admin (simonghooper@gmail.com) never hits a talk time cap. */
+export function hasUnlimitedTalk(isAdminFlag = false) {
+  return Boolean(isAdminFlag) || storedProfileIsAdmin()
+}
 
 export type BillingStatus = 'trial' | 'active' | 'expired'
 
@@ -201,6 +219,7 @@ export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
 }
 
 export function recordTalkSeconds(seconds: number) {
+  if (hasUnlimitedTalk()) return
   const add = Math.max(0, seconds)
   if (!add) return
   const used = minutesUsedToday() * 60 + add
@@ -220,7 +239,7 @@ export function getTalkAccess(isAdmin = false): TalkAccess {
   const catalog = loadPlanCatalog()
   const state = ensureTrialStarted()
   const used = minutesUsedToday()
-  if (isAdmin) {
+  if (hasUnlimitedTalk(isAdmin)) {
     return {
       ok: true,
       reason: 'ok',

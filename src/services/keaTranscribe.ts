@@ -18,14 +18,29 @@ function blobToBase64(blob: Blob): Promise<string> {
   })
 }
 
-export async function transcribeWithWhisper(blob: Blob): Promise<WhisperTranscript> {
+export async function transcribeWithWhisper(
+  blob: Blob,
+  options?: { prompt?: string },
+): Promise<WhisperTranscript> {
   const audio = await blobToBase64(blob)
+  const rawType = (blob.type || 'audio/webm').toLowerCase()
+  // OpenAI rejects codec suffixes like audio/webm;codecs=opus
+  const mimeType = rawType.includes('mp4') || rawType.includes('m4a')
+    ? 'audio/mp4'
+    : rawType.includes('ogg') || rawType.includes('oga')
+      ? 'audio/ogg'
+      : rawType.includes('mpeg') || rawType.includes('mp3')
+        ? 'audio/mpeg'
+        : rawType.includes('wav')
+          ? 'audio/wav'
+          : 'audio/webm'
   const response = await fetch('/api/transcribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       audio,
-      mimeType: blob.type || 'audio/webm',
+      mimeType,
+      prompt: options?.prompt,
     }),
   })
   const data = (await response.json()) as WhisperTranscript & { error?: string }

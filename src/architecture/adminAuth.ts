@@ -5,7 +5,7 @@ const SESSION_KEY = 'kea-admin-session'
 export const DEFAULT_ADMIN_PASSWORD = 'Tester'
 
 export function isAdminEmail(email: string) {
-  return email.trim().toLowerCase() === ADMIN_EMAIL
+  return email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase()
 }
 
 async function sha256(text: string) {

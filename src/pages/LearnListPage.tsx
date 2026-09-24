@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getLearnList,
+  getLearnListStats,
   subscribeLearnMemory,
 } from '../architecture/companionMemory'
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
@@ -12,17 +13,22 @@ export function LearnListPage() {
   const { languageCode } = useSession()
   const [query, setQuery] = useState('')
   const [items, setItems] = useState(() => getLearnList())
+  const [stats, setStats] = useState(() => getLearnListStats(languageCode))
   const need = getLearnMasteryUses()
 
   useEffect(() => {
-    const refresh = () => setItems(getLearnList())
+    const refresh = () => {
+      setItems(getLearnList())
+      setStats(getLearnListStats(languageCode))
+    }
+    refresh()
     const stop = subscribeLearnMemory(refresh)
     window.addEventListener('kea-learn-memory', refresh)
     return () => {
       stop()
       window.removeEventListener('kea-learn-memory', refresh)
     }
-  }, [])
+  }, [languageCode])
 
   const words = useMemo(() => {
     const scoped = languageCode
@@ -45,6 +51,23 @@ export function LearnListPage() {
       </header>
       <div className="memory-library__content">
         <h1>Learn List</h1>
+        <p className="learn-list-stats" aria-live="polite">
+          <span>
+            <strong>{stats.ever}</strong> have been on this list
+          </span>
+          <span className="learn-list-stats__sep" aria-hidden="true">
+            ·
+          </span>
+          <span>
+            <strong>{stats.removed}</strong> removed
+          </span>
+          <span className="learn-list-stats__sep" aria-hidden="true">
+            ·
+          </span>
+          <span>
+            <strong>{stats.onList}</strong> here now
+          </span>
+        </p>
         <p className="memory-library__lede">
           The following is a list of words and phrases that you have struggled
           with. They leave once Kea has heard you use them well {need} times.

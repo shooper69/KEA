@@ -16,23 +16,24 @@ export function CloudAtmosphere({
   presence,
   tempo = 'calm',
 }: CloudAtmosphereProps) {
-  const { skyTheme } = useSession()
+  const { skyTheme, isAdmin } = useSession()
+  const activeTheme = isAdmin && skyTheme === 'weather' ? 'weather' : 'clouds'
   const [weather, setWeather] = useState<WeatherKind>('clear')
 
   useEffect(() => {
-    if (skyTheme !== 'weather') return
+    if (activeTheme !== 'weather') return
     const roll = () => {
       setWeather(WEATHER_CYCLE[Math.floor(Math.random() * WEATHER_CYCLE.length)])
     }
     roll()
     const id = window.setInterval(roll, 22000 + Math.random() * 10000)
     return () => window.clearInterval(id)
-  }, [skyTheme])
+  }, [activeTheme])
 
   return (
     <div
-      className={`cloud-atmosphere cloud-atmosphere--${presence} cloud-atmosphere--${tempo} cloud-atmosphere--${skyTheme} ${
-        skyTheme === 'weather' ? `cloud-atmosphere--wx-${weather}` : ''
+      className={`cloud-atmosphere cloud-atmosphere--${presence} cloud-atmosphere--${tempo} cloud-atmosphere--${activeTheme} ${
+        activeTheme === 'weather' ? `cloud-atmosphere--wx-${weather}` : ''
       }`}
       aria-hidden="true"
     >

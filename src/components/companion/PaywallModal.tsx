@@ -42,7 +42,13 @@ export function useTalkGate(isAdmin: boolean) {
 
   useEffect(() => {
     const access = getTalkAccess(isAdmin)
-    if (access.reason === 'trial-expired') setBlock('trial-expired')
+    if (access.ok) {
+      setBlock(null)
+      return
+    }
+    if (access.reason === 'trial-expired' || access.reason === 'daily-limit') {
+      setBlock(access.reason)
+    }
   }, [isAdmin])
 
   function guardStart() {
@@ -51,6 +57,7 @@ export function useTalkGate(isAdmin: boolean) {
       setBlock(access.reason)
       return false
     }
+    setBlock(null)
     return true
   }
 

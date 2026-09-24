@@ -93,7 +93,7 @@ button {
 }
 
 .kea-mark--header {
-  height: 3.05rem;
+  height: 4.6rem;
 }
 
 .kea-mark--welcome {
@@ -377,7 +377,15 @@ html.kea-motion .admin-tabs a:hover {
 html:has(.settings-screen),
 body:has(.settings-screen),
 #root:has(.settings-screen),
-.kea-page:has(.settings-screen) {
+.kea-page:has(.settings-screen),
+html:has(.conversation-screen),
+body:has(.conversation-screen),
+#root:has(.conversation-screen),
+.kea-page:has(.conversation-screen),
+html:has(.memory-library),
+body:has(.memory-library),
+#root:has(.memory-library),
+.kea-page:has(.memory-library) {
   height: 100%;
   max-height: 100dvh;
   overflow: hidden;
@@ -910,14 +918,15 @@ body:has(.settings-screen),
 }
 
 .settings-screen__header {
-  position: relative;
-  z-index: 4;
+  position: sticky;
+  top: 0;
+  z-index: 25;
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 0.6rem;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .memory-library__nav {
@@ -1074,12 +1083,20 @@ body:has(.settings-screen),
   margin-bottom: 0.15rem;
 }
 
+.settings-wip-note {
+  display: block;
+  margin-top: 0.35rem;
+  color: #b91c1c;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 .settings-choice input {
   margin-top: 0.3rem;
 }
 
 .settings-card {
-  padding: 1rem;
+  padding: 1.25rem 1.45rem 1.45rem;
   border-radius: 1rem;
   background: rgba(255, 248, 240, 0.52);
   border: 1px solid rgba(255, 255, 255, 0.28);
@@ -1093,7 +1110,19 @@ body:has(.settings-screen),
 
 .settings-card h2 {
   font-size: 1rem;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.55rem;
+}
+
+.settings-card > .settings-note {
+  margin: 0 0 0.95rem;
+}
+
+.settings-card .welcome-field {
+  margin-inline: 0.4rem;
+}
+
+.settings-card .welcome-field + .welcome-field {
+  margin-top: 0.7rem;
 }
 
 .settings-save {
@@ -1949,19 +1978,27 @@ body:has(.settings-screen),
 }
 
 .memory-library {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   justify-content: flex-start;
   align-items: stretch;
-  overflow-y: auto;
+  overflow: hidden;
+  height: 100%;
+  max-height: 100dvh;
+  overscroll-behavior: none;
 }
 
 .memory-library__header {
-  position: relative;
-  z-index: 4;
+  position: sticky;
+  top: 0;
+  z-index: 25;
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 .memory-library__content {
@@ -1970,6 +2007,20 @@ body:has(.settings-screen),
   width: min(36rem, 100%);
   margin: 1.25rem auto 0;
   padding-bottom: 1.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.memory-library__content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .memory-library h1 {
@@ -1984,6 +2035,28 @@ body:has(.settings-screen),
   font-weight: 300;
   line-height: 1.5;
 }
+
+.learn-list-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+  margin: 0.55rem 0 0.15rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.learn-list-stats strong {
+  font-weight: 700;
+  color: var(--gold-strong);
+}
+
+.learn-list-stats__sep {
+  color: var(--ink-muted);
+  font-weight: 400;
+}
+
 
 .memory-library__search {
   display: block;
@@ -2158,8 +2231,13 @@ body:has(.settings-screen),
 .conversation-screen {
   justify-content: flex-start;
   align-items: stretch;
-  position: relative;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
   padding: max(0.75rem, env(safe-area-inset-top))
     max(0.85rem, env(safe-area-inset-right))
     0
@@ -2167,8 +2245,9 @@ body:has(.settings-screen),
 }
 
 .conversation-screen__header {
-  position: relative;
-  z-index: 4;
+  position: sticky;
+  top: 0;
+  z-index: 25;
   width: 100%;
   margin: 0;
   display: flex;
@@ -2211,12 +2290,38 @@ body:has(.settings-screen),
   z-index: 5;
 }
 
+.companion-nav .user-menu {
+  flex: 0 0 auto;
+}
+
 .kea-mark--header {
-  height: 3.05rem;
+  height: 4.6rem;
   width: auto;
-  max-width: min(36vw, 8.2rem);
+  max-width: min(46vw, 11rem);
   object-fit: contain;
   object-position: left center;
+}
+
+@media (min-width: 721px) {
+  .companion-nav__mark {
+    order: 20;
+    margin-right: 0;
+    margin-left: auto;
+  }
+
+  .companion-nav__clear {
+    order: 21;
+  }
+
+  .companion-nav .user-menu {
+    order: 22;
+  }
+
+  .kea-mark--header {
+    height: 5.4rem;
+    max-width: min(30vw, 14rem);
+    object-position: right center;
+  }
 }
 
 .companion-nav .user-menu__avatar {
@@ -2377,14 +2482,50 @@ body:has(.settings-screen),
 
 .speak-button {
   appearance: none;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 248, 240, 0.4);
-  color: var(--gold-strong);
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
   cursor: pointer;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  margin: 0.18rem 0 0;
+  filter: drop-shadow(0 1px 2px rgba(255, 255, 255, 0.55));
+}
+
+.speak-button svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  display: block;
+}
+
+.speak-button:focus-visible {
+  outline: 2px solid rgba(29, 78, 216, 0.55);
+  outline-offset: 2px;
+}
+
+.speak-button:active {
+  transform: scale(0.94);
+}
+
+.rising-words__spoken-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.rising-words__spoken-row .rising-words__spoken {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rising-words__spoken-row .speak-button {
+  position: relative;
+  z-index: 2;
 }
 
 .conversation-screen .conversation-screen__header {
@@ -2620,12 +2761,26 @@ body:has(.settings-screen),
   align-items: center;
   column-gap: 0.62rem;
   width: min(26rem, 96vw);
+  pointer-events: none;
+}
+
+.voice-mic-wrap .voice-mic,
+.voice-mic-wrap .voice-mic__prompt--left {
   pointer-events: auto;
-  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.voice-mic__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-self: center;
+  z-index: 2;
+  min-width: 0;
+  max-width: 9.5rem;
 }
 
 .voice-mic-wrap .voice-mic {
-  pointer-events: auto;
   justify-self: center;
   z-index: 2;
 }
@@ -2642,7 +2797,12 @@ body:has(.settings-screen),
   touch-action: manipulation;
 }
 
+.voice-mic__prompt--reserved {
+  visibility: hidden;
+}
+
 .voice-mic__prompt {
+  appearance: none;
   position: relative;
   z-index: 1;
   box-sizing: border-box;
@@ -2650,6 +2810,7 @@ body:has(.settings-screen),
   margin: 0;
   padding: 0.42rem 0.72rem;
   overflow: visible;
+  border: 0;
   border-radius: 999px;
   background: #f4d7c4;
   color: #2a211c;
@@ -2660,6 +2821,7 @@ body:has(.settings-screen),
   text-align: center;
   text-shadow: none;
   box-shadow: 0 2px 8px rgba(40, 24, 20, 0.14);
+  cursor: pointer;
 }
 
 .voice-mic__prompt::after {
@@ -2694,6 +2856,7 @@ body:has(.settings-screen),
 
 .voice-mic-wrap--live .voice-mic__prompt {
   visibility: hidden;
+  pointer-events: none;
 }
 
 .voice-mic__status {
@@ -2719,6 +2882,18 @@ body:has(.settings-screen),
   text-align: center;
   color: #6b2a2a;
   font-size: 0.9rem;
+}
+
+.voice-mic-device {
+  width: 100%;
+  margin: 0.15rem 0 0;
+  padding: 0 0.2rem;
+  text-align: center;
+  color: color-mix(in srgb, var(--ink, #1a2a32) 72%, transparent);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  word-break: break-word;
+  pointer-events: none;
 }
 
 .transcript-review {
@@ -2932,8 +3107,14 @@ body:has(.settings-screen),
 }
 
 /* Settings Voice list: one cream pill, name + italic description on one line. */
+.settings-card .voice-cast__list {
+  margin-top: 0.15rem;
+  padding: 0.1rem 0.4rem 0.2rem;
+}
+
 .settings-card .voice-cast__choice {
   align-items: center;
+  padding: 0.48rem 0.55rem 0.48rem 0.5rem;
 }
 
 .settings-card .voice-cast__pick {
@@ -2943,6 +3124,7 @@ body:has(.settings-screen),
   column-gap: 0.9rem;
   row-gap: 0.15rem;
   min-width: 0;
+  padding: 0.52rem 0.5rem 0.52rem 0.62rem;
 }
 
 .settings-card .voice-cast__name {
@@ -3432,21 +3614,22 @@ body:has(.settings-screen),
   .companion-nav {
     flex-wrap: nowrap;
     justify-content: flex-start;
-    gap: 0.3rem;
+    gap: 0.22rem;
     max-width: none;
   }
 
   .memory-button {
     flex: 0 1 auto;
     min-width: 0;
-    min-height: 2.1rem;
-    padding: 0.3rem 0.45rem;
-    font-size: 0.74rem;
+    min-height: 2rem;
+    padding: 0.28rem 0.38rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
   }
 
   .kea-mark--header {
-    height: 2.85rem;
-    max-width: min(34vw, 7.4rem);
+    height: 5rem;
+    max-width: min(46vw, 10.25rem);
   }
 
   .learn-grown-badge {
@@ -3584,6 +3767,52 @@ body:has(.settings-screen),
   place-items: center;
   padding: 1.2rem;
   background: rgba(24, 16, 28, 0.42);
+}
+
+.kea-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(24, 16, 28, 0.38);
+}
+
+.kea-confirm__card {
+  width: min(16.5rem, calc(100% - 2rem));
+  padding: 0.95rem 0.95rem 0.85rem;
+  border-radius: 1rem;
+  background: rgba(255, 248, 240, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 12px 28px rgba(40, 20, 30, 0.22);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  animation: kea-panel-in 0.32s ease both;
+}
+
+.kea-confirm__title {
+  margin: 0 0 0.85rem;
+  font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink);
+  text-align: center;
+}
+
+.kea-confirm__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.kea-confirm__actions .kea-button {
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
 }
 
 .paywall__card {

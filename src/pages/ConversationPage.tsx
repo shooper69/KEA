@@ -5,6 +5,7 @@ import { PaywallModal, useTalkGate } from '../components/companion/PaywallModal'
 import { RisingWords } from '../components/companion/RisingWords'
 import { VoiceMic } from '../components/companion/VoiceMic'
 import { recordTalkSeconds } from '../architecture/keaBilling'
+import { buildStartSpeechLine } from '../architecture/keaStartSpeech'
 import { useSession } from '../context/SessionContext'
 import { useVoiceConversation } from '../hooks/useVoiceConversation'
 import { useKeaWakeWord } from '../hooks/useKeaWakeWord'
@@ -21,8 +22,10 @@ export function ConversationPage() {
   } = useSession()
   const { block, setBlock, guardStart } = useTalkGate(isAdmin)
 
+  const target = languageCode ?? 'es'
+
   const voice = useVoiceConversation({
-    targetLanguage: languageCode ?? 'es',
+    targetLanguage: target,
     nativeLanguage: nativeLanguage ?? 'en',
     level,
     firstName,
@@ -35,13 +38,20 @@ export function ConversationPage() {
   liveRef.current = live
   const lastTapAt = useRef(0)
 
+  function beginTalking() {
+    if (liveRef.current) return
+    if (!guardStart()) return
+    const line = buildStartSpeechLine({
+      languageCode: target,
+      firstName,
+      messages: voice.messages,
+    })
+    void voice.start(line.spoken, line.english)
+  }
+
   const wake = useKeaWakeWord({
     enabled: !live && !block,
-    onWake: () => {
-      if (liveRef.current) return
-      if (!guardStart()) return
-      void voice.start("Yes I'm here")
-    },
+    onWake: beginTalking,
   })
 
   useEffect(() => {
@@ -64,12 +74,23 @@ export function ConversationPage() {
           messages={voice.messages}
           live={false}
           userName={firstName}
+          targetLanguage={target}
         />
       </div>
       {voice.error ? <p className="voice-error">{voice.error}</p> : null}
       <VoiceMic
         live={live}
         status={voice.status}
+        wakePhrase={wake.listens}
+        micLabel={
+          isAdmin
+            ? live
+              ? voice.micLabel
+              : wake.armed
+                ? wake.wakeMic
+                : ''
+            : ''
+        }
         onToggle={() => {
           const now = Date.now()
           if (now - lastTapAt.current < 450) return
@@ -79,8 +100,7 @@ export function ConversationPage() {
             voice.stop()
             return
           }
-          if (!guardStart()) return
-          void voice.start()
+          beginTalking()
         }}
       />
       {block ? (

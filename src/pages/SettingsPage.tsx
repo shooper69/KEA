@@ -22,6 +22,10 @@ import {
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
+import {
+  listAudioInputs,
+  savePreferredMicId,
+} from '../architecture/keaMicrophone'
 import type { ChatKeep, SkyTheme } from '../types'
 
 function PlayIcon() {
@@ -112,6 +116,40 @@ export function SettingsPage() {
   const [userVoiceId, setUserVoiceId] = useState(
     () => readUserVoiceId() ?? catalog.defaultId,
   )
+  const [micDevices, setMicDevices] = useState<
+    Array<{ deviceId: string; label: string }>
+  >([])
+  const [preferredMicId, setPreferredMicId] = useState(() => {
+    try {
+      return localStorage.getItem('kea-preferred-mic-id') || ''
+    } catch {
+      return ''
+    }
+  })
+
+  useEffect(() => {
+    if (tab !== 'listening') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        stream.getTracks().forEach((track) => track.stop())
+        const inputs = await listAudioInputs()
+        if (cancelled) return
+        setMicDevices(
+          inputs.map((item) => ({
+            deviceId: item.deviceId,
+            label: item.label || `Microphone ${item.deviceId.slice(0, 6)}`,
+          })),
+        )
+      } catch {
+        if (!cancelled) setMicDevices([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
 
   async function onPhoto(file: File | undefined) {
     if (!file) return
@@ -162,9 +200,12 @@ export function SettingsPage() {
         </div>
         {tab === 'choices' ? (
           <>
+        {isAdmin ? (
         <section className="settings-card">
           <h2>Background theme</h2>
-          <p className="settings-note">How the sky behind Kea should feel.</p>
+          <p className="settings-note">
+            Admin only. Users always see Kea in the clouds.
+          </p>
           <label className="settings-choice">
             <input
               type="radio"
@@ -187,9 +228,13 @@ export function SettingsPage() {
             <span>
               <strong>Today the weather will be …</strong>
               Sun bursting through, then rain, then a rainbow, at random.
+              <span className="settings-wip-note">
+                Work in progress.
+              </span>
             </span>
           </label>
         </section>
+        ) : null}
         <section className="settings-card">
           <h2>Languages</h2>
           <p className="settings-note">
@@ -292,6 +337,29 @@ export function SettingsPage() {
         {tab === 'listening' ? (
         <section className="settings-card settings-card--listening">
           <h2>Listening</h2>
+          <label className="welcome-field">
+            <span>Microphone for Kea</span>
+            <select
+              value={preferredMicId}
+              onChange={(event) => {
+                const next = event.target.value
+                setPreferredMicId(next)
+                savePreferredMicId(next)
+              }}
+            >
+              <option value="">Automatic (prefer real mic)</option>
+              {micDevices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="settings-note">
+            On PC, pick your Samson Meteor — not Voicemod or EaseUS. If Chrome
+            still uses the wrong one, click the lock icon by the URL → Microphone
+            → choose the same device.
+          </p>
           <label className="welcome-field">
             <span>Turn the microphone off after</span>
             <select

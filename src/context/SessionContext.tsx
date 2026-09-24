@@ -18,7 +18,6 @@ import {
 import { isLanguageCode } from '../config/languages'
 import { DEFAULT_VOICE_CHARACTER } from '../config/voices'
 import { PLACEHOLDER_VOCABULARY } from '../data/placeholders'
-import { requestClearTalkTranscript } from '../architecture/keaTalkMemory'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
   fetchCloudProfile,
@@ -336,8 +335,52 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     persistProfile(empty)
     setProfileState(empty)
     setVocabulary([])
-    requestClearTalkTranscript()
+    // Keep talk transcript so the chat is still there after they sign back in.
   }
+
+  useEffect(() => {
+    if (!userId) return
+    const IDLE_MS = 5 * 60 * 1000
+    let timer = window.setTimeout(() => {
+      void signOut()
+    }, IDLE_MS)
+
+    const bump = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void signOut()
+      }, IDLE_MS)
+    }
+
+    const onActivity = () => bump()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') bump()
+    }
+    const events: Array<keyof WindowEventMap> = [
+      'pointerdown',
+      'keydown',
+      'touchstart',
+      'mousemove',
+      'scroll',
+      'wheel',
+    ]
+    for (const name of events) {
+      window.addEventListener(name, onActivity, { passive: true })
+    }
+    window.addEventListener('kea-user-activity', onActivity)
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      window.clearTimeout(timer)
+      for (const name of events) {
+        window.removeEventListener(name, onActivity)
+      }
+      window.removeEventListener('kea-user-activity', onActivity)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+    // signOut is stable enough for idle logout; re-bind when user signs in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
   const emailIsAdmin = isAdminEmail(profile.email)
   const cloudAuth = isKeaCloudConfigured()
