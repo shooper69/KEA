@@ -43,6 +43,16 @@
   to = "/.netlify/functions/billing/:splat"
   status = 200
 
+[[redirects]]
+  from = "/api/website-tracker/ingest"
+  to = "/.netlify/functions/website-tracker-ingest"
+  status = 200
+
+[[redirects]]
+  from = "/api/website-tracker/admin"
+  to = "/.netlify/functions/website-tracker-admin"
+  status = 200
+
 # Existing files in dist/ (favicons, assets) are served first.
 # This SPA fallback must not use force=true or it would hide them.
 [[redirects]]

@@ -13,6 +13,10 @@ import {
 } from '../../services/keaProfile'
 import { useSession } from '../../context/SessionContext'
 import type { LanguageCode } from '../../types'
+import {
+  identify,
+  trackRegisterClick,
+} from '../../architecture/websiteTracker/client'
 
 type AuthView = 'register' | 'login' | 'forgot' | 'check-email' | 'reset'
 
@@ -90,6 +94,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     }
     setBusy(true)
     setMessage('')
+    trackRegisterClick({ label: 'Create account' })
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -107,6 +112,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
       setMessage(authMessage(error, 'Could not create your account.'))
       return
     }
+    identify({ first_name: name.trim(), email: email.trim() })
     setProfile({
       firstName: name.trim(),
       email: email.trim(),
@@ -323,6 +329,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             <Button
               type="submit"
               className="auth-login-submit"
+              data-wt="register"
               disabled={busy || !registerReady}
             >
               Create account

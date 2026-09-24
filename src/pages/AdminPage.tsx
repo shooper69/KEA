@@ -45,6 +45,7 @@ export function AdminPage() {
           <NavLink to="/admin/voices">Voice Tester</NavLink>
           <NavLink to="/admin/tiers">Tiers</NavLink>
           <NavLink to="/admin/costs">Cost analysis</NavLink>
+          <NavLink to="/admin/website-tracker">Website Tracker</NavLink>
         </nav>
         <Outlet />
       </div>

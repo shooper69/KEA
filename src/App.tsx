@@ -6,6 +6,7 @@ import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminVoiceManagementPage } from './pages/AdminVoiceManagementPage'
 import { AdminVoiceTesterPage } from './pages/AdminVoiceTesterPage'
+import { AdminWebsiteTrackerPage } from './pages/AdminWebsiteTrackerPage'
 import { AboutKeaPage } from './pages/AboutKeaPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
@@ -16,6 +17,7 @@ import { HomePage } from './pages/HomePage'
 import type { ReactNode } from 'react'
 import { KeaPageMotion } from './components/companion/KeaPageMotion'
 import { KeaSeo } from './components/companion/KeaSeo'
+import { WebsiteTrackerProvider } from './components/websiteTracker/WebsiteTrackerProvider'
 
 function RequireOnboard({ children }: { children: ReactNode }) {
   const { isOnboarded, authReady, cloudAuth, isSignedIn } = useSession()
@@ -44,6 +46,7 @@ export default function App() {
   return (
     <SessionProvider>
       <BrowserRouter>
+        <WebsiteTrackerProvider />
         <KeaSeo />
         <KeaPageMotion>
         <Routes>
@@ -117,6 +120,7 @@ export default function App() {
             />
             <Route path="tiers" element={<AdminPlansPage />} />
             <Route path="costs" element={<AdminCostAnalysisPage />} />
+            <Route path="website-tracker" element={<AdminWebsiteTrackerPage />} />
           </Route>
         </Routes>
         </KeaPageMotion>
