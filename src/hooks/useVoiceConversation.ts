@@ -37,14 +37,6 @@ import type {
   VoicePresenceState,
 } from '../types'
 
-const NATIVE_NAMES: Record<NativeLanguageCode, string> = {
-  en: 'English',
-  es: 'Spanish',
-  fr: 'French',
-  de: 'German',
-  ru: 'Russian',
-}
-
 const CHARACTER_KEY = 'kea-voice-character'
 const RESTART_LISTEN_MS = 80
 const MIN_SPEECH_MS = 480
@@ -542,7 +534,7 @@ export function useVoiceConversation({
       try {
         logAi('request', userText)
         const raw = await askKea({
-          nativeLanguage: NATIVE_NAMES[nativeLanguage],
+          nativeLanguage: getLanguage(nativeLanguage).name,
           targetLanguage: getLanguage(targetLanguage).name,
           level,
           history: historyRef.current,
