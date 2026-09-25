@@ -67,9 +67,57 @@ const pages: Array<[string, KeaPageSeo]> = [
     '/settings',
     {
       title: 'Settings · Kea',
-      description: 'Your Kea profile, voice, languages, and subscription.',
+      description: 'Your Kea profile, voice, and languages.',
       path: '/settings',
       index: false,
+    },
+  ],
+  [
+    '/subscription',
+    {
+      title: 'Subscription · Kea',
+      description: 'Choose a Kea plan and manage your subscription.',
+      path: '/subscription',
+      index: false,
+    },
+  ],
+  [
+    '/support',
+    {
+      title: 'Customer Support · Kea',
+      description:
+        'Get help with Kea. Contact the team at team@kea.chat for account, subscription, or product questions.',
+      path: '/support',
+      index: true,
+    },
+  ],
+  [
+    '/privacy-policy',
+    {
+      title: 'Privacy Policy · Kea',
+      description:
+        'How Kea collects, uses, and protects your information at kea.chat.',
+      path: '/privacy-policy',
+      index: true,
+    },
+  ],
+  [
+    '/terms-of-service',
+    {
+      title: 'Terms of Service · Kea',
+      description: 'Terms that govern your use of Kea at kea.chat.',
+      path: '/terms-of-service',
+      index: true,
+    },
+  ],
+  [
+    '/cookie-policy',
+    {
+      title: 'Cookie Policy · Kea',
+      description:
+        'How Kea uses necessary and analytics cookies, and how to manage your choice.',
+      path: '/cookie-policy',
+      index: true,
     },
   ],
   [

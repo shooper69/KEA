@@ -3,6 +3,7 @@ import {
   DEFAULT_OFFERS,
   OFFER_APPEAR_PAGES,
   clearHomeOfferDismiss,
+  clearSubLeaveOfferDismiss,
   getOffer,
   getPopup1AppearOn,
   loadOffers,
@@ -15,6 +16,7 @@ import {
   type OfferAppearPage,
 } from '../data/keaOffers'
 import { OfferPopup } from '../components/companion/OfferPopup'
+import { SubLeaveOfferPopup } from '../components/companion/SubLeaveOfferPopup'
 
 const LABELS: Record<KeaOfferId, { heading: string; note: string }> = {
   home: {
@@ -24,6 +26,10 @@ const LABELS: Record<KeaOfferId, { heading: string; note: string }> = {
   limit: {
     heading: 'Usage & trial offer',
     note: 'Shows when today’s talk allowance is used up, and when the seven-day trial ends.',
+  },
+  subLeave: {
+    heading: 'Subscriptions leave offer',
+    note: 'Shows when someone leaves Subscriptions without signing up. Kea speaks the body text. Same Superlearner code by default — different urgency wording.',
   },
 }
 
@@ -70,9 +76,8 @@ export function AdminOffersPage() {
         <h2>Offers</h2>
         <p className="settings-note">
           Special offer pop-ups. Turn each one on or off, edit the wording, and
-          optionally upload a sky background. On phones the card sits at the
-          bottom; on tablets and PCs it sits top-right so the centre of the
-          screen stays usable.
+          optionally upload a background. The subscriptions leave offer uses a
+          built-in design unless you upload a photo.
         </p>
       </section>
 
@@ -126,6 +131,19 @@ export function AdminOffersPage() {
                 </button>
               </>
             ) : null}
+            {offer.id === 'subLeave' ? (
+              <button
+                type="button"
+                className="kea-button kea-button--ghost"
+                onClick={() => {
+                  clearSubLeaveOfferDismiss()
+                  saveOffers(offers)
+                  setSaved('Subscriptions leave offer can show again this session.')
+                }}
+              >
+                Show subscriptions leave offer again now
+              </button>
+            ) : null}
             <label className="welcome-field">
               <span>Badge</span>
               <input
@@ -147,7 +165,7 @@ export function AdminOffersPage() {
               />
             </label>
             <label className="welcome-field">
-              <span>Body</span>
+              <span>{offer.id === 'subLeave' ? 'Body (spoken + on screen)' : 'Body'}</span>
               <textarea
                 rows={4}
                 value={offer.body}
@@ -156,6 +174,18 @@ export function AdminOffersPage() {
                 }
               />
             </label>
+            {offer.id === 'subLeave' ? (
+              <label className="welcome-field">
+                <span>Discount code</span>
+                <input
+                  type="text"
+                  value={offer.discountCode ?? ''}
+                  onChange={(event) =>
+                    patch(offer.id, { discountCode: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
             <label className="welcome-field">
               <span>Button label</span>
               <input
@@ -166,27 +196,37 @@ export function AdminOffersPage() {
                 }
               />
             </label>
-            <label className="welcome-field">
-              <span>Button path</span>
-              <input
-                type="text"
-                value={offer.ctaPath}
-                onChange={(event) =>
-                  patch(offer.id, { ctaPath: event.target.value })
-                }
-              />
-            </label>
+            {offer.id !== 'subLeave' ? (
+              <label className="welcome-field">
+                <span>Button path</span>
+                <input
+                  type="text"
+                  value={offer.ctaPath}
+                  onChange={(event) =>
+                    patch(offer.id, { ctaPath: event.target.value })
+                  }
+                />
+              </label>
+            ) : null}
             <div className="welcome-field">
-              <span>Background image</span>
+              <span>Background</span>
               <p className="settings-note">
-                Default is a sunset sky with Kea flying. Upload your own photo
-                to replace it for this offer.
+                {offer.id === 'subLeave'
+                  ? 'Default is a bold designed panel. Upload a photo to replace it.'
+                  : 'Default is a sunset sky with Kea flying. Upload your own photo to replace it for this offer.'}
               </p>
-              <div
-                className="offer-admin__preview"
-                style={{ backgroundImage: `url(${previewSrc})` }}
-                aria-hidden="true"
-              />
+              {previewSrc ? (
+                <div
+                  className="offer-admin__preview"
+                  style={{ backgroundImage: `url(${previewSrc})` }}
+                  aria-hidden="true"
+                />
+              ) : offer.id === 'subLeave' ? (
+                <div
+                  className="offer-admin__preview offer-admin__preview--sub-leave"
+                  aria-hidden="true"
+                />
+              ) : null}
               <input
                 ref={(node) => {
                   fileRefs.current[offer.id] = node
@@ -212,7 +252,7 @@ export function AdminOffersPage() {
                     className="kea-button kea-button--ghost"
                     onClick={() => patch(offer.id, { backgroundImage: '' })}
                   >
-                    Use default sky
+                    {offer.id === 'subLeave' ? 'Use designed panel' : 'Use default sky'}
                   </button>
                 ) : null}
               </div>
@@ -250,10 +290,16 @@ export function AdminOffersPage() {
         </button>
       </section>
 
-      {previewOffer ? (
+      {previewOffer && previewOffer.id === 'subLeave' ? (
+        <SubLeaveOfferPopup
+          offer={previewOffer}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
+      {previewOffer && previewOffer.id !== 'subLeave' ? (
         <OfferPopup
           offer={previewOffer}
-          tone={previewOffer.id}
+          tone={previewOffer.id === 'limit' ? 'limit' : 'home'}
           onClose={() => setPreview(null)}
         />
       ) : null}

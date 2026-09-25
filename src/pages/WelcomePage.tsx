@@ -7,6 +7,8 @@ import { LeaveAccountPopup } from '../components/companion/LeaveAccountPopup'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
 import { OfferPopup } from '../components/companion/OfferPopup'
 import { PasswordField } from '../components/companion/PasswordField'
+import { StoreBadges } from '../components/companion/StoreBadges'
+import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
 import { getMarketingIntroVoice } from '../architecture/voiceCatalog'
@@ -89,6 +91,7 @@ export function WelcomePage() {
   const [langSheet, setLangSheet] = useState<null | 'spoken' | 'learning'>(null)
   const introRunId = useRef(0)
   const langMenuRef = useRef<HTMLDivElement>(null)
+  const introScrollRef = useRef<HTMLDivElement>(null)
   const leaveArmedRef = useRef(false)
   const leaveAllowRef = useRef(false)
   const leaveShownRef = useRef(leavePromptAlreadyShown())
@@ -340,6 +343,16 @@ export function WelcomePage() {
     ? visibleCopy.split(/\n\n+/).filter(Boolean)
     : []
 
+  useEffect(() => {
+    if (!introBusy && visibleParagraphs.length === 0) return
+    const scroller = introScrollRef.current
+    if (!scroller) return
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [visibleCopy, introBusy, visibleParagraphs.length])
+
   const localProfileForm = (
     <div className="auth-profile-form">
       <h2 className="welcome-screen__onboard-title">
@@ -421,89 +434,104 @@ export function WelcomePage() {
       className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}`}
     >
       <CloudAtmosphere presence="idle" tempo="sunrise" />
-      <div className="welcome-screen__content">
+      <div
+        className={`welcome-screen__shell${
+          introBusy || visibleParagraphs.length > 0
+            ? ' welcome-screen__shell--intro'
+            : ''
+        }`}
+      >
         <div className="welcome-screen__brand">
           <img className="welcome-screen__logo" src="/kea-05.png" alt="Kea" />
         </div>
-        <h1>{welcomeTitle}</h1>
+        <div className="welcome-screen__scroll" ref={introScrollRef}>
+          <h1>{welcomeTitle}</h1>
 
-        {!authOpen ? (
-        <div className="welcome-lang-picker" ref={langMenuRef}>
-          <button
-            type="button"
-            className="welcome-lang-picker__trigger"
-            aria-expanded={langMenuOpen}
-            aria-haspopup="listbox"
-            disabled={introBusy}
-            onClick={() => setLangMenuOpen((open) => !open)}
-          >
-            <span>Choose your native language.</span>
-            <span
-              className={`welcome-lang-picker__arrow${langMenuOpen ? ' is-open' : ''}`}
-              aria-hidden="true"
+          {!authOpen ? (
+            <div className="welcome-lang-picker" ref={langMenuRef}>
+              <button
+                type="button"
+                className="welcome-lang-picker__trigger"
+                aria-expanded={langMenuOpen}
+                aria-haspopup="listbox"
+                disabled={introBusy}
+                onClick={() => setLangMenuOpen((open) => !open)}
+              >
+                <span>Choose language for Kea to say hi</span>
+                <span
+                  className={`welcome-lang-picker__arrow${langMenuOpen ? ' is-open' : ''}`}
+                  aria-hidden="true"
+                >
+                  ▾
+                </span>
+              </button>
+              {langMenuOpen ? (
+                <ul className="welcome-lang-picker__menu" role="listbox">
+                  {SUPPORTED_LANGUAGES.map((language) => (
+                    <li key={language.code}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={prospectLang === language.code}
+                        className={
+                          prospectLang === language.code
+                            ? 'is-selected'
+                            : undefined
+                        }
+                        onClick={() => void playWelcomeIntro(language.code)}
+                      >
+                        {language.name} · {language.nativeName}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!authOpen ? (
+            <div
+              className="welcome-screen__spoken"
+              aria-live="polite"
+              aria-busy={introBusy}
             >
-              ▾
-            </span>
-          </button>
-          {langMenuOpen ? (
-            <ul className="welcome-lang-picker__menu" role="listbox">
-              {SUPPORTED_LANGUAGES.map((language) => (
-                <li key={language.code}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={prospectLang === language.code}
-                    className={
-                      prospectLang === language.code ? 'is-selected' : undefined
-                    }
-                    onClick={() => void playWelcomeIntro(language.code)}
-                  >
-                    {language.name} · {language.nativeName}
-                  </button>
-                </li>
+              {introBusy && visibleParagraphs.length === 0 ? (
+                <p className="welcome-screen__lede welcome-screen__lede--hint">
+                  Kea is getting ready…
+                </p>
+              ) : null}
+              {visibleParagraphs.map((paragraph, index) => (
+                <p
+                  key={`${index}-${paragraph.slice(0, 12)}`}
+                  className="welcome-screen__speech"
+                >
+                  {paragraph}
+                </p>
               ))}
-            </ul>
+            </div>
+          ) : null}
+
+          {!authReady ? (
+            <p className="settings-note">One moment…</p>
+          ) : !authOpen ? (
+            <div className="welcome-screen__actions welcome-screen__actions--home">
+              <Button type="button" onClick={openRegister}>
+                Create free account
+              </Button>
+              <Button type="button" variant="ghost" onClick={openLogin}>
+                Sign in
+              </Button>
+            </div>
           ) : null}
         </div>
-        ) : null}
-
-        {!authOpen ? (
-        <div
-          className="welcome-screen__spoken"
-          aria-live="polite"
-          aria-busy={introBusy}
-        >
-          {visibleParagraphs.length === 0 && !introBusy ? (
-            <p className="welcome-screen__lede welcome-screen__lede--hint">
-              Pick a language and Kea will introduce herself.
-            </p>
-          ) : null}
-          {introBusy && visibleParagraphs.length === 0 ? (
-            <p className="welcome-screen__lede welcome-screen__lede--hint">
-              Kea is getting ready…
-            </p>
-          ) : null}
-          {visibleParagraphs.map((paragraph, index) => (
-            <p key={`${index}-${paragraph.slice(0, 12)}`} className="welcome-screen__lede">
-              {paragraph}
-            </p>
-          ))}
-        </div>
-        ) : null}
-
-        {!authReady ? (
-          <p className="settings-note">One moment…</p>
-        ) : !authOpen ? (
-          <div className="welcome-screen__actions welcome-screen__actions--home">
-            <Button type="button" onClick={openRegister}>
-              Create account
-            </Button>
-            <Button type="button" variant="ghost" onClick={openLogin}>
-              Sign in
-            </Button>
-          </div>
-        ) : null}
       </div>
+
+      {!authOpen ? (
+        <footer className="welcome-screen__store-footer">
+          <StoreBadges />
+          <SiteFooter tone="marketing" />
+        </footer>
+      ) : null}
 
       {authOpen ? (
         <div

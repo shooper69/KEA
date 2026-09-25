@@ -2,8 +2,10 @@
 
 const STORAGE_KEY = 'kea-offers-v1'
 const HOME_DISMISS_KEY = 'kea-offer-home-dismissed'
+const SUB_LEAVE_DISMISS_KEY = 'kea-offer-subleave-dismissed'
+const SUB_LEAVE_PENDING_KEY = 'kea-offer-subleave-pending'
 
-export type KeaOfferId = 'home' | 'limit'
+export type KeaOfferId = 'home' | 'limit' | 'subLeave'
 
 /** Where Pop up 1 (id `home`) may appear. */
 export type OfferAppearPage = 'marketing' | 'home' | 'subscriptions'
@@ -32,14 +34,16 @@ export interface KeaOffer {
   ctaPath: string
   /**
    * Background image URL or data URL.
-   * Empty string means the built-in sunset/Kea default.
+   * Empty string means the built-in default (sky image or CSS design).
    */
   backgroundImage: string
   /**
    * Pop up 1 only: which screen shows this offer.
-   * Ignored for the usage/trial (limit) offer.
+   * Ignored for limit / subLeave offers.
    */
   appearOn?: OfferAppearPage
+  /** Optional discount code to highlight / apply (e.g. Superlearner). */
+  discountCode?: string
 }
 
 export const DEFAULT_OFFERS: KeaOffer[] = [
@@ -50,7 +54,7 @@ export const DEFAULT_OFFERS: KeaOffer[] = [
     title: 'Talk more with Kea',
     body: 'Welcome home. Take half off your first month and keep the conversation going.',
     ctaLabel: 'Grab Special offer',
-    ctaPath: '/settings?tab=subscription',
+    ctaPath: '/subscription',
     backgroundImage: '',
     appearOn: 'marketing',
   },
@@ -61,8 +65,19 @@ export const DEFAULT_OFFERS: KeaOffer[] = [
     title: 'Your free time is up',
     body: 'Today’s allowance or your seven-day trial has ended. Choose a plan and Kea will be ready whenever you are.',
     ctaLabel: 'Go to Subscriptions',
-    ctaPath: '/settings?tab=subscription',
+    ctaPath: '/subscription',
     backgroundImage: '',
+  },
+  {
+    id: 'subLeave',
+    enabled: true,
+    badge: '60% off · Superlearner',
+    title: 'Grab this now',
+    body: "This special offer won't be here when you come back. Grab Superlearner now for 60% off — once you leave, it's gone.",
+    ctaLabel: 'Grab Superlearner now',
+    ctaPath: '/subscription',
+    backgroundImage: '',
+    discountCode: 'Superlearner',
   },
 ]
 
@@ -70,11 +85,15 @@ function isAppearPage(value: unknown): value is OfferAppearPage {
   return value === 'marketing' || value === 'home' || value === 'subscriptions'
 }
 
+function isOfferId(value: unknown): value is KeaOfferId {
+  return value === 'home' || value === 'limit' || value === 'subLeave'
+}
+
 function isOffer(value: unknown): value is KeaOffer {
   if (!value || typeof value !== 'object') return false
   const item = value as KeaOffer
   return (
-    (item.id === 'home' || item.id === 'limit') &&
+    isOfferId(item.id) &&
     typeof item.enabled === 'boolean' &&
     typeof item.badge === 'string' &&
     typeof item.title === 'string' &&
@@ -86,7 +105,9 @@ function isOffer(value: unknown): value is KeaOffer {
 
 export function offerBackgroundSrc(offer: KeaOffer): string {
   const custom = offer.backgroundImage?.trim()
-  return custom || DEFAULT_OFFER_BACKGROUND
+  if (custom) return custom
+  if (offer.id === 'subLeave') return ''
+  return DEFAULT_OFFER_BACKGROUND
 }
 
 export function getPopup1AppearOn(offer: KeaOffer): OfferAppearPage {
@@ -135,6 +156,10 @@ export function loadOffers(): KeaOffer[] {
               ? saved.appearOn
               : base.appearOn
             : undefined,
+        discountCode:
+          typeof saved.discountCode === 'string' && saved.discountCode.trim()
+            ? saved.discountCode.trim()
+            : base.discountCode,
       }
     })
   } catch {
@@ -144,8 +169,8 @@ export function loadOffers(): KeaOffer[] {
 
 export function saveOffers(offers: KeaOffer[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(offers))
-  // So turning an offer back on (or saving) shows it again this session.
   clearHomeOfferDismiss()
+  clearSubLeaveOfferDismiss()
   window.dispatchEvent(new Event('kea-offers-changed'))
 }
 
@@ -167,6 +192,8 @@ export function updateOffer(id: KeaOfferId, patch: Partial<KeaOffer>) {
 export function resetOffers() {
   localStorage.removeItem(STORAGE_KEY)
   clearHomeOfferDismiss()
+  clearSubLeaveOfferDismiss()
+  clearSubLeaveOfferPending()
   window.dispatchEvent(new Event('kea-offers-changed'))
 }
 
@@ -189,6 +216,63 @@ export function clearHomeOfferDismiss() {
 export function dismissHomeOffer() {
   try {
     sessionStorage.setItem(HOME_DISMISS_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+export function isSubLeaveOfferDismissed() {
+  try {
+    return sessionStorage.getItem(SUB_LEAVE_DISMISS_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function clearSubLeaveOfferDismiss() {
+  try {
+    sessionStorage.removeItem(SUB_LEAVE_DISMISS_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+export function dismissSubLeaveOffer() {
+  try {
+    sessionStorage.setItem(SUB_LEAVE_DISMISS_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+export function shouldShowSubLeaveOffer(isPaidSubscriber: boolean): boolean {
+  if (isPaidSubscriber) return false
+  const offer = getOffer('subLeave')
+  if (!offer.enabled || isSubLeaveOfferDismissed()) return false
+  return true
+}
+
+export function markSubLeaveOfferPending() {
+  try {
+    sessionStorage.setItem(SUB_LEAVE_PENDING_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+export function consumeSubLeaveOfferPending(): boolean {
+  try {
+    if (sessionStorage.getItem(SUB_LEAVE_PENDING_KEY) !== '1') return false
+    sessionStorage.removeItem(SUB_LEAVE_PENDING_KEY)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function clearSubLeaveOfferPending() {
+  try {
+    sessionStorage.removeItem(SUB_LEAVE_PENDING_KEY)
   } catch {
     // ignore
   }

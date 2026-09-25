@@ -3,10 +3,15 @@
  * Sends consented events to /api/website-tracker/ingest — never talks to Supabase directly.
  */
 
+import {
+  COOKIE_CONSENT_EVENT,
+  COOKIE_CONSENT_KEY,
+  hasAnalyticsConsent,
+} from '../keaCookieConsent'
+
 const ANON_KEY = 'wt_anon_id'
 const SESSION_KEY = 'wt_session_id'
 const SESSION_STARTED_KEY = 'wt_session_started'
-const CONSENT_KEY = 'kea_analytics_consent'
 const LAST_PATH_KEY = 'wt_last_path'
 const PAGE_ENTERED_KEY = 'wt_page_entered_ms'
 
@@ -55,17 +60,7 @@ function uuid(): string {
   })
 }
 
-/** Analytics on by default; set localStorage kea_analytics_consent=0 to opt out. */
-export function hasAnalyticsConsent(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    const raw = localStorage.getItem(CONSENT_KEY)
-    if (raw === '0' || raw === 'false') return false
-    return true
-  } catch {
-    return true
-  }
-}
+export { hasAnalyticsConsent }
 
 function getAnonId(): string {
   let id = localStorage.getItem(ANON_KEY)
@@ -256,9 +251,17 @@ function bindListeners() {
   })
   document.addEventListener('click', onClickCapture, true)
   window.addEventListener('storage', (e) => {
-    if (e.key === CONSENT_KEY) {
+    if (e.key === COOKIE_CONSENT_KEY) {
       if (hasAnalyticsConsent()) startTracker()
       else stopTracker()
+    }
+  })
+  window.addEventListener(COOKIE_CONSENT_EVENT, () => {
+    if (hasAnalyticsConsent()) {
+      started = false
+      startTracker()
+    } else {
+      stopTracker()
     }
   })
 }

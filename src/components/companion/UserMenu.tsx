@@ -73,6 +73,16 @@ export function UserMenu({ micLabel = '' }: UserMenuProps) {
           <button type="button" role="menuitem" onClick={goSettings}>
             Settings
           </button>
+          <Link
+            role="menuitem"
+            to="/subscription"
+            onClick={() => setOpen(false)}
+          >
+            Subscription
+          </Link>
+          <Link role="menuitem" to="/support" onClick={() => setOpen(false)}>
+            Customer Support
+          </Link>
           <Link role="menuitem" to="/about" onClick={() => setOpen(false)}>
             About
           </Link>

@@ -16,6 +16,8 @@ import {
   formatDailyMinutes,
   formatUsd,
   loadPlanCatalog,
+  subscribePlanCatalog,
+  type KeaPlanCatalog,
   type PlanId,
 } from '../../architecture/keaPlans'
 import { confirmCheckoutSession, startKeaCheckout } from '../../services/keaPay'
@@ -29,19 +31,31 @@ export function SubscriptionPanel({
   isAdmin: boolean
   onViewUsage: () => void
 }) {
-  const catalog = loadPlanCatalog()
+  const [catalog, setCatalog] = useState<KeaPlanCatalog>(() => loadPlanCatalog())
   const [access, setAccess] = useState(() => getTalkAccess(isAdmin))
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState<PlanId | null>(null)
-  const [discountDraft, setDiscountDraft] = useState('')
+  const [discountDraft, setDiscountDraft] = useState(
+    () => getAppliedDiscount()?.code ?? '',
+  )
   const [applied, setApplied] = useState<AppliedDiscount | null>(() =>
     getAppliedDiscount(),
   )
 
   useEffect(() => {
+    function refreshCatalog() {
+      setCatalog(loadPlanCatalog())
+    }
+    refreshCatalog()
+    return subscribePlanCatalog(refreshCatalog)
+  }, [])
+
+  useEffect(() => {
     refreshBillingStatus()
     setAccess(getTalkAccess(isAdmin))
-    setApplied(getAppliedDiscount())
+    const current = getAppliedDiscount()
+    setApplied(current)
+    if (current?.code) setDiscountDraft(current.code)
     const params = new URLSearchParams(window.location.search)
     const sessionId = params.get('session_id')
     if (params.get('checkout') === 'success' && sessionId) {
@@ -50,6 +64,7 @@ export function SubscriptionPanel({
           if (state) {
             clearAppliedDiscount()
             setApplied(null)
+            setDiscountDraft('')
             setMessage('You are subscribed. Thank you.')
             setAccess(getTalkAccess(isAdmin))
           }
@@ -107,34 +122,38 @@ export function SubscriptionPanel({
   }
 
   return (
-    <section className="settings-card">
-      <h2>Subscriptions</h2>
-      <p className="settings-note">{catalog.trialBlurb}</p>
-      <p className="settings-note">
+    <section className="settings-card settings-card--plans">
+      <p className="settings-note settings-note--lead">{catalog.trialBlurb}</p>
+      <p className="settings-note settings-note--status">
         {access.status === 'active' && access.planId
           ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatDailyMinutes(access.dailyMinutesAllowed)}.`
           : access.status === 'expired'
             ? 'Your trial has expired. Choose a plan to keep talking.'
-            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`}
+            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`}{' '}
+        <button type="button" className="settings-usage-link" onClick={onViewUsage}>
+          Click here to view Usage
+        </button>
       </p>
-      <button type="button" className="settings-usage-link" onClick={onViewUsage}>
-        Click here to view Usage
-      </button>
-      {isAdmin ? (
-        <p className="settings-note">
-          Admin accounts can talk without a paid plan, for testing.
-        </p>
-      ) : null}
 
       <div className="discount-code">
-        <label className="welcome-field">
-          <span>Discount code</span>
+        <div className="discount-code__row">
+          <span className="discount-code__label">Discount code</span>
           <input
             type="text"
+            className="discount-code__input"
             value={discountDraft}
             placeholder="Enter a code"
             autoComplete="off"
-            onChange={(event) => setDiscountDraft(event.target.value)}
+            aria-label="Discount code"
+            onChange={(event) => {
+              const next = event.target.value
+              setDiscountDraft(next)
+              if (next.trim()) return
+              if (!applied) return
+              clearAppliedDiscount()
+              setApplied(null)
+              setMessage('')
+            }}
             onKeyDown={(event) => {
               if (event.key !== 'Enter') return
               event.preventDefault()
@@ -155,11 +174,9 @@ export function SubscriptionPanel({
               }
             }}
           />
-        </label>
-        <div className="discount-code__actions">
           <button
             type="button"
-            className="kea-button"
+            className="kea-button discount-code__apply"
             onClick={() => {
               try {
                 const next = applyDiscountCode(discountDraft)
@@ -183,7 +200,7 @@ export function SubscriptionPanel({
           {applied ? (
             <button
               type="button"
-              className="kea-button kea-button--ghost"
+              className="discount-code__clear"
               onClick={() => {
                 clearAppliedDiscount()
                 setApplied(null)
@@ -196,7 +213,7 @@ export function SubscriptionPanel({
           ) : null}
         </div>
         {applied ? (
-          <p className="settings-note">
+          <p className="discount-code__active">
             Active: <strong>{applied.code}</strong> · {applied.percentOff}% off
           </p>
         ) : null}
@@ -224,13 +241,13 @@ export function SubscriptionPanel({
                   </span>
                 ) : null}
               </p>
-              <p className="settings-note">{plan.tagline}</p>
-              <p className="settings-note">
+              <p className="plan-card__tagline">{plan.tagline}</p>
+              <p className="plan-card__minutes">
                 {formatDailyMinutes(plan.dailyMinutes)}
               </p>
               <ul>
-                {plan.bullets.map((line) => (
-                  <li key={line}>{line}</li>
+                {plan.bullets.map((line, index) => (
+                  <li key={`${plan.id}-${index}`}>{line}</li>
                 ))}
               </ul>
               <button

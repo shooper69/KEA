@@ -103,10 +103,10 @@ export async function handleKeaBilling(
     }
     const success =
       payload.successUrl?.trim() ||
-      'http://localhost:5173/settings?tab=subscription&checkout=success'
+      'http://localhost:5173/subscription?checkout=success'
     const cancel =
       payload.cancelUrl?.trim() ||
-      'http://localhost:5173/settings?tab=subscription&checkout=cancel'
+      'http://localhost:5173/subscription?checkout=cancel'
     const joiner = success.includes('?') ? '&' : '?'
     const form = new URLSearchParams()
     form.set('mode', 'subscription')
@@ -184,7 +184,7 @@ export async function handleKeaBilling(
     form.set('customer', payload.customerId)
     form.set(
       'return_url',
-      payload.returnUrl?.trim() || 'http://localhost:5173/settings?tab=subscription',
+      payload.returnUrl?.trim() || 'http://localhost:5173/subscription',
     )
     const { ok, data } = await stripeForm(key, 'billing_portal/sessions', form)
     if (!ok) {

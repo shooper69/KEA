@@ -11,9 +11,12 @@ function normalizeHeard(text: string) {
 /** Clear forms of the bird's name — avoid common words like kaya / key alone. */
 const KEA_TOKEN = '(kea|kia|kiah|keya|kee+a)'
 
+/** Attentional opener — primary wake is "Hey Kea". */
+const HEY_TOKEN = '(hey|hay|hei|hi|yo|yoh|yah)'
+
 /**
- * Strict wake match. Background noise + Whisper often invent short words;
- * old patterns (yoga, yorkie, "ok a", "you a") caused false starts.
+ * Wake match for "Hey Kea" (and close variants).
+ * Lone "Kea" is intentionally not enough — too many Whisper false misses/hits.
  */
 export function heardKeaWake(text: string) {
   const n = normalizeHeard(text)
@@ -21,23 +24,28 @@ export function heardKeaWake(text: string) {
 
   // Wake phrases are short. Long noise transcripts must not match.
   const words = n.split(/\s+/).filter(Boolean)
-  if (words.length > 4) return false
+  if (words.length > 6) return false
 
-  // Lone name
-  if (new RegExp(`^${KEA_TOKEN}$`).test(n)) return true
+  // Exact: "Hey Kea", "Hi Kea", "Yo Kea"
+  if (new RegExp(`^${HEY_TOKEN}\\s+${KEA_TOKEN}$`).test(n)) {
+    return true
+  }
 
-  // "Yo Kea", "Hey Kea", "OK Kea", "Wake Kea", "Hola Kea"
+  // Soft fluff: "um hey kea", "hey there kea", "okay hey kea"
   if (
     new RegExp(
-      `^(yo|yoh|yah|hey|hi|ok|okay|hola|oye|oi|wake|call)\\s+${KEA_TOKEN}$`,
+      `^(um+|uh+|oh+|ok|okay|well)?\\s*${HEY_TOKEN}\\s+(there\\s+)?${KEA_TOKEN}$`,
     ).test(n)
   ) {
     return true
   }
 
-  // Compact glued forms only (no loose "joke a" / "you a")
+  // Compact glued forms (heykea / heykeya)
   const compact = n.replace(/\s+/g, '')
-  if (compact.length <= 12 && /^(yo+|ok+|okay|hey|hi|wake)+k(ea|ia|iah|eya|ee+a)$/.test(compact)) {
+  if (
+    compact.length <= 14 &&
+    /^(um|uh|ok|okay)?(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a)$/.test(compact)
+  ) {
     return true
   }
 

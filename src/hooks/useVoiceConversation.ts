@@ -17,6 +17,7 @@ import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import {
   DEFAULT_VOICE_CHARACTER,
   getVoicePersonality,
+  migrateCharmMoodDefault,
 } from '../config/voices'
 import { openKeaMicrophone } from '../architecture/keaMicrophone'
 import {
@@ -51,6 +52,7 @@ const SPEECH_RMS_FLOOR = 0.02
 const DEFAULT_ANSWER_SILENCE_MS = 3000
 
 function readCharacter(): VoicePersonalityId {
+  migrateCharmMoodDefault()
   try {
     const stored = localStorage.getItem(CHARACTER_KEY)
     if (

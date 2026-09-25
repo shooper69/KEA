@@ -116,33 +116,86 @@ const WELCOME_VARIANTS: Record<
   ],
 }
 
-function topicLabel(topic: {
+function isSampleTopicId(id: string) {
+  return id.startsWith('sample-')
+}
+
+function isWelcomeBackLine(text: string) {
+  return /welcome back|qu[eé] bueno que volviste|content de te revoir|willkommen zur[uü]ck|с возвращением|pick up where we left|seguimos donde|reprend où|dort weiter/i.test(
+    text,
+  )
+}
+
+/** Short phrase suitable for “we were talking about …”. */
+function topicLabel(rawInput: string) {
+  let raw = rawInput.replace(/\s+/g, ' ').trim()
+  if (!raw || looksLikeSystemText(raw) || isWelcomeBackLine(raw)) return ''
+  raw = raw.replace(
+    /^(um+|uh+|well|so|ok|okay|yeah|yes|no|hi|hey|hello)[,.\s]+/i,
+    '',
+  )
+  const about =
+    raw.match(/\babout\s+(.+)$/i)?.[1] ||
+    raw.match(/\bsobre\s+(.+)$/i)?.[1] ||
+    raw.match(/\bde\s+(.+)$/i)?.[1]
+  if (about) raw = about.trim()
+  const clause = raw.split(/[.!?¿¡]/)[0]?.trim() || raw
+  const words = clause.split(/\s+/).filter(Boolean)
+  const clipped =
+    words.length > 8 ? `${words.slice(0, 8).join(' ')}…` : clause
+  const cut = clipped.length > 48 ? `${clipped.slice(0, 45).trim()}…` : clipped
+  return cut.replace(/^[,.\s]+|[,.\s]+$/g, '')
+}
+
+function topicFromStored(topic: {
+  id?: string
   title: string
   nativeTitle?: string
   summary?: string
 }) {
-  let raw = (topic.title || topic.nativeTitle || topic.summary || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!raw || looksLikeSystemText(raw)) return ''
-  const about =
-    raw.match(/\babout\s+(.+)$/i)?.[1] ||
-    raw.match(/\bde\s+(.+)$/i)?.[1] ||
-    raw.match(/\bsobre\s+(.+)$/i)?.[1]
-  if (about) raw = about.trim()
-  const cut = raw.length > 48 ? `${raw.slice(0, 45).trim()}…` : raw
-  return cut.replace(/^[,.\s]+|[,.\s]+$/g, '')
+  if (topic.id && isSampleTopicId(topic.id)) return ''
+  return (
+    topicLabel(topic.nativeTitle || '') ||
+    topicLabel(topic.summary || '') ||
+    topicLabel(topic.title || '')
+  )
 }
 
-function recentTopicPhrase(): string {
-  const open = getOpenChatTopic()
-  if (open) {
-    const label = topicLabel(open)
+/** Prefer the learner’s last real turn, then Kea’s last real reply. */
+function recallFromTranscript(messages: TranscriptMessage[]): string {
+  const real = messages.filter(
+    (item) =>
+      item.text.trim() &&
+      !item.interim &&
+      !isHomeGreetingMessage(item) &&
+      !looksLikeSystemText(item.text) &&
+      !isWelcomeBackLine(item.text),
+  )
+  if (real.length === 0) return ''
+  const lastUser = [...real].reverse().find((item) => item.speaker === 'user')
+  if (lastUser) {
+    const label = topicLabel(lastUser.text)
     if (label) return label
   }
-  const topics = getChatTopics()
+  const lastKea = [...real].reverse().find((item) => item.speaker === 'kea')
+  if (lastKea) {
+    const label = topicLabel(lastKea.text)
+    if (label) return label
+  }
+  return ''
+}
+
+function recentTopicPhrase(messages: TranscriptMessage[]): string {
+  const open = getOpenChatTopic()
+  if (open) {
+    const label = topicFromStored(open)
+    if (label) return label
+  }
+  const fromChat = recallFromTranscript(messages)
+  if (fromChat) return fromChat
+  const topics = getChatTopics().filter((topic) => !isSampleTopicId(topic.id))
   for (const topic of topics) {
-    const label = topicLabel(topic)
+    const label = topicFromStored(topic)
     if (label) return label
   }
   return ''
@@ -244,7 +297,7 @@ export function buildStartSpeechLine(options: {
     }
   }
 
-  const topic = recentTopicPhrase()
+  const topic = recentTopicPhrase(options.messages)
   const pack = WELCOME_BACK[lang] ?? WELCOME_BACK.en
   const line = topic ? pack.withTopic(topic) : pack.plain()
   return {

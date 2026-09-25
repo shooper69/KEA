@@ -5,8 +5,8 @@ import { getAverageReplyWords } from '../data/keaSpeech'
 import type { LearnerLevel } from '../types'
 import type { TranscriptMessage } from '../types'
 
-const MAX_HISTORY_TURNS = 16
-const MAX_TURN_CHARS = 480
+const MAX_HISTORY_TURNS = 24
+const MAX_TURN_CHARS = 560
 
 function clipTurn(text: string) {
   const trimmed = text.trim()

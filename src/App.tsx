@@ -14,11 +14,19 @@ import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
 import { LearnListPage } from './pages/LearnListPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { SubscriptionPage } from './pages/SubscriptionPage'
+import { SupportPage } from './pages/SupportPage'
+import {
+  CookiePolicyPage,
+  PrivacyPolicyPage,
+  TermsOfServicePage,
+} from './pages/LegalPages'
 import { WelcomePage } from './pages/WelcomePage'
 import { HomePage } from './pages/HomePage'
 import type { ReactNode } from 'react'
 import { KeaPageMotion } from './components/companion/KeaPageMotion'
 import { KeaSeo } from './components/companion/KeaSeo'
+import { CookieConsentBanner } from './components/companion/CookieConsentBanner'
 import { WebsiteTrackerProvider } from './components/websiteTracker/WebsiteTrackerProvider'
 import { KeaErrorBoundary } from './components/companion/KeaErrorBoundary'
 
@@ -51,10 +59,14 @@ export default function App() {
       <BrowserRouter>
         <WebsiteTrackerProvider />
         <KeaSeo />
+        <CookieConsentBanner />
         <KeaErrorBoundary>
         <KeaPageMotion>
         <Routes>
           <Route path="/" element={<WelcomePage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+          <Route path="/cookie-policy" element={<CookiePolicyPage />} />
           <Route
             path="/home"
             element={
@@ -102,6 +114,22 @@ export default function App() {
             element={
               <RequireOnboard>
                 <SettingsPage />
+              </RequireOnboard>
+            }
+          />
+          <Route
+            path="/subscription"
+            element={
+              <RequireOnboard>
+                <SubscriptionPage />
+              </RequireOnboard>
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              <RequireOnboard>
+                <SupportPage />
               </RequireOnboard>
             }
           />

@@ -24,6 +24,7 @@ import {
   upsertCloudProfile,
   markPasswordRecovery,
 } from '../services/keaProfile'
+import { markAudioRoutePromptPending } from '../architecture/keaAudioRoute'
 import type {
   ChatKeep,
   LanguageCode,
@@ -267,6 +268,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (event === 'PASSWORD_RECOVERY') {
         markPasswordRecovery()
         window.dispatchEvent(new Event('kea-password-recovery'))
+      }
+      if (event === 'SIGNED_IN' && session?.user) {
+        markAudioRoutePromptPending()
       }
       if (!session?.user) {
         userIdRef.current = null

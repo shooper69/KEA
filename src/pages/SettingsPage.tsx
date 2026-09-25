@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { PasswordField } from '../components/companion/PasswordField'
@@ -15,23 +15,22 @@ import {
 } from '../architecture/voiceCatalog'
 import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
-import { SubscriptionPanel } from '../components/companion/SubscriptionPanel'
 import { UsagePanel } from '../components/companion/UsagePanel'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
-import { OfferPopup } from '../components/companion/OfferPopup'
-import {
-  dismissHomeOffer,
-  getOffer,
-  shouldShowPopup1,
-} from '../data/keaOffers'
 import {
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
 import {
+  applyAudioRouteMic,
   listAudioInputs,
   savePreferredMicId,
 } from '../architecture/keaMicrophone'
+import {
+  isKeaMobileDevice,
+  readAudioRoute,
+  type KeaAudioRoute,
+} from '../architecture/keaAudioRoute'
 import type { ChatKeep, LanguageCode, SkyTheme } from '../types'
 
 function PlayIcon() {
@@ -120,25 +119,19 @@ export function SettingsPage() {
     | 'notifications'
     | 'profile'
     | 'security'
-    | 'subscription'
     | 'usage'
   >('choices')
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   useEffect(() => {
     const next = searchParams.get('tab')
-    if (next === 'subscription' || next === 'usage') setTab(next)
-  }, [searchParams])
-  const [popup1Open, setPopup1Open] = useState(false)
-  useEffect(() => {
-    function maybeShow() {
-      setPopup1Open(
-        tab === 'subscription' && shouldShowPopup1('subscriptions'),
-      )
+    if (next === 'subscription') {
+      navigate('/subscription', { replace: true })
+      return
     }
-    maybeShow()
-    window.addEventListener('kea-offers-changed', maybeShow)
-    return () => window.removeEventListener('kea-offers-changed', maybeShow)
-  }, [tab])
+    if (next === 'usage') setTab('usage')
+  }, [searchParams, navigate])
+
   const catalog = loadVoiceCatalog()
   const userVoices = enabledUserVoices(catalog)
   const [userVoiceId, setUserVoiceId] = useState(
@@ -154,6 +147,10 @@ export function SettingsPage() {
       return ''
     }
   })
+  const [audioRoute, setAudioRoute] = useState<KeaAudioRoute | null>(() =>
+    readAudioRoute(),
+  )
+  const showMobileAudioRoute = isKeaMobileDevice()
 
   useEffect(() => {
     setDraftListenIdle(listenIdleSeconds)
@@ -215,11 +212,7 @@ export function SettingsPage() {
   }
 
   return (
-    <main
-      className={`companion-screen settings-screen${
-        popup1Open ? ' has-offer-dock' : ''
-      }`}
-    >
+    <main className="companion-screen settings-screen">
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
         <CompanionNav />
@@ -233,7 +226,9 @@ export function SettingsPage() {
         </div>
         <div className="settings-tabs" role="tablist" aria-label="Settings">
           {isAdmin ? (
-            <Link to="/admin">Admin</Link>
+            <Link to="/admin" className="settings-tabs__admin">
+              Admin
+            </Link>
           ) : null}
           {(
             [
@@ -244,7 +239,6 @@ export function SettingsPage() {
               ['notifications', 'Notifications'],
               ['profile', 'Profile'],
               ['security', 'Security'],
-              ['subscription', 'Subscriptions'],
               ['usage', 'Usage'],
             ] as const
           ).map(([id, label]) => (
@@ -436,6 +430,56 @@ export function SettingsPage() {
         {tab === 'listening' ? (
         <section className="settings-card settings-card--listening">
           <h2>Listening</h2>
+          {showMobileAudioRoute ? (
+            <div className="welcome-field">
+              <span>Phone speaker or headphones</span>
+              <div className="audio-route-settings">
+                <button
+                  type="button"
+                  className={`kea-button${
+                    audioRoute === 'speaker' ? '' : ' kea-button--ghost'
+                  }`}
+                  onClick={() => {
+                    void applyAudioRouteMic('speaker').then(() => {
+                      setAudioRoute('speaker')
+                      try {
+                        setPreferredMicId(
+                          localStorage.getItem('kea-preferred-mic-id') || '',
+                        )
+                      } catch {
+                        // ignore
+                      }
+                    })
+                  }}
+                >
+                  Phone speaker
+                </button>
+                <button
+                  type="button"
+                  className={`kea-button${
+                    audioRoute === 'headphones' ? '' : ' kea-button--ghost'
+                  }`}
+                  onClick={() => {
+                    void applyAudioRouteMic('headphones').then(() => {
+                      setAudioRoute('headphones')
+                      try {
+                        setPreferredMicId(
+                          localStorage.getItem('kea-preferred-mic-id') || '',
+                        )
+                      } catch {
+                        // ignore
+                      }
+                    })
+                  }}
+                >
+                  Headphones
+                </button>
+              </div>
+              <p className="settings-note">
+                Shown each time you sign in on a phone. Change it here anytime.
+              </p>
+            </div>
+          ) : null}
           <div className="welcome-field">
             <span>Microphone for Kea</span>
             <button
@@ -507,13 +551,6 @@ export function SettingsPage() {
               setListeningSaved('')
             }}
             onClose={() => setMicSheetOpen(false)}
-          />
-        ) : null}
-        {tab === 'subscription' ? (
-          <SubscriptionPanel
-            email={email}
-            isAdmin={isAdmin}
-            onViewUsage={() => setTab('usage')}
           />
         ) : null}
         {tab === 'usage' ? <UsagePanel isAdmin={isAdmin} /> : null}
@@ -774,16 +811,6 @@ export function SettingsPage() {
           </>
         ) : null}
       </div>
-      {popup1Open ? (
-        <OfferPopup
-          offer={getOffer('home')}
-          tone="home"
-          onClose={() => {
-            dismissHomeOffer()
-            setPopup1Open(false)
-          }}
-        />
-      ) : null}
     </main>
   )
 }

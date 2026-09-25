@@ -32,7 +32,7 @@ export function VoiceMic({
   const actionLabel = live
     ? 'Stop conversation'
     : wakePhrase
-      ? "Tap to talk or stop me, or say 'Kea' or 'Stop Kea'"
+      ? "Tap to talk or stop me, or say 'Hey Kea' or 'Stop Kea'"
       : 'Tap to talk or stop me'
 
   function handleToggle() {
@@ -83,7 +83,7 @@ export function VoiceMic({
         }`}
         aria-hidden="true"
       >
-        or say 'Kea'
+        or say 'Hey Kea'
         <br />
         or 'Stop Kea'
       </p>

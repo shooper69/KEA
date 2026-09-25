@@ -15,6 +15,9 @@ const OPENAI_VOICES = new Set([
 ])
 
 async function requestSpeech(apiKey: string, voice: string, text: string) {
+  const warmInstructions =
+    'Speak warmly and closely, like a charming companion. Soft, inviting, and lightly playful — never hard, clipped, or cold. Keep a natural, alluring ease.'
+
   const first = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -25,6 +28,7 @@ async function requestSpeech(apiKey: string, voice: string, text: string) {
       model: 'gpt-4o-mini-tts',
       voice,
       input: text,
+      instructions: warmInstructions,
     }),
   })
   if (first.ok) return first
@@ -35,7 +39,7 @@ async function requestSpeech(apiKey: string, voice: string, text: string) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'tts-1',
+      model: 'tts-1-hd',
       voice,
       input: text,
     }),

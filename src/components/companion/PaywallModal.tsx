@@ -32,7 +32,7 @@ export function PaywallModal({
             : 'You have used today’s conversation time. Come back tomorrow, or pick a higher plan.'}
         </p>
         <div className="paywall__actions">
-          <Link className="kea-button" to="/settings?tab=subscription" onClick={onClose}>
+          <Link className="kea-button" to="/subscription" onClick={onClose}>
             Go to Subscriptions
           </Link>
           <button type="button" className="kea-button kea-button--ghost" onClick={onClose}>

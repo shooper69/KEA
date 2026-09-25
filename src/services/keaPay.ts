@@ -18,8 +18,8 @@ export async function startKeaCheckout(options: {
       monthlyPrice: options.monthlyPrice,
       stripePriceId: options.stripePriceId,
       email: options.email,
-      successUrl: `${origin}/settings?tab=subscription&checkout=success`,
-      cancelUrl: `${origin}/settings?tab=subscription&checkout=cancel`,
+      successUrl: `${origin}/subscription?checkout=success`,
+      cancelUrl: `${origin}/subscription?checkout=cancel`,
     }),
   })
   const data = (await response.json()) as { url?: string; error?: string }

@@ -3,7 +3,23 @@ import { listVoices, speakText } from '../lib/speech'
 import { readChosenTts } from '../lib/chosenTts'
 import type { LanguageCode, VoicePersonality, VoicePersonalityId } from '../types'
 
-export const DEFAULT_VOICE_CHARACTER: VoicePersonalityId = 'luna'
+export const DEFAULT_VOICE_CHARACTER: VoicePersonalityId = 'mira'
+
+const CHARM_MOOD_FLAG = 'kea-voice-mood-charm-v1'
+
+/** Soften the old Serious default mood to Playful once. */
+export function migrateCharmMoodDefault() {
+  try {
+    if (localStorage.getItem(CHARM_MOOD_FLAG) === '1') return
+    const stored = localStorage.getItem('kea-voice-character')
+    if (!stored || stored === 'luna') {
+      localStorage.setItem('kea-voice-character', 'mira')
+    }
+    localStorage.setItem(CHARM_MOOD_FLAG, '1')
+  } catch {
+    // ignore
+  }
+}
 
 export const VOICE_PERSONALITIES: VoicePersonality[] = [
   {
@@ -23,9 +39,9 @@ export const VOICE_PERSONALITIES: VoicePersonality[] = [
   {
     id: 'mira',
     name: 'Playful mood',
-    style: 'bright, lightly teasing',
+    style: 'warm, lightly teasing, charming',
     gender: 'female',
-    rate: 1.02,
+    rate: 0.96,
     samples: {
       en: 'Go on then. I want the whole story.',
       es: 'Anda, cuéntame todo.',

@@ -19,13 +19,13 @@ const SPEECH_RMS_FLOOR = 0.04
 const SPEECH_HOLD_MS = 420
 const SHOT_COOLDOWN_MS = 3500
 const WAKE_SILENCE_MS = 520
-const MIN_SPEECH_BURST_MS = 650
-const MAX_UTTERANCE_MS = 2200
-/** Do not prime Whisper with "Kea" — that invents wake words from room noise. */
+const MIN_SPEECH_BURST_MS = 720
+const MAX_UTTERANCE_MS = 3000
+/** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
-  'Transcribe clearly spoken words only. If there is only noise or silence, return an empty transcript.'
+  'Short spoken English. If you clearly hear "Hey Kea", transcribe that. If there is only noise or silence, return an empty transcript.'
 const MIN_WAKE_BLOB = 2200
-const MIN_WAKE_CONFIDENCE = 0.45
+const MIN_WAKE_CONFIDENCE = 0.4
 
 function pickRecorderMime(): string {
   const types = [

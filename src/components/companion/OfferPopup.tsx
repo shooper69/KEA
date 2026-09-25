@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
+import { applyDiscountCode } from '../../architecture/keaDiscountCodes'
 import {
   offerBackgroundSrc,
   type KeaOffer,
@@ -17,6 +18,18 @@ export function OfferPopup({ offer, onClose, tone = 'home' }: OfferPopupProps) {
   const cardStyle = {
     '--offer-bg-image': `url("${background.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`,
   } as CSSProperties
+
+  function takeOffer() {
+    const code = offer.discountCode?.trim()
+    if (code) {
+      try {
+        applyDiscountCode(code)
+      } catch {
+        // Still open Subscriptions; user can enter the code shown on the offer.
+      }
+    }
+    onClose()
+  }
 
   return (
     <div
@@ -37,7 +50,7 @@ export function OfferPopup({ offer, onClose, tone = 'home' }: OfferPopupProps) {
         </h2>
         <p className="offer-popup__body">{offer.body}</p>
         <div className="offer-popup__actions">
-          <Link className="kea-button" to={offer.ctaPath} onClick={onClose}>
+          <Link className="kea-button" to={offer.ctaPath} onClick={takeOffer}>
             {offer.ctaLabel}
           </Link>
           <button

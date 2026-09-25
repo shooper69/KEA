@@ -96,8 +96,8 @@ export function AdminVoiceManagementPage() {
         <h3 className="voice-manage__heading">Marketing page intro</h3>
         <p className="settings-note">
           Voice that speaks the welcome-page intro after someone chooses their
-          native language. Defaults to Friendly Companion — warm, thoughtful
-          and supportive.
+          native language. Defaults to Soft Charm — warm, close, and a little
+          alluring.
         </p>
         <label className="welcome-field">
           <span>Intro voice</span>
@@ -140,7 +140,7 @@ export function AdminVoiceManagementPage() {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Coral, Microsoft Aria, Friendly Companion…"
+          placeholder="Nova, Soft Charm, Microsoft Aria…"
         />
       </label>
       <h3 className="voice-manage__heading">OpenAI voices</h3>
@@ -238,7 +238,7 @@ function VoiceRow({
         <input
           value={voice.userName}
           onChange={(event) => onPatch({ userName: event.target.value })}
-          placeholder="Friendly Companion"
+          placeholder="Soft Charm"
         />
       </label>
       <label className="welcome-field">

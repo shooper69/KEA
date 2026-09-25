@@ -6,6 +6,7 @@ const LEARN_KEY = 'kea-learn-list'
 const MASTERED_KEY = 'kea-learn-mastered'
 const TOPICS_KEY = 'kea-chat-topics'
 const OPEN_TOPIC_KEY = 'kea-open-topic-id'
+const OPEN_TOPIC_LOCAL_KEY = 'kea-open-topic-id-v1'
 const CHANGE_EVENT = 'kea-learn-memory'
 
 const LEARN_REQUEST =
@@ -623,8 +624,8 @@ export function touchChatTopic(userText: string, keaReply: string) {
   if (!learnt && !native) return
   const now = new Date().toISOString()
   const topics = getChatTopics()
-  const openId = sessionStorage.getItem(OPEN_TOPIC_KEY)
-  let topic = topics.find((item) => item.id === openId)
+  const openId = readOpenTopicId()
+  let topic = topics.find((item) => item.id === openId && !item.id.startsWith('sample-'))
   if (!topic) {
     topic = {
       id: crypto.randomUUID(),
@@ -636,7 +637,7 @@ export function touchChatTopic(userText: string, keaReply: string) {
       discussionCount: 1,
     }
     topics.unshift(topic)
-    sessionStorage.setItem(OPEN_TOPIC_KEY, topic.id)
+    openChatTopic(topic.id)
   } else {
     const quietMs =
       Date.now() - new Date(topic.lastDiscussedAt).getTime()
@@ -651,7 +652,7 @@ export function touchChatTopic(userText: string, keaReply: string) {
         discussionCount: 1,
       }
       topics.unshift(topic)
-      sessionStorage.setItem(OPEN_TOPIC_KEY, topic.id)
+      openChatTopic(topic.id)
     } else {
       topic.title = learnt
       topic.nativeTitle = native
@@ -677,12 +678,35 @@ function topicLine(text: string, max = 110) {
 }
 
 export function openChatTopic(id: string) {
-  sessionStorage.setItem(OPEN_TOPIC_KEY, id)
+  try {
+    sessionStorage.setItem(OPEN_TOPIC_KEY, id)
+  } catch {
+    // ignore
+  }
+  try {
+    localStorage.setItem(OPEN_TOPIC_LOCAL_KEY, id)
+  } catch {
+    // ignore
+  }
+}
+
+function readOpenTopicId(): string | null {
+  try {
+    const sessionId = sessionStorage.getItem(OPEN_TOPIC_KEY)
+    if (sessionId) return sessionId
+  } catch {
+    // ignore
+  }
+  try {
+    return localStorage.getItem(OPEN_TOPIC_LOCAL_KEY)
+  } catch {
+    return null
+  }
 }
 
 export function getOpenChatTopic(): ChatTopic | null {
-  const id = sessionStorage.getItem(OPEN_TOPIC_KEY)
-  if (!id) return null
+  const id = readOpenTopicId()
+  if (!id || id.startsWith('sample-')) return null
   return getChatTopics().find((item) => item.id === id) ?? null
 }
 
@@ -696,7 +720,10 @@ export function memoryPromptBlock(userText = '') {
         `- native "${item.term}" → target "${item.translation || '(needed)'}" (used well ${item.practiceCount}/${need})`,
     )
     .join('\n')
-  const topics = getChatTopics()
+  const allTopics = getChatTopics()
+  const realTopics = allTopics.filter((item) => !item.id.startsWith('sample-'))
+  const topicSource = realTopics.length > 0 ? realTopics : allTopics
+  const topics = topicSource
     .slice(0, 12)
     .map((item) => `- ${item.title} / ${item.nativeTitle || item.summary}`)
     .join('\n')
@@ -706,7 +733,12 @@ export function memoryPromptBlock(userText = '') {
 - ${open.title} / ${open.nativeTitle || open.summary}
 
 `
-    : ''
+    : realTopics[0]
+      ? `RECENT CHAT (continue from this; do not restart as a first meeting):
+- ${realTopics[0].title} / ${realTopics[0].nativeTitle || realTopics[0].summary}
+
+`
+      : ''
   const quiz = looksLikeLearnListQuizRequest(userText)
   const quizBlock = quiz
     ? `LEARN LIST QUIZ (user asked to be tested — do this now):

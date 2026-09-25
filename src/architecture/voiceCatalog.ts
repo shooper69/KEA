@@ -36,6 +36,20 @@ const OPENAI_SEED: Array<{
   enabled: boolean
 }> = [
   {
+    openaiVoice: 'nova',
+    actualName: 'Nova',
+    userName: 'Soft Charm',
+    userDescription: 'Warm, close, and a little alluring.',
+    enabled: true,
+  },
+  {
+    openaiVoice: 'shimmer',
+    actualName: 'Shimmer',
+    userName: 'Sweet Glow',
+    userDescription: 'Light, soft, and inviting.',
+    enabled: true,
+  },
+  {
     openaiVoice: 'coral',
     actualName: 'Coral',
     userName: 'Friendly Companion',
@@ -43,24 +57,10 @@ const OPENAI_SEED: Array<{
     enabled: true,
   },
   {
-    openaiVoice: 'shimmer',
-    actualName: 'Shimmer',
-    userName: 'Cheerful Coach',
-    userDescription: 'Light, upbeat and encouraging.',
-    enabled: true,
-  },
-  {
     openaiVoice: 'sage',
     actualName: 'Sage',
     userName: 'Wise Guide',
     userDescription: 'Calm and reflective conversation.',
-    enabled: true,
-  },
-  {
-    openaiVoice: 'nova',
-    actualName: 'Nova',
-    userName: 'Gentle Teacher',
-    userDescription: 'Patient guidance while learning.',
     enabled: true,
   },
   {
@@ -80,8 +80,8 @@ const OPENAI_SEED: Array<{
   {
     openaiVoice: 'ballad',
     actualName: 'Ballad',
-    userName: '',
-    userDescription: '',
+    userName: 'Velvet Tone',
+    userDescription: 'Smooth, intimate, and melodic.',
     enabled: false,
   },
   {
@@ -122,6 +122,9 @@ function browserId(uri: string) {
   return `browser:${uri}`
 }
 
+const SOFT_CHARM_ID = () => openaiId('nova')
+const CHARM_DEFAULT_FLAG = 'kea-voice-charm-default-v2'
+
 function seedCatalog(): VoiceCatalog {
   const voices = OPENAI_SEED.map((item) => ({
     id: openaiId(item.openaiVoice),
@@ -133,10 +136,10 @@ function seedCatalog(): VoiceCatalog {
     userDescription: item.userDescription,
     enabled: item.enabled,
   }))
-  const friendlyCompanion = openaiId('coral')
+  const softCharm = SOFT_CHARM_ID()
   return {
-    defaultId: friendlyCompanion,
-    marketingIntroId: friendlyCompanion,
+    defaultId: softCharm,
+    marketingIntroId: softCharm,
     voices,
   }
 }
@@ -181,14 +184,81 @@ export function mergeBrowserVoices(
   return { ...catalog, voices: [...catalog.voices, ...extras] }
 }
 
+/** One-time move from the colder Coral default to Soft Charm (Nova). */
+function migrateCharmDefault(catalog: VoiceCatalog): VoiceCatalog {
+  try {
+    if (localStorage.getItem(CHARM_DEFAULT_FLAG) === '1') return catalog
+  } catch {
+    return catalog
+  }
+
+  const softCharm = SOFT_CHARM_ID()
+  const coral = openaiId('coral')
+  const next: VoiceCatalog = {
+    ...catalog,
+    voices: catalog.voices.map((item) => {
+      if (item.id === softCharm) {
+        return {
+          ...item,
+          enabled: true,
+          userName: 'Soft Charm',
+          userDescription: 'Warm, close, and a little alluring.',
+        }
+      }
+      if (item.openaiVoice === 'shimmer') {
+        return {
+          ...item,
+          userName: item.userName.trim() === 'Cheerful Coach' || !item.userName.trim()
+            ? 'Sweet Glow'
+            : item.userName,
+          userDescription:
+            item.userDescription.trim() === 'Light, upbeat and encouraging.' ||
+            !item.userDescription.trim()
+              ? 'Light, soft, and inviting.'
+              : item.userDescription,
+        }
+      }
+      return item
+    }),
+  }
+
+  if (!next.voices.some((item) => item.id === softCharm)) {
+    const seeded = seedCatalog().voices.find((item) => item.id === softCharm)
+    if (seeded) next.voices.unshift(seeded)
+  }
+
+  if (!next.defaultId || next.defaultId === coral) {
+    next.defaultId = softCharm
+  }
+  if (!next.marketingIntroId || next.marketingIntroId === coral) {
+    next.marketingIntroId = softCharm
+  }
+
+  saveVoiceCatalog(next)
+  try {
+    localStorage.setItem(CHARM_DEFAULT_FLAG, '1')
+  } catch {
+    // ignore
+  }
+  try {
+    const chosen = localStorage.getItem(USER_VOICE_KEY)
+    if (!chosen || chosen === coral) {
+      localStorage.setItem(USER_VOICE_KEY, softCharm)
+    }
+  } catch {
+    // ignore
+  }
+  return next
+}
+
 export function loadVoiceCatalog(): VoiceCatalog {
   const stored = readStored()
-  const base = stored ?? seedCatalog()
+  const base = migrateCharmDefault(stored ?? seedCatalog())
   const byId = new Map(base.voices.map((item) => [item.id, item]))
   for (const seed of seedCatalog().voices) {
     if (!byId.has(seed.id)) base.voices.push(seed)
   }
-  const friendlyCompanion = openaiId('coral')
+  const softCharm = SOFT_CHARM_ID()
   if (!base.voices.some((item) => item.id === base.defaultId)) {
     base.defaultId =
       base.voices.find((item) => item.enabled)?.id ??
@@ -199,8 +269,8 @@ export function loadVoiceCatalog(): VoiceCatalog {
     !base.marketingIntroId ||
     !base.voices.some((item) => item.id === base.marketingIntroId)
   ) {
-    base.marketingIntroId = base.voices.some((item) => item.id === friendlyCompanion)
-      ? friendlyCompanion
+    base.marketingIntroId = base.voices.some((item) => item.id === softCharm)
+      ? softCharm
       : base.defaultId
   }
   if (!stored) saveVoiceCatalog(base)
@@ -208,14 +278,14 @@ export function loadVoiceCatalog(): VoiceCatalog {
   return base
 }
 
-/** Soft Friendly Companion (Coral) — warm, thoughtful and supportive — or admin override. */
+/** Soft Charm (Nova) — warm and a little alluring — or admin override. */
 export function getMarketingIntroVoice(
   catalog = loadVoiceCatalog(),
 ): ManagedVoice | null {
-  const friendlyCompanion = openaiId('coral')
+  const softCharm = SOFT_CHARM_ID()
   const chosen =
     catalog.voices.find((item) => item.id === catalog.marketingIntroId) ||
-    catalog.voices.find((item) => item.id === friendlyCompanion) ||
+    catalog.voices.find((item) => item.id === softCharm) ||
     catalog.voices.find((item) => item.id === catalog.defaultId) ||
     catalog.voices[0]
   return chosen ?? null

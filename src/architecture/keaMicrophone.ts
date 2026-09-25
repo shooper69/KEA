@@ -1,3 +1,10 @@
+import {
+  audioRouteMicBoost,
+  looksLikeHeadsetMic,
+  saveAudioRoute,
+  type KeaAudioRoute,
+} from './keaAudioRoute'
+
 /** Prefer a real USB/built-in mic; skip Voicemod / EaseUS / virtual cables. */
 
 const VIRTUAL_MIC =
@@ -26,6 +33,7 @@ function scoreMic(label: string, deviceId: string) {
   if (deviceId === 'communications') score += 6
   if (PREFERRED_MIC.test(name)) score += 40
   if (/samson|meteor/i.test(name)) score += 40
+  score += audioRouteMicBoost(label, deviceId)
   return score
 }
 
@@ -206,4 +214,40 @@ export async function openKeaMicrophone(): Promise<{
   const info = infoFromStream(stream, 'default')
   if (!info.virtual) savePreferredMicId(info.deviceId)
   return { stream, info }
+}
+
+/**
+ * After the user picks speaker or headphones, lock in a matching input
+ * when labels are available.
+ */
+export async function applyAudioRouteMic(route: KeaAudioRoute) {
+  saveAudioRoute(route)
+  try {
+    const inputs = await ensureMicLabels()
+    if (inputs.length === 0) return
+
+    const ranked = [...inputs].sort((a, b) => {
+      const score = (item: MediaDeviceInfo) =>
+        scoreMic(item.label, item.deviceId) +
+        (item.deviceId === 'default' ? 5 : 0)
+      return score(b) - score(a)
+    })
+
+    if (route === 'headphones') {
+      const headset = ranked.find((item) =>
+        looksLikeHeadsetMic(item.label, item.deviceId),
+      )
+      savePreferredMicId(headset?.deviceId || '')
+      return
+    }
+
+    const builtin = ranked.find(
+      (item) =>
+        !looksLikeHeadsetMic(item.label, item.deviceId) &&
+        scoreMic(item.label, item.deviceId) >= 0,
+    )
+    savePreferredMicId(builtin?.deviceId || ranked[0]?.deviceId || '')
+  } catch {
+    // Route preference still saved; mic picker falls back later.
+  }
 }
