@@ -8,8 +8,8 @@ function normalizeHeard(text: string) {
     .trim()
 }
 
-/** Clear forms of the bird's name — avoid common words like kaya / key alone. */
-const KEA_TOKEN = '(kea|kia|kiah|keya|kee+a)'
+/** Clear forms of the bird's name — avoid common words like kaya alone. */
+const KEA_TOKEN = '(kea|kia|kiah|keya|kee+a|key)'
 
 /** Attentional opener — primary wake is "Hey Kea". */
 const HEY_TOKEN = '(hey|hay|hei|hi|yo|yoh|yah)'
@@ -40,11 +40,13 @@ export function heardKeaWake(text: string) {
     return true
   }
 
-  // Compact glued forms (heykea / heykeya)
+  // Compact glued forms (heykea / heykeya / heykey)
   const compact = n.replace(/\s+/g, '')
   if (
     compact.length <= 14 &&
-    /^(um|uh|ok|okay)?(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a)$/.test(compact)
+    /^(um|uh|ok|okay)?(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a|ey)$/.test(
+      compact,
+    )
   ) {
     return true
   }

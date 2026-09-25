@@ -342,16 +342,104 @@ export function WelcomePage() {
   const visibleParagraphs = visibleCopy
     ? visibleCopy.split(/\n\n+/).filter(Boolean)
     : []
+  const introMode = introBusy || visibleParagraphs.length > 0
 
   useEffect(() => {
-    if (!introBusy && visibleParagraphs.length === 0) return
+    if (!introMode) return
     const scroller = introScrollRef.current
     if (!scroller) return
+    const latest = scroller.querySelector(
+      '.welcome-screen__speech:last-of-type, .welcome-screen__lede--hint',
+    ) as HTMLElement | null
+    if (!latest) return
+    const scrollerRect = scroller.getBoundingClientRect()
+    const latestRect = latest.getBoundingClientRect()
+    const room = scrollerRect.bottom - 12
+    if (latestRect.bottom <= room && latestRect.top >= scrollerRect.top + 8) {
+      return
+    }
+    const nextTop = scroller.scrollTop + (latestRect.bottom - room) + 8
     scroller.scrollTo({
-      top: scroller.scrollHeight,
+      top: Math.max(0, nextTop),
       behavior: 'smooth',
     })
-  }, [visibleCopy, introBusy, visibleParagraphs.length])
+  }, [visibleCopy, introBusy, visibleParagraphs.length, introMode])
+
+  const langPicker = !authOpen ? (
+    <div className="welcome-lang-picker" ref={langMenuRef}>
+      <button
+        type="button"
+        className="welcome-lang-picker__trigger"
+        aria-expanded={langMenuOpen}
+        aria-haspopup="listbox"
+        disabled={introBusy}
+        onClick={() => setLangMenuOpen((open) => !open)}
+      >
+        <span>Choose language for Kea to say hi</span>
+        <span
+          className={`welcome-lang-picker__arrow${langMenuOpen ? ' is-open' : ''}`}
+          aria-hidden="true"
+        >
+          ▾
+        </span>
+      </button>
+      {langMenuOpen ? (
+        <ul className="welcome-lang-picker__menu" role="listbox">
+          {SUPPORTED_LANGUAGES.map((language) => (
+            <li key={language.code}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={prospectLang === language.code}
+                className={
+                  prospectLang === language.code ? 'is-selected' : undefined
+                }
+                onClick={() => void playWelcomeIntro(language.code)}
+              >
+                {language.name} · {language.nativeName}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  ) : null
+
+  const homeActions =
+    !authReady ? (
+      <p className="settings-note">One moment…</p>
+    ) : !authOpen ? (
+      <div className="welcome-screen__actions welcome-screen__actions--home">
+        <Button type="button" onClick={openRegister}>
+          Create free account
+        </Button>
+        <Button type="button" variant="ghost" onClick={openLogin}>
+          Sign in
+        </Button>
+      </div>
+    ) : null
+
+  const spokenBlock = !authOpen ? (
+    <div
+      className="welcome-screen__spoken"
+      aria-live="polite"
+      aria-busy={introBusy}
+    >
+      {introBusy && visibleParagraphs.length === 0 ? (
+        <p className="welcome-screen__lede welcome-screen__lede--hint">
+          Kea is getting ready…
+        </p>
+      ) : null}
+      {visibleParagraphs.map((paragraph, index) => (
+        <p
+          key={`${index}-${paragraph.slice(0, 12)}`}
+          className="welcome-screen__speech"
+        >
+          {paragraph}
+        </p>
+      ))}
+    </div>
+  ) : null
 
   const localProfileForm = (
     <div className="auth-profile-form">
@@ -436,94 +524,34 @@ export function WelcomePage() {
       <CloudAtmosphere presence="idle" tempo="sunrise" />
       <div
         className={`welcome-screen__shell${
-          introBusy || visibleParagraphs.length > 0
-            ? ' welcome-screen__shell--intro'
-            : ''
+          introMode ? ' welcome-screen__shell--intro' : ''
         }`}
       >
-        <div className="welcome-screen__brand">
-          <img className="welcome-screen__logo" src="/kea-05.png" alt="Kea" />
+        <div className="welcome-screen__pinned">
+          <div className="welcome-screen__brand">
+            <img className="welcome-screen__logo" src="/kea-05.png" alt="Kea" />
+          </div>
+          {introMode ? (
+            <>
+              <h1>{welcomeTitle}</h1>
+              {langPicker}
+            </>
+          ) : null}
         </div>
         <div className="welcome-screen__scroll" ref={introScrollRef}>
-          <h1>{welcomeTitle}</h1>
-
-          {!authOpen ? (
-            <div className="welcome-lang-picker" ref={langMenuRef}>
-              <button
-                type="button"
-                className="welcome-lang-picker__trigger"
-                aria-expanded={langMenuOpen}
-                aria-haspopup="listbox"
-                disabled={introBusy}
-                onClick={() => setLangMenuOpen((open) => !open)}
-              >
-                <span>Choose language for Kea to say hi</span>
-                <span
-                  className={`welcome-lang-picker__arrow${langMenuOpen ? ' is-open' : ''}`}
-                  aria-hidden="true"
-                >
-                  ▾
-                </span>
-              </button>
-              {langMenuOpen ? (
-                <ul className="welcome-lang-picker__menu" role="listbox">
-                  {SUPPORTED_LANGUAGES.map((language) => (
-                    <li key={language.code}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={prospectLang === language.code}
-                        className={
-                          prospectLang === language.code
-                            ? 'is-selected'
-                            : undefined
-                        }
-                        onClick={() => void playWelcomeIntro(language.code)}
-                      >
-                        {language.name} · {language.nativeName}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
+          {!introMode ? (
+            <>
+              <h1>{welcomeTitle}</h1>
+              {langPicker}
+            </>
           ) : null}
 
-          {!authOpen ? (
-            <div
-              className="welcome-screen__spoken"
-              aria-live="polite"
-              aria-busy={introBusy}
-            >
-              {introBusy && visibleParagraphs.length === 0 ? (
-                <p className="welcome-screen__lede welcome-screen__lede--hint">
-                  Kea is getting ready…
-                </p>
-              ) : null}
-              {visibleParagraphs.map((paragraph, index) => (
-                <p
-                  key={`${index}-${paragraph.slice(0, 12)}`}
-                  className="welcome-screen__speech"
-                >
-                  {paragraph}
-                </p>
-              ))}
-            </div>
-          ) : null}
-
-          {!authReady ? (
-            <p className="settings-note">One moment…</p>
-          ) : !authOpen ? (
-            <div className="welcome-screen__actions welcome-screen__actions--home">
-              <Button type="button" onClick={openRegister}>
-                Create free account
-              </Button>
-              <Button type="button" variant="ghost" onClick={openLogin}>
-                Sign in
-              </Button>
-            </div>
-          ) : null}
+          {spokenBlock}
+          {!introMode ? homeActions : null}
         </div>
+        {introMode ? (
+          <div className="welcome-screen__dock">{homeActions}</div>
+        ) : null}
       </div>
 
       {!authOpen ? (

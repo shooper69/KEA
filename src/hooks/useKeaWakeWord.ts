@@ -4,7 +4,6 @@ import {
   getSpeechRecognition,
   heardKeaWake,
   speechRecognitionAvailable,
-  speechRecognitionPings,
 } from '../architecture/keaWakeWord'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import { looksLikeWhisperHallucination } from '../architecture/whisperText'
@@ -23,9 +22,11 @@ const MIN_SPEECH_BURST_MS = 720
 const MAX_UTTERANCE_MS = 3000
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
-  'Short spoken English. If you clearly hear "Hey Kea", transcribe that. If there is only noise or silence, return an empty transcript.'
+  'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
 const MIN_WAKE_BLOB = 2200
-const MIN_WAKE_CONFIDENCE = 0.4
+/** Soft floor only for non-wake noise; matching "Hey Kea" bypasses this. */
+const MIN_WAKE_CONFIDENCE = 0.28
+const MIN_WAKE_MATCH_CONFIDENCE = 0.12
 
 function pickRecorderMime(): string {
   const types = [
@@ -44,9 +45,9 @@ function logWake(event: string, detail?: unknown, extra?: unknown) {
 }
 
 /**
- * Mobile: energy → short SpeechRecognition.
- * Desktop: energy → one complete MediaRecorder clip → Whisper.
- * (Rolling timeslice chunks are not valid WebM and OpenAI rejects them.)
+ * Energy gate → short SpeechRecognition shot when the browser supports it
+ * (phones + Chrome/Edge desktop). Otherwise MediaRecorder clip → Whisper.
+ * Whisper alone was inventing "Thank you" / "Done" for short "Hey Kea" clips.
  */
 export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
   const [armed, setArmed] = useState(false)
@@ -62,8 +63,11 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
   }, [])
 
   useEffect(() => {
-    const mobile = speechRecognitionPings()
     const Ctor = getSpeechRecognition()
+    const preferSpeech = Boolean(Ctor)
+    const canWhisper =
+      typeof navigator !== 'undefined' &&
+      Boolean(navigator.mediaDevices?.getUserMedia)
 
     if (!enabled) {
       setArmed(false)
@@ -71,13 +75,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       abortRef.current = () => {}
       return
     }
-    if (mobile && !Ctor) {
-      setArmed(false)
-      setWakeMic('')
-      abortRef.current = () => {}
-      return
-    }
-    if (!mobile && !navigator.mediaDevices?.getUserMedia) {
+    if (!preferSpeech && !canWhisper) {
       setArmed(false)
       setWakeMic('')
       abortRef.current = () => {}
@@ -246,7 +244,10 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           logWake('clip too small', blob.size)
           return
         }
-        const result = await transcribeWithWhisper(blob, { prompt: WAKE_PROMPT })
+        const result = await transcribeWithWhisper(blob, {
+          prompt: WAKE_PROMPT,
+          language: 'en',
+        })
         logWake('transcript', result.text || '(empty)', result.confidence)
         patchVoiceDiagnostics({
           lastTranscript: result.text,
@@ -262,16 +263,22 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           logWake('noise hallucination — ignore', result.text)
           return
         }
-        if (
-          result.confidence > 0 &&
-          result.confidence <= 1 &&
-          result.confidence < MIN_WAKE_CONFIDENCE
-        ) {
-          logWake('low confidence — ignore', result.confidence)
+        const conf =
+          result.confidence > 0 && result.confidence <= 1
+            ? result.confidence
+            : 1
+        // Short wake phrases often score low — match text first.
+        if (heardKeaWake(result.text)) {
+          if (conf < MIN_WAKE_MATCH_CONFIDENCE) {
+            logWake('wake match but confidence too low', conf)
+            return
+          }
+          logWake('wake matched', result.text, conf)
+          fireWake()
           return
         }
-        if (heardKeaWake(result.text)) {
-          fireWake()
+        if (conf < MIN_WAKE_CONFIDENCE) {
+          logWake('low confidence — ignore', conf)
           return
         }
         logWake('no wake match', result.text || '(empty)')
@@ -285,7 +292,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
     }
 
-    const startMobileShot = () => {
+    const startSpeechShot = () => {
       if (!Ctor) return
       if (dead || waking || cancelled || !enabledRef.current || listeningShot) return
       if (document.visibilityState !== 'visible') return
@@ -293,7 +300,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       listeningShot = true
       lastShotAt = Date.now()
       heard = ''
-      logWake('mobile speech shot')
+      logWake('speech shot')
       teardownMic()
       try {
         const next = new Ctor()
@@ -311,21 +318,27 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
               const said = piece?.[a]?.transcript ?? ''
               if (said) alts.push(said)
             }
-            const said = alts.join(' ')
-            heard = `${heard} ${said}`.replace(/\s+/g, ' ').trim().slice(-160)
-            logWake('mobile heard', heard)
-            if (looksLikeWhisperHallucination(said) || looksLikeWhisperHallucination(heard)) {
-              return
+            for (const said of alts) {
+              if (looksLikeWhisperHallucination(said)) continue
+              if (heardKeaWake(said)) {
+                logWake('speech wake matched', said)
+                fireWake()
+                return
+              }
             }
-            if (heardKeaWake(said) || heardKeaWake(heard)) {
+            const joined = alts.join(' ')
+            heard = `${heard} ${joined}`.replace(/\s+/g, ' ').trim().slice(-160)
+            logWake('speech heard', heard)
+            if (looksLikeWhisperHallucination(heard)) return
+            if (heardKeaWake(heard)) {
+              logWake('speech wake matched', heard)
               fireWake()
-              return
             }
           }
         }
         next.onerror = (event) => {
           const err = event.error || ''
-          logWake('mobile speech error', err)
+          logWake('speech error', err)
           if (err === 'not-allowed' || err === 'service-not-allowed') {
             dead = true
             setArmed(false)
@@ -373,7 +386,10 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         const calibrateUntil = performance.now() + 500
         let ambientSum = 0
         let ambientN = 0
-        logWake('armed', { mobile, mic: opened.info.label })
+        logWake('armed', {
+          preferSpeech,
+          mic: opened.info.label,
+        })
         const tick = (now: number) => {
           raf = requestAnimationFrame(tick)
           if (dead || waking || cancelled || !enabledRef.current) return
@@ -408,11 +424,11 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             speechBurstMs += delta
             silenceHold = 0
             if (speechHold >= SPEECH_HOLD_MS) {
-              if (mobile) startMobileShot()
+              if (preferSpeech) startSpeechShot()
               else beginUtterance()
             }
             if (
-              !mobile &&
+              !preferSpeech &&
               recordingUtterance &&
               now - utteranceStartedAt >= MAX_UTTERANCE_MS
             ) {
@@ -420,7 +436,11 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             }
           } else {
             speechHold = Math.max(0, speechHold - delta * 0.7)
-            if (!mobile && recordingUtterance && speechBurstMs >= MIN_SPEECH_BURST_MS) {
+            if (
+              !preferSpeech &&
+              recordingUtterance &&
+              speechBurstMs >= MIN_SPEECH_BURST_MS
+            ) {
               silenceHold += delta
               if (silenceHold >= WAKE_SILENCE_MS) {
                 void finishUtterance('silence')
@@ -438,7 +458,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         patchVoiceDiagnostics({
           recognitionAvailable: true,
           recognitionRunning: true,
-          recognitionLanguage: mobile
+          recognitionLanguage: preferSpeech
             ? 'wake-speech'
             : `wake-whisper · ${opened.info.label}`,
         })
@@ -477,9 +497,9 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     armed,
     wakeMic,
     release,
-    listens: speechRecognitionPings()
-      ? speechRecognitionAvailable()
-      : typeof navigator !== 'undefined' &&
-        Boolean(navigator.mediaDevices?.getUserMedia),
+    listens:
+      speechRecognitionAvailable() ||
+      (typeof navigator !== 'undefined' &&
+        Boolean(navigator.mediaDevices?.getUserMedia)),
   }
 }

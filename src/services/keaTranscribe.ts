@@ -20,7 +20,7 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 export async function transcribeWithWhisper(
   blob: Blob,
-  options?: { prompt?: string },
+  options?: { prompt?: string; language?: string },
 ): Promise<WhisperTranscript> {
   const audio = await blobToBase64(blob)
   const rawType = (blob.type || 'audio/webm').toLowerCase()
@@ -41,6 +41,7 @@ export async function transcribeWithWhisper(
       audio,
       mimeType,
       prompt: options?.prompt,
+      language: options?.language,
     }),
   })
   const data = (await response.json()) as WhisperTranscript & { error?: string }

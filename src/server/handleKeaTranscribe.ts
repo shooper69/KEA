@@ -7,6 +7,7 @@ interface TranscribeRequest {
   audio?: string
   mimeType?: string
   prompt?: string
+  language?: string
 }
 
 interface WhisperVerbose {
@@ -115,6 +116,9 @@ export async function handleKeaTranscribe(
       ? payload.prompt.trim().slice(0, 800)
       : LEARNER_PROMPT
   form.append('prompt', prompt)
+  const language =
+    typeof payload.language === 'string' ? payload.language.trim().slice(0, 16) : ''
+  if (language) form.append('language', language)
 
   const openaiResponse = await fetch(
     'https://api.openai.com/v1/audio/transcriptions',
