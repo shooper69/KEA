@@ -7,7 +7,7 @@ import {
   planIdFromPriceId,
   upsertBillingProfile,
   type KeaPlanId,
-} from './keaStripeBilling'
+} from './keaStripeBilling.ts'
 
 type BillingEnv = {
   STRIPE_SECRET_KEY?: string
