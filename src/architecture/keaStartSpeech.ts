@@ -4,6 +4,7 @@ import {
 } from '../config/languages'
 import type { LanguageCode, TranscriptMessage } from '../types'
 import { getChatTopics, getOpenChatTopic } from './companionMemory'
+import { describeLastChat } from './keaChatRecall'
 import { looksLikeSystemText } from './whisperText'
 
 export interface StartSpeechLine {
@@ -116,102 +117,17 @@ const WELCOME_VARIANTS: Record<
   ],
 }
 
-function isSampleTopicId(id: string) {
-  return id.startsWith('sample-')
-}
-
-function isWelcomeBackLine(text: string) {
-  return /welcome back|qu[eé] bueno que volviste|content de te revoir|willkommen zur[uü]ck|с возвращением|pick up where we left|seguimos donde|reprend où|dort weiter/i.test(
-    text,
-  )
-}
-
-/** Short phrase suitable for “we were talking about …”. */
-function topicLabel(rawInput: string) {
-  let raw = rawInput.replace(/\s+/g, ' ').trim()
-  if (!raw || looksLikeSystemText(raw) || isWelcomeBackLine(raw)) return ''
-  raw = raw.replace(
-    /^(um+|uh+|well|so|ok|okay|yeah|yes|no|hi|hey|hello)[,.\s]+/i,
-    '',
-  )
-  const about =
-    raw.match(/\babout\s+(.+)$/i)?.[1] ||
-    raw.match(/\bsobre\s+(.+)$/i)?.[1] ||
-    raw.match(/\bde\s+(.+)$/i)?.[1]
-  if (about) raw = about.trim()
-  const clause = raw.split(/[.!?¿¡]/)[0]?.trim() || raw
-  const words = clause.split(/\s+/).filter(Boolean)
-  const clipped =
-    words.length > 8 ? `${words.slice(0, 8).join(' ')}…` : clause
-  const cut = clipped.length > 48 ? `${clipped.slice(0, 45).trim()}…` : clipped
-  return cut.replace(/^[,.\s]+|[,.\s]+$/g, '')
-}
-
-function topicFromStored(topic: {
-  id?: string
-  title: string
-  nativeTitle?: string
-  summary?: string
-}) {
-  if (topic.id && isSampleTopicId(topic.id)) return ''
-  return (
-    topicLabel(topic.nativeTitle || '') ||
-    topicLabel(topic.summary || '') ||
-    topicLabel(topic.title || '')
-  )
-}
-
-/** Prefer the learner’s last real turn, then Kea’s last real reply. */
-function recallFromTranscript(messages: TranscriptMessage[]): string {
-  const real = messages.filter(
-    (item) =>
-      item.text.trim() &&
-      !item.interim &&
-      !isHomeGreetingMessage(item) &&
-      !looksLikeSystemText(item.text) &&
-      !isWelcomeBackLine(item.text),
-  )
-  if (real.length === 0) return ''
-  const lastUser = [...real].reverse().find((item) => item.speaker === 'user')
-  if (lastUser) {
-    const label = topicLabel(lastUser.text)
-    if (label) return label
-  }
-  const lastKea = [...real].reverse().find((item) => item.speaker === 'kea')
-  if (lastKea) {
-    const label = topicLabel(lastKea.text)
-    if (label) return label
-  }
-  return ''
-}
-
-function recentTopicPhrase(messages: TranscriptMessage[]): string {
-  const open = getOpenChatTopic()
-  if (open) {
-    const label = topicFromStored(open)
-    if (label) return label
-  }
-  const fromChat = recallFromTranscript(messages)
-  if (fromChat) return fromChat
-  const topics = getChatTopics().filter((topic) => !isSampleTopicId(topic.id))
-  for (const topic of topics) {
-    const label = topicFromStored(topic)
-    if (label) return label
-  }
-  return ''
-}
-
 const WELCOME_BACK: Record<
   string,
   {
-    withTopic: (topic: string) => { spoken: string; english: string }
+    withAbout: (about: string) => { spoken: string; english: string }
     plain: () => { spoken: string; english: string }
   }
 > = {
   en: {
-    withTopic: (topic) => ({
-      spoken: `Welcome back. We were talking about ${topic}. Shall we continue?`,
-      english: `Welcome back. We were talking about ${topic}. Shall we continue?`,
+    withAbout: (about) => ({
+      spoken: `Welcome back. ${about}. Shall we continue?`,
+      english: `Welcome back. ${about}. Shall we continue?`,
     }),
     plain: () => ({
       spoken: 'Welcome back. Shall we pick up where we left off?',
@@ -219,9 +135,9 @@ const WELCOME_BACK: Record<
     }),
   },
   es: {
-    withTopic: (topic) => ({
-      spoken: `¡Qué bueno que volviste! Estábamos hablando de ${topic}. ¿Seguimos?`,
-      english: `Welcome back. We were talking about ${topic}. Shall we continue?`,
+    withAbout: (about) => ({
+      spoken: `¡Qué bueno que volviste! ${about}. ¿Seguimos?`,
+      english: `Welcome back. ${about}. Shall we continue?`,
     }),
     plain: () => ({
       spoken: '¡Qué bueno que volviste! ¿Seguimos donde lo dejamos?',
@@ -229,9 +145,9 @@ const WELCOME_BACK: Record<
     }),
   },
   fr: {
-    withTopic: (topic) => ({
-      spoken: `Content de te revoir. On parlait de ${topic}. On continue ?`,
-      english: `Welcome back. We were talking about ${topic}. Shall we continue?`,
+    withAbout: (about) => ({
+      spoken: `Content de te revoir. ${about}. On continue ?`,
+      english: `Welcome back. ${about}. Shall we continue?`,
     }),
     plain: () => ({
       spoken: 'Content de te revoir. On reprend où on s’était arrêté ?',
@@ -239,9 +155,9 @@ const WELCOME_BACK: Record<
     }),
   },
   de: {
-    withTopic: (topic) => ({
-      spoken: `Willkommen zurück. Wir haben über ${topic} gesprochen. Machen wir weiter?`,
-      english: `Welcome back. We were talking about ${topic}. Shall we continue?`,
+    withAbout: (about) => ({
+      spoken: `Willkommen zurück. ${about}. Machen wir weiter?`,
+      english: `Welcome back. ${about}. Shall we continue?`,
     }),
     plain: () => ({
       spoken: 'Willkommen zurück. Machen wir dort weiter, wo wir aufgehört haben?',
@@ -249,15 +165,67 @@ const WELCOME_BACK: Record<
     }),
   },
   ru: {
-    withTopic: (topic) => ({
-      spoken: `С возвращением. Мы говорили о ${topic}. Продолжим?`,
-      english: `Welcome back. We were talking about ${topic}. Shall we continue?`,
+    withAbout: (about) => ({
+      spoken: `С возвращением. ${about}. Продолжим?`,
+      english: `Welcome back. ${about}. Shall we continue?`,
     }),
     plain: () => ({
       spoken: 'С возвращением. Продолжим с того места, где остановились?',
       english: 'Welcome back. Shall we pick up where we left off?',
     }),
   },
+}
+
+/** Localize the English recall beat into the learning language when we can. */
+function localizeAbout(
+  lang: string,
+  recall: { topic: string; nature: string; spokenAbout: string },
+): { spoken: string; english: string } {
+  const topic = recall.topic
+  const nature = recall.nature
+  const english = recall.spokenAbout
+
+  if (lang === 'en' || !topic) {
+    return { spoken: english, english }
+  }
+
+  if (lang === 'es') {
+    const spoken = nature
+      ? nature.startsWith('you were saying')
+        ? `Estábamos hablando de ${topic} — decías ${nature.replace(/^you were saying\s+/i, '')}`
+        : nature.startsWith('I had just asked')
+          ? `Estábamos hablando de ${topic} — te preguntaba por ${nature.replace(/^I had just asked about\s+/i, '')}`
+          : `Estábamos hablando de ${topic} — ${nature}`
+      : `Estábamos hablando de ${topic}`
+    return { spoken, english }
+  }
+
+  if (lang === 'fr') {
+    const spoken = nature
+      ? nature.startsWith('you were saying')
+        ? `On parlait de ${topic} — tu disais ${nature.replace(/^you were saying\s+/i, '')}`
+        : `On parlait de ${topic} — ${nature}`
+      : `On parlait de ${topic}`
+    return { spoken, english }
+  }
+
+  if (lang === 'de') {
+    const spoken = nature
+      ? nature.startsWith('you were saying')
+        ? `Wir haben über ${topic} gesprochen — du hast gesagt ${nature.replace(/^you were saying\s+/i, '')}`
+        : `Wir haben über ${topic} gesprochen — ${nature}`
+      : `Wir haben über ${topic} gesprochen`
+    return { spoken, english }
+  }
+
+  if (lang === 'ru') {
+    const spoken = nature
+      ? `Мы говорили о ${topic} — ${nature}`
+      : `Мы говорили о ${topic}`
+    return { spoken, english }
+  }
+
+  return { spoken: english, english }
 }
 
 export function isFreshTalkSession(messages: TranscriptMessage[]) {
@@ -281,7 +249,6 @@ export function buildStartSpeechLine(options: {
     const variants = WELCOME_VARIANTS[lang] ?? WELCOME_VARIANTS.en
     const pick = variants[Math.floor(Math.random() * variants.length)]
     const line = pick(name)
-    // Fallback if somehow empty
     if (!line.spoken.trim()) {
       const spoken = spokenHomeGreeting(lang, name)
       return {
@@ -297,9 +264,22 @@ export function buildStartSpeechLine(options: {
     }
   }
 
-  const topic = recentTopicPhrase(options.messages)
+  const recall = describeLastChat(options.messages, {
+    openTopic: getOpenChatTopic(),
+    recentTopics: getChatTopics(),
+  })
   const pack = WELCOME_BACK[lang] ?? WELCOME_BACK.en
-  const line = topic ? pack.withTopic(topic) : pack.plain()
+  if (recall.spokenAbout) {
+    const about = localizeAbout(lang, recall)
+    const line = pack.withAbout(about.spoken)
+    return {
+      spoken: line.spoken,
+      english: lang === 'en' ? undefined : pack.withAbout(about.english).english,
+      kind: 'welcome-back',
+    }
+  }
+
+  const line = pack.plain()
   return {
     spoken: line.spoken,
     english: lang === 'en' ? undefined : line.english,

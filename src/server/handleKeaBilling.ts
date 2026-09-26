@@ -1,7 +1,19 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import {
+  isKeaPlanId,
+  normalizeSubscriptionStatus,
+  planFromSubscriptionObject,
+  planIdFromPriceId,
+  upsertBillingProfile,
+  type KeaPlanId,
+} from './keaStripeBilling'
 
 type BillingEnv = {
   STRIPE_SECRET_KEY?: string
+  STRIPE_WEBHOOK_SECRET?: string
+  SUPABASE_URL?: string
+  SUPABASE_SERVICE_ROLE_KEY?: string
 }
 
 type CheckoutPayload = {
@@ -9,6 +21,7 @@ type CheckoutPayload = {
   planName?: string
   monthlyPrice?: number
   email?: string
+  userId?: string
   successUrl?: string
   cancelUrl?: string
   stripePriceId?: string
@@ -31,6 +44,11 @@ function json(res: ServerResponse, status: number, body: unknown) {
 
 function pathOf(req: IncomingMessage) {
   return (req.url ?? '').split('?')[0] ?? ''
+}
+
+function header(req: IncomingMessage, name: string) {
+  const raw = req.headers[name.toLowerCase()]
+  return Array.isArray(raw) ? raw[0] : raw
 }
 
 async function stripeForm(
@@ -58,6 +76,59 @@ async function stripeGet(apiKey: string, path: string) {
   return { ok: response.ok, data }
 }
 
+function verifyStripeWebhook(
+  rawBody: Buffer,
+  signatureHeader: string | undefined,
+  secret: string,
+) {
+  if (!signatureHeader || !secret) return false
+  const parts = signatureHeader.split(',').map((piece) => piece.trim())
+  const stamp = parts.find((piece) => piece.startsWith('t='))?.slice(2)
+  const v1 = parts.find((piece) => piece.startsWith('v1='))?.slice(3)
+  if (!stamp || !v1) return false
+  const age = Math.abs(Date.now() / 1000 - Number(stamp))
+  if (!Number.isFinite(age) || age > 300) return false
+  const expected = createHmac('sha256', secret)
+    .update(`${stamp}.${rawBody.toString('utf8')}`)
+    .digest('hex')
+  try {
+    const a = Buffer.from(expected, 'utf8')
+    const b = Buffer.from(v1, 'utf8')
+    if (a.length !== b.length) return false
+    return timingSafeEqual(a, b)
+  } catch {
+    return false
+  }
+}
+
+function stripeErrorMessage(data: Record<string, unknown>) {
+  if (
+    typeof data.error === 'object' &&
+    data.error &&
+    'message' in data.error
+  ) {
+    return String((data.error as { message?: string }).message)
+  }
+  return ''
+}
+
+async function applySubscriptionToProfile(
+  env: BillingEnv,
+  sub: Record<string, unknown>,
+  extras: { customerId?: string | null; email?: string | null; userId?: string | null } = {},
+) {
+  const parsed = planFromSubscriptionObject(sub)
+  return upsertBillingProfile(env, {
+    userId: extras.userId || parsed.userId,
+    customerId: extras.customerId || parsed.customerId,
+    subscriptionId: parsed.subscriptionId,
+    planId: parsed.planId,
+    status: parsed.status,
+    currentPeriodEnd: parsed.currentPeriodEnd,
+    email: extras.email,
+  })
+}
+
 export async function handleKeaBilling(
   req: IncomingMessage,
   res: ServerResponse,
@@ -69,14 +140,142 @@ export async function handleKeaBilling(
 
   if (path.endsWith('/webhook') && method === 'POST') {
     const raw = await readBody(req)
-    let event: { type?: string; data?: { object?: Record<string, unknown> } }
+    const secret = env.STRIPE_WEBHOOK_SECRET?.trim()
+    if (!secret) {
+      json(res, 501, {
+        error: 'STRIPE_WEBHOOK_SECRET is not set for Kea.',
+      })
+      return
+    }
+    const signature = header(req, 'stripe-signature')
+    if (!verifyStripeWebhook(raw, signature, secret)) {
+      json(res, 400, { error: 'Invalid Stripe signature' })
+      return
+    }
+    let event: {
+      type?: string
+      data?: { object?: Record<string, unknown> }
+    }
     try {
       event = JSON.parse(raw.toString('utf8')) as typeof event
     } catch {
-      json(res, 400, { error: 'Invalid webhook' })
+      json(res, 400, { error: 'Invalid webhook JSON' })
       return
     }
-    json(res, 200, { received: true, type: event.type ?? '' })
+    const type = event.type ?? ''
+    const object = event.data?.object ?? {}
+
+    try {
+      if (type === 'checkout.session.completed') {
+        const session = object
+        const meta = (session.metadata ?? {}) as Record<string, string>
+        const planId = isKeaPlanId(meta.planId)
+          ? meta.planId
+          : isKeaPlanId(session.client_reference_id)
+            ? (session.client_reference_id as KeaPlanId)
+            : null
+        const userId =
+          (typeof meta.userId === 'string' && meta.userId) ||
+          (typeof session.client_reference_id === 'string' &&
+          !isKeaPlanId(session.client_reference_id)
+            ? session.client_reference_id
+            : null)
+        const customerId =
+          typeof session.customer === 'string' ? session.customer : null
+        const subscriptionId =
+          typeof session.subscription === 'string' ? session.subscription : null
+        const email =
+          typeof session.customer_email === 'string'
+            ? session.customer_email
+            : typeof session.customer_details === 'object' &&
+                session.customer_details &&
+                typeof (session.customer_details as { email?: string }).email ===
+                  'string'
+              ? (session.customer_details as { email: string }).email
+              : null
+
+        let resolvedPlan = planId
+        let status = normalizeSubscriptionStatus('active')
+        let periodEnd: string | null = null
+        if (subscriptionId && key) {
+          const { ok, data } = await stripeGet(key, `subscriptions/${subscriptionId}`)
+          if (ok) {
+            const parsed = planFromSubscriptionObject(data)
+            resolvedPlan = parsed.planId || resolvedPlan
+            status = parsed.status
+            periodEnd = parsed.currentPeriodEnd
+          }
+        }
+        await upsertBillingProfile(env, {
+          userId,
+          customerId,
+          subscriptionId,
+          planId: resolvedPlan,
+          status,
+          currentPeriodEnd: periodEnd,
+          email,
+        })
+      } else if (
+        type === 'customer.subscription.updated' ||
+        type === 'customer.subscription.created' ||
+        type === 'customer.subscription.deleted'
+      ) {
+        const parsed = planFromSubscriptionObject(object)
+        const status =
+          type === 'customer.subscription.deleted'
+            ? normalizeSubscriptionStatus('canceled')
+            : parsed.status
+        await upsertBillingProfile(env, {
+          userId: parsed.userId,
+          customerId: parsed.customerId,
+          subscriptionId: parsed.subscriptionId,
+          planId: parsed.planId,
+          status,
+          currentPeriodEnd: parsed.currentPeriodEnd,
+        })
+      } else if (type === 'invoice.payment_failed') {
+        const invoice = object
+        const customerId =
+          typeof invoice.customer === 'string' ? invoice.customer : null
+        const subscriptionId =
+          typeof invoice.subscription === 'string' ? invoice.subscription : null
+        let planId: KeaPlanId | null = null
+        if (subscriptionId && key) {
+          const { ok, data } = await stripeGet(key, `subscriptions/${subscriptionId}`)
+          if (ok) {
+            const parsed = planFromSubscriptionObject(data)
+            planId = parsed.planId
+            await applySubscriptionToProfile(env, {
+              ...data,
+              status: 'past_due',
+            }, { customerId })
+            json(res, 200, { received: true, type })
+            return
+          }
+        }
+        await upsertBillingProfile(env, {
+          customerId,
+          subscriptionId,
+          planId,
+          status: 'past_due',
+        })
+      } else if (type === 'invoice.paid') {
+        const invoice = object
+        const subscriptionId =
+          typeof invoice.subscription === 'string' ? invoice.subscription : null
+        if (subscriptionId && key) {
+          const { ok, data } = await stripeGet(key, `subscriptions/${subscriptionId}`)
+          if (ok) await applySubscriptionToProfile(env, data)
+        }
+      }
+    } catch (caught) {
+      json(res, 500, {
+        error: caught instanceof Error ? caught.message : 'Webhook handler failed',
+      })
+      return
+    }
+
+    json(res, 200, { received: true, type })
     return
   }
 
@@ -101,20 +300,41 @@ export async function handleKeaBilling(
       json(res, 400, { error: 'Need a plan and a monthly price.' })
       return
     }
+    if (!isKeaPlanId(payload.planId)) {
+      json(res, 400, { error: 'Unknown Kea plan.' })
+      return
+    }
     const success =
       payload.successUrl?.trim() ||
-      'http://localhost:5173/subscription?checkout=success'
+      'https://kea.chat/subscription?checkout=success'
     const cancel =
       payload.cancelUrl?.trim() ||
-      'http://localhost:5173/subscription?checkout=cancel'
+      'https://kea.chat/subscription?checkout=cancel'
     const joiner = success.includes('?') ? '&' : '?'
     const form = new URLSearchParams()
+    // Checkout Studio fixed_by_ui (+ Kea sample_only values already real below).
+    form.set('ui_mode', 'hosted_page')
     form.set('mode', 'subscription')
+    form.set('billing_address_collection', 'auto')
+    form.set('phone_number_collection[enabled]', 'false')
+    form.set('automatic_tax[enabled]', 'false')
+    form.set('allow_promotion_codes', 'true')
+    form.set('payment_method_collection', 'always')
+    form.set('submit_type', 'auto')
+    form.set('saved_payment_method_options[payment_method_save]', 'enabled')
+    form.set('integration_identifier', 'hosted_web_0001')
+    form.set('origin_context', 'web')
     form.set('success_url', `${success}${joiner}session_id={CHECKOUT_SESSION_ID}`)
     form.set('cancel_url', cancel)
-    form.set('client_reference_id', payload.planId)
     form.set('metadata[planId]', payload.planId)
     form.set('subscription_data[metadata][planId]', payload.planId)
+    if (payload.userId?.trim()) {
+      form.set('client_reference_id', payload.userId.trim())
+      form.set('metadata[userId]', payload.userId.trim())
+      form.set('subscription_data[metadata][userId]', payload.userId.trim())
+    } else {
+      form.set('client_reference_id', payload.planId)
+    }
     if (payload.email?.trim()) form.set('customer_email', payload.email.trim())
     if (payload.stripePriceId?.trim()) {
       form.set('line_items[0][price]', payload.stripePriceId.trim())
@@ -128,16 +348,15 @@ export async function handleKeaBilling(
         'line_items[0][price_data][product_data][name]',
         `Kea ${payload.planName || payload.planId}`,
       )
+      form.set(
+        'line_items[0][price_data][product_data][metadata][kea_plan_id]',
+        payload.planId,
+      )
     }
     const { ok, data } = await stripeForm(key, 'checkout/sessions', form)
     if (!ok) {
       json(res, 502, {
-        error:
-          typeof data.error === 'object' &&
-          data.error &&
-          'message' in data.error
-            ? String((data.error as { message?: string }).message)
-            : 'Stripe checkout failed',
+        error: stripeErrorMessage(data) || 'Stripe checkout failed',
       })
       return
     }
@@ -157,13 +376,57 @@ export async function handleKeaBilling(
       return
     }
     const meta = (data.metadata ?? {}) as Record<string, string>
+    let planId =
+      (isKeaPlanId(meta.planId) && meta.planId) ||
+      (isKeaPlanId(data.client_reference_id) ? data.client_reference_id : '')
+    const subscriptionId =
+      typeof data.subscription === 'string' ? data.subscription : ''
+    let subscriptionStatus = ''
+    let currentPeriodEnd: string | null = null
+    if (subscriptionId) {
+      const sub = await stripeGet(key, `subscriptions/${subscriptionId}`)
+      if (sub.ok) {
+        const parsed = planFromSubscriptionObject(sub.data)
+        if (parsed.planId) planId = parsed.planId
+        subscriptionStatus = parsed.status
+        currentPeriodEnd = parsed.currentPeriodEnd
+        const linePrice =
+          (
+            sub.data.items as
+              | { data?: Array<{ price?: { id?: string } }> }
+              | undefined
+          )?.data?.[0]?.price?.id ?? ''
+        if (!planId) planId = planIdFromPriceId(linePrice) || ''
+      }
+    }
+    const paid =
+      data.payment_status === 'paid' ||
+      data.status === 'complete' ||
+      subscriptionStatus === 'active' ||
+      subscriptionStatus === 'trialing'
+
+    // Best-effort cloud sync when the browser confirms checkout.
+    if (paid) {
+      await upsertBillingProfile(env, {
+        userId: typeof meta.userId === 'string' ? meta.userId : null,
+        customerId: typeof data.customer === 'string' ? data.customer : null,
+        subscriptionId: subscriptionId || null,
+        planId: isKeaPlanId(planId) ? planId : null,
+        status: normalizeSubscriptionStatus(subscriptionStatus || 'active'),
+        currentPeriodEnd,
+        email:
+          typeof data.customer_email === 'string' ? data.customer_email : null,
+      })
+    }
+
     json(res, 200, {
-      paid:
-        data.payment_status === 'paid' ||
-        data.status === 'complete',
-      planId: meta.planId || data.client_reference_id || '',
+      paid,
+      planId,
       customer: data.customer ?? '',
-      subscription: data.subscription ?? '',
+      subscription: subscriptionId,
+      subscriptionStatus: subscriptionStatus || (paid ? 'active' : ''),
+      currentPeriodEnd,
+      userId: meta.userId || '',
     })
     return
   }
@@ -184,11 +447,13 @@ export async function handleKeaBilling(
     form.set('customer', payload.customerId)
     form.set(
       'return_url',
-      payload.returnUrl?.trim() || 'http://localhost:5173/subscription',
+      payload.returnUrl?.trim() || 'https://kea.chat/subscription',
     )
     const { ok, data } = await stripeForm(key, 'billing_portal/sessions', form)
     if (!ok) {
-      json(res, 502, { error: 'Could not open the billing portal' })
+      json(res, 502, {
+        error: stripeErrorMessage(data) || 'Could not open the billing portal',
+      })
       return
     }
     json(res, 200, { url: data.url })

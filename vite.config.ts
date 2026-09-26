@@ -113,6 +113,9 @@ function keaApiPlugin(env: Record<string, string>): Plugin {
       if (url.startsWith('/api/billing')) {
         void handleKeaBilling(req, res, {
           STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
+          STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
+          SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
         })
         return
       }

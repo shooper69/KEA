@@ -5,7 +5,9 @@ import { AdminAboutPage } from './pages/AdminAboutPage'
 import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminLeaveFunnelPage } from './pages/AdminLeaveFunnelPage'
 import { AdminOffersPage } from './pages/AdminOffersPage'
+import { AdminOnboardingPage } from './pages/AdminOnboardingPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
+import { AdminStripePage } from './pages/AdminStripePage'
 import { AdminVoiceManagementPage } from './pages/AdminVoiceManagementPage'
 import { AdminVoiceTesterPage } from './pages/AdminVoiceTesterPage'
 import { AdminWebsiteTrackerPage } from './pages/AdminWebsiteTrackerPage'
@@ -13,6 +15,7 @@ import { AboutKeaPage } from './pages/AboutKeaPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
 import { LearnListPage } from './pages/LearnListPage'
+import { PerformancePage } from './pages/PerformancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SubscriptionPage } from './pages/SubscriptionPage'
 import { SupportPage } from './pages/SupportPage'
@@ -95,8 +98,16 @@ export default function App() {
           <Route
             path="/topics"
             element={
-              <RequireOnboard>
+              <RequireAdmin>
                 <ChatTopicsPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/performance"
+            element={
+              <RequireOnboard>
+                <PerformancePage />
               </RequireOnboard>
             }
           />
@@ -146,6 +157,7 @@ export default function App() {
             <Route index element={<AdminOverview />} />
             <Route path="about" element={<AdminAboutPage />} />
             <Route path="offers" element={<AdminOffersPage />} />
+            <Route path="onboarding" element={<AdminOnboardingPage />} />
             <Route path="leave-funnel" element={<AdminLeaveFunnelPage />} />
             <Route path="voices" element={<AdminVoiceTesterPage />} />
             <Route
@@ -153,6 +165,7 @@ export default function App() {
               element={<AdminVoiceManagementPage />}
             />
             <Route path="tiers" element={<AdminPlansPage />} />
+            <Route path="stripe" element={<AdminStripePage />} />
             <Route path="costs" element={<AdminCostAnalysisPage />} />
             <Route path="website-tracker" element={<AdminWebsiteTrackerPage />} />
           </Route>

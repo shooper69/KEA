@@ -21,7 +21,7 @@ import {
 import { getWelcomeTitle } from '../data/keaWelcomeTitle'
 import { useSession } from '../context/SessionContext'
 import { isPasswordRecoveryLocation } from '../services/keaProfile'
-import { speakManagedVoice, speakKeaLine, stopKeaSpeech } from '../services/keaSpeak'
+import { speakManagedVoice, speakKeaLine, stopKeaSpeech, prefetchManagedVoiceAudio } from '../services/keaSpeak'
 import type { LanguageCode } from '../types'
 
 function isEmail(value: string) {
@@ -242,13 +242,27 @@ export function WelcomePage() {
       const locale = getLanguage(code).speechLocale
       const introVoice = getMarketingIntroVoice()
       let spokenSoFar = ''
+      /** Prefetch next paragraph while the current one plays — cuts the gap. */
+      let nextUrl: Promise<string | null> | null =
+        introVoice && paragraphs.length > 0
+          ? prefetchManagedVoiceAudio(introVoice, paragraphs[0])
+          : null
+      const gapMs = 90
 
-      for (const paragraph of paragraphs) {
+      for (let index = 0; index < paragraphs.length; index++) {
         if (runId !== introRunId.current) return
+        const paragraph = paragraphs[index]
         const prefix = spokenSoFar
+        const prefetchedUrl = nextUrl ? await nextUrl : null
+        nextUrl =
+          introVoice && index + 1 < paragraphs.length
+            ? prefetchManagedVoiceAudio(introVoice, paragraphs[index + 1])
+            : null
+
         await new Promise<void>((resolve) => {
           const opts = {
             lang: locale,
+            prefetchedUrl,
             onCharIndex: (charIndex: number) => {
               if (runId !== introRunId.current) return
               const piece = snapToWordEnd(paragraph, charIndex)
@@ -274,6 +288,9 @@ export function WelcomePage() {
           ? `${spokenSoFar}\n\n${paragraph}`
           : paragraph
         setVisibleCopy(spokenSoFar)
+        if (index + 1 < paragraphs.length && runId === introRunId.current) {
+          await new Promise((resolve) => window.setTimeout(resolve, gapMs))
+        }
       }
     } finally {
       if (runId === introRunId.current) setIntroBusy(false)

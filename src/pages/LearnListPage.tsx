@@ -95,23 +95,19 @@ export function LearnListPage() {
           <ul className="memory-library__list">
             {words.map((item) => (
               <li key={item.id} className="memory-library__card">
-                <p className="memory-library__pair">
-                  <span className="memory-library__native">{item.term}</span>
-                  {item.translation ? (
-                    <>
-                      <span className="memory-library__sep" aria-hidden="true">
-                        {' '}
-                        ·{' '}
-                      </span>
+                <div className="memory-library__row">
+                  <p className="memory-library__pair">
+                    <span className="memory-library__native">{item.term}</span>
+                    {item.translation ? (
                       <span className="memory-library__target">
                         {item.translation}
                       </span>
-                    </>
-                  ) : null}
-                </p>
-                <p className="memory-library__count">
-                  Used well {item.practiceCount}/{need}
-                </p>
+                    ) : null}
+                  </p>
+                  <p className="memory-library__count">
+                    Used well {item.practiceCount}/{need}
+                  </p>
+                </div>
               </li>
             ))}
           </ul>

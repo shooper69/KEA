@@ -19,17 +19,23 @@ export function PaywallModal({
     return <OfferPopup offer={offer} tone="limit" onClose={onClose} />
   }
 
-  const expired = reason === 'trial-expired'
+  const expired = reason === 'trial-expired' || reason === 'canceled'
   return (
     <div className="paywall" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
       <div className="paywall__card">
         <h2 id="paywall-title">
-          {expired ? 'Your trial has expired' : 'That’s all for today'}
+          {reason === 'canceled'
+            ? 'Subscription ended'
+            : expired
+              ? 'Your trial has expired'
+              : 'That’s all for today'}
         </h2>
         <p>
-          {expired
-            ? 'Now proceed to Subscriptions to pay, and you can keep talking with Kea.'
-            : 'You have used today’s conversation time. Come back tomorrow, or pick a higher plan.'}
+          {reason === 'canceled'
+            ? 'Your Kea subscription is no longer active. Choose a plan to keep talking.'
+            : expired
+              ? 'Now proceed to Subscriptions to pay, and you can keep talking with Kea.'
+              : 'You have used today’s conversation time. Come back tomorrow, or pick a higher plan.'}
         </p>
         <div className="paywall__actions">
           <Link className="kea-button" to="/subscription" onClick={onClose}>
@@ -53,7 +59,11 @@ export function useTalkGate(isAdmin: boolean) {
       setBlock(null)
       return
     }
-    if (access.reason === 'trial-expired' || access.reason === 'daily-limit') {
+    if (
+      access.reason === 'trial-expired' ||
+      access.reason === 'daily-limit' ||
+      access.reason === 'canceled'
+    ) {
       setBlock(access.reason)
     }
   }, [isAdmin])

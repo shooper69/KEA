@@ -4,9 +4,11 @@ import {
   getSpeechRecognition,
   heardKeaWake,
   speechRecognitionAvailable,
+  speechRecognitionPings,
 } from '../architecture/keaWakeWord'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import { looksLikeWhisperHallucination } from '../architecture/whisperText'
+import { isKeaReplayActive } from '../services/keaSpeak'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 
 interface UseKeaWakeWordOptions {
@@ -18,12 +20,13 @@ const SPEECH_RMS_FLOOR = 0.04
 const SPEECH_HOLD_MS = 420
 const SHOT_COOLDOWN_MS = 3500
 const WAKE_SILENCE_MS = 520
-const MIN_SPEECH_BURST_MS = 720
-const MAX_UTTERANCE_MS = 3000
+/** “Hey Kea” is short — don’t require a long burst before checking. */
+const MIN_SPEECH_BURST_MS = 480
+const MAX_UTTERANCE_MS = 2800
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
-const MIN_WAKE_BLOB = 2200
+const MIN_WAKE_BLOB = 1800
 /** Soft floor only for non-wake noise; matching "Hey Kea" bypasses this. */
 const MIN_WAKE_CONFIDENCE = 0.28
 const MIN_WAKE_MATCH_CONFIDENCE = 0.12
@@ -64,7 +67,9 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
 
   useEffect(() => {
     const Ctor = getSpeechRecognition()
-    const preferSpeech = Boolean(Ctor)
+    // Phones: Energy gate + Whisper only. Browser SpeechRecognition pings and
+    // often fails / permanently disables wake on mobile.
+    const preferSpeech = Boolean(Ctor) && !speechRecognitionPings()
     const canWhisper =
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia)
@@ -339,9 +344,13 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         next.onerror = (event) => {
           const err = event.error || ''
           logWake('speech error', err)
+          // Permission denied: stop. Other errors (no-speech, network, aborted)
+          // must not kill wake forever — fall back to energy + Whisper.
           if (err === 'not-allowed' || err === 'service-not-allowed') {
-            dead = true
-            setArmed(false)
+            if (!canWhisper) {
+              dead = true
+              setArmed(false)
+            }
           }
         }
         next.onend = () => {
@@ -394,6 +403,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           raf = requestAnimationFrame(tick)
           if (dead || waking || cancelled || !enabledRef.current) return
           if (listeningShot) return
+          if (isKeaReplayActive()) return
           if (!analyser) return
           if (audioContext?.state === 'suspended') {
             void audioContext.resume()

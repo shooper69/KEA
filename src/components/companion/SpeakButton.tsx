@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 import { getLanguage } from '../../config/languages'
-import { speakKeaLine } from '../../services/keaSpeak'
+import { speakKeaReplay } from '../../services/keaSpeak'
 import type { LanguageCode } from '../../types'
 
 interface SpeakButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -32,6 +32,7 @@ export function SpeakButton({
   languageCode,
   label = 'Hear this',
   className = '',
+  onClick,
   ...props
 }: SpeakButtonProps) {
   return (
@@ -40,14 +41,15 @@ export function SpeakButton({
       className={`speak-button ${className}`.trim()}
       aria-label={label}
       title={label}
+      {...props}
       onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
-        void speakKeaLine(text, {
+        onClick?.(event)
+        void speakKeaReplay(text, {
           lang: getLanguage(languageCode).speechLocale,
         })
       }}
-      {...props}
     >
       <SpeakerIcon />
     </button>

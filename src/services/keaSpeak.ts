@@ -9,11 +9,35 @@ let currentAudio: HTMLAudioElement | null = null
 let progressRaf = 0
 /** Bumped on stop / new speak so late TTS blobs never play over a newer line. */
 let speakGeneration = 0
+/** Paragraph speaker-icon replay — must not tear down the live chat session. */
+let replayDepth = 0
+
+export const KEA_REPLAY_START = 'kea-replay-start'
+export const KEA_REPLAY_END = 'kea-replay-end'
 
 function clearAudioProgress() {
   if (progressRaf) {
     cancelAnimationFrame(progressRaf)
     progressRaf = 0
+  }
+}
+
+export function isKeaReplayActive() {
+  return replayDepth > 0
+}
+
+function beginReplay() {
+  replayDepth += 1
+  if (replayDepth === 1) {
+    window.dispatchEvent(new Event(KEA_REPLAY_START))
+  }
+}
+
+function endReplay() {
+  if (replayDepth <= 0) return
+  replayDepth -= 1
+  if (replayDepth === 0) {
+    window.dispatchEvent(new Event(KEA_REPLAY_END))
   }
 }
 
@@ -34,6 +58,57 @@ type SpeakOptions = {
   onerror?: () => void
   /** Character offset into `text` as speech progresses (for reveal-as-spoken). */
   onCharIndex?: (charIndex: number) => void
+  /** Optional pre-fetched OpenAI TTS object URL (from prefetchManagedVoiceAudio). */
+  prefetchedUrl?: string | null
+}
+
+/** Fetch OpenAI TTS ahead of time so marketing paragraphs can chain tightly. */
+export async function prefetchManagedVoiceAudio(
+  voice: ManagedVoice,
+  text: string,
+): Promise<string | null> {
+  if (voice.provider !== 'openai' || !voice.openaiVoice || !text.trim()) {
+    return null
+  }
+  try {
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice: voice.openaiVoice, text }),
+    })
+    if (!response.ok) return null
+    const blob = await response.blob()
+    return URL.createObjectURL(blob)
+  } catch {
+    return null
+  }
+}
+
+function playBlobUrl(
+  url: string,
+  text: string,
+  gen: number,
+  options: SpeakOptions,
+  revoke: boolean,
+) {
+  const audio = new Audio(url)
+  currentAudio = audio
+  options.onCharIndex?.(0)
+  audio.onplay = () => trackAudioProgress(audio, text, options.onCharIndex)
+  audio.onended = () => {
+    clearAudioProgress()
+    options.onCharIndex?.(text.length)
+    if (revoke) URL.revokeObjectURL(url)
+    if (currentAudio === audio) currentAudio = null
+    if (gen === speakGeneration) options.onend?.()
+  }
+  audio.onerror = () => {
+    clearAudioProgress()
+    if (revoke) URL.revokeObjectURL(url)
+    if (currentAudio === audio) currentAudio = null
+    if (gen === speakGeneration) options.onerror?.()
+  }
+  return audio.play()
 }
 
 function trackAudioProgress(
@@ -66,6 +141,13 @@ export async function speakManagedVoice(
   const gen = speakGeneration
   if (voice.provider === 'openai' && voice.openaiVoice) {
     try {
+      if (options.prefetchedUrl) {
+        await playBlobUrl(options.prefetchedUrl, text, gen, options, true)
+        if (gen !== speakGeneration) {
+          // stopKeaSpeech already cleared currentAudio
+        }
+        return
+      }
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,33 +161,13 @@ export async function speakManagedVoice(
       const blob = await response.blob()
       if (gen !== speakGeneration) return
       const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
       if (gen !== speakGeneration) {
         URL.revokeObjectURL(url)
         return
       }
-      currentAudio = audio
-      options.onCharIndex?.(0)
-      audio.onplay = () => trackAudioProgress(audio, text, options.onCharIndex)
-      audio.onended = () => {
-        clearAudioProgress()
-        options.onCharIndex?.(text.length)
-        URL.revokeObjectURL(url)
-        if (currentAudio === audio) currentAudio = null
-        if (gen === speakGeneration) options.onend?.()
-      }
-      audio.onerror = () => {
-        clearAudioProgress()
-        URL.revokeObjectURL(url)
-        if (currentAudio === audio) currentAudio = null
-        if (gen === speakGeneration) options.onerror?.()
-      }
-      await audio.play()
+      await playBlobUrl(url, text, gen, options, true)
       if (gen !== speakGeneration) {
-        audio.pause()
-        audio.src = ''
-        if (currentAudio === audio) currentAudio = null
-        URL.revokeObjectURL(url)
+        // interrupted
       }
     } catch {
       if (gen === speakGeneration) options.onerror?.()
@@ -140,4 +202,47 @@ export async function speakKeaLine(
     return
   }
   await speakManagedVoice(voice, text, options)
+}
+
+/**
+ * Replay a paragraph from the speaker icon. Keeps the chat session alive —
+ * phones often fire visibility/freeze while TTS starts; those must not stop Kea.
+ */
+export async function speakKeaReplay(
+  text: string,
+  options: SpeakOptions = {},
+) {
+  const trimmed = text.trim()
+  if (!trimmed) return
+  // A new tap cancels the previous replay without waiting for its onend
+  // (stopKeaSpeech bumps the generation so the old callbacks are skipped).
+  if (replayDepth > 0) {
+    replayDepth = 0
+    window.dispatchEvent(new Event(KEA_REPLAY_END))
+  }
+  beginReplay()
+  let settled = false
+  let safety = 0
+  const finish = (ok: boolean) => {
+    if (settled) return
+    settled = true
+    window.clearTimeout(safety)
+    endReplay()
+    if (ok) options.onend?.()
+    else options.onerror?.()
+  }
+  safety = window.setTimeout(
+    () => finish(true),
+    Math.min(22_000, 2_400 + trimmed.length * 90),
+  )
+  try {
+    await speakKeaLine(trimmed, {
+      lang: options.lang,
+      onCharIndex: options.onCharIndex,
+      onend: () => finish(true),
+      onerror: () => finish(false),
+    })
+  } catch {
+    finish(false)
+  }
 }

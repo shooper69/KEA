@@ -60,7 +60,17 @@ const pages: Array<[string, KeaPageSeo]> = [
       description:
         'Things you have spoken about with Kea. Pick a topic up and continue the conversation.',
       path: '/topics',
-      index: true,
+      index: false,
+    },
+  ],
+  [
+    '/performance',
+    {
+      title: 'Performance · Kea',
+      description:
+        'See how many hours you talk with Kea each day and your seven-day trend.',
+      path: '/performance',
+      index: false,
     },
   ],
   [

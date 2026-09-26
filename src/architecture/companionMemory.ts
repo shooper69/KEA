@@ -1,6 +1,17 @@
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
+import {
+  lastChatRecallPromptBlock,
+  preferTopicLabel,
+  subjectPhrase,
+} from './keaChatRecall'
+import { loadTalkTranscript } from './keaTalkMemory'
 import { looksLikeSystemText } from './whisperText'
-import type { ChatTopic, LanguageCode, LearnListItem } from '../types'
+import type {
+  ChatTopic,
+  LanguageCode,
+  LearnListItem,
+  TranscriptMessage,
+} from '../types'
 
 const LEARN_KEY = 'kea-learn-list'
 const MASTERED_KEY = 'kea-learn-mastered'
@@ -619,8 +630,10 @@ export function captureLearnRequest(
 }
 
 export function touchChatTopic(userText: string, keaReply: string) {
-  const learnt = topicLine(keaReply) || topicLine(userText)
-  const native = topicLine(userText)
+  const userSubject = subjectPhrase(userText) || topicLine(userText)
+  const keaSubject = subjectPhrase(keaReply) || topicLine(keaReply)
+  const learnt = keaSubject || userSubject
+  const native = userSubject || keaSubject
   if (!learnt && !native) return
   const now = new Date().toISOString()
   const topics = getChatTopics()
@@ -654,9 +667,10 @@ export function touchChatTopic(userText: string, keaReply: string) {
       topics.unshift(topic)
       openChatTopic(topic.id)
     } else {
-      topic.title = learnt
-      topic.nativeTitle = native
-      topic.summary = native
+      // Keep a stable subject; only upgrade labels when the new phrase is clearer.
+      topic.title = preferTopicLabel(topic.title, learnt)
+      topic.nativeTitle = preferTopicLabel(topic.nativeTitle, native)
+      topic.summary = preferTopicLabel(topic.summary, native)
       topic.lastDiscussedAt = now
       topic.discussionCount += 1
     }
@@ -710,7 +724,10 @@ export function getOpenChatTopic(): ChatTopic | null {
   return getChatTopics().find((item) => item.id === id) ?? null
 }
 
-export function memoryPromptBlock(userText = '') {
+export function memoryPromptBlock(
+  userText = '',
+  recentMessages?: TranscriptMessage[],
+) {
   const need = getLearnMasteryUses()
   const list = getLearnList()
   const learn = list
@@ -739,6 +756,14 @@ export function memoryPromptBlock(userText = '') {
 
 `
       : ''
+  const recallMessages =
+    recentMessages && recentMessages.length > 0
+      ? recentMessages
+      : loadTalkTranscript()
+  const recallBlock = lastChatRecallPromptBlock(recallMessages, {
+    openTopic: open,
+    recentTopics: topicSource,
+  })
   const quiz = looksLikeLearnListQuizRequest(userText)
   const quizBlock = quiz
     ? `LEARN LIST QUIZ (user asked to be tested — do this now):
@@ -752,7 +777,7 @@ ${learn || '(empty — say the list is empty and invite a normal chat)'}
 
 `
     : ''
-  return `${openBlock}${quizBlock}LEARN LIST (single words / short phrases only; never sentences; never mix with topics).
+  return `${openBlock}${recallBlock}${quizBlock}LEARN LIST (single words / short phrases only; never sentences; never mix with topics).
 Native language first, target language second. A word leaves after ${need} correct natural uses in the target language:
 ${learn || '(empty)'}
 

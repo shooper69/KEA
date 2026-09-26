@@ -20,14 +20,20 @@ import {
   type KeaPlanCatalog,
   type PlanId,
 } from '../../architecture/keaPlans'
-import { confirmCheckoutSession, startKeaCheckout } from '../../services/keaPay'
+import {
+  confirmCheckoutSession,
+  openKeaBillingPortal,
+  startKeaCheckout,
+} from '../../services/keaPay'
 
 export function SubscriptionPanel({
   email,
+  userId,
   isAdmin,
   onViewUsage,
 }: {
   email: string
+  userId?: string | null
   isAdmin: boolean
   onViewUsage: () => void
 }) {
@@ -35,6 +41,7 @@ export function SubscriptionPanel({
   const [access, setAccess] = useState(() => getTalkAccess(isAdmin))
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState<PlanId | null>(null)
+  const [portalBusy, setPortalBusy] = useState(false)
   const [discountDraft, setDiscountDraft] = useState(
     () => getAppliedDiscount()?.code ?? '',
   )
@@ -113,6 +120,7 @@ export function SubscriptionPanel({
       monthlyPrice: price,
       stripePriceId: percentOff > 0 ? '' : plan.stripePriceId,
       email,
+      userId: userId || undefined,
     }).catch((error: unknown) => {
       setMessage(
         error instanceof Error ? error.message : 'Could not start payment.',
@@ -121,18 +129,57 @@ export function SubscriptionPanel({
     })
   }
 
+  function manageBilling() {
+    setPortalBusy(true)
+    setMessage('')
+    void openKeaBillingPortal()
+      .catch((error: unknown) => {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not open billing portal.',
+        )
+      })
+      .finally(() => setPortalBusy(false))
+  }
+
+  const statusCopy =
+    access.status === 'active' && access.planId
+      ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatDailyMinutes(access.dailyMinutesAllowed)}.`
+      : access.status === 'past_due' && access.planId
+        ? `Payment issue on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'your plan'}. Update your card to keep talking.`
+        : access.status === 'canceled'
+          ? 'Your subscription ended. Choose a plan to talk again.'
+          : access.status === 'expired'
+            ? 'Your trial has expired. Choose a plan to keep talking.'
+            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`
+
+  const showPortal =
+    access.status === 'active' ||
+    access.status === 'past_due' ||
+    access.status === 'canceled'
+
   return (
     <section className="settings-card settings-card--plans">
       <p className="settings-note settings-note--lead">{catalog.trialBlurb}</p>
       <p className="settings-note settings-note--status">
-        {access.status === 'active' && access.planId
-          ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatDailyMinutes(access.dailyMinutesAllowed)}.`
-          : access.status === 'expired'
-            ? 'Your trial has expired. Choose a plan to keep talking.'
-            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`}{' '}
+        {statusCopy}{' '}
         <button type="button" className="settings-usage-link" onClick={onViewUsage}>
           Click here to view Usage
         </button>
+        {showPortal ? (
+          <>
+            {' · '}
+            <button
+              type="button"
+              className="settings-usage-link"
+              disabled={portalBusy}
+              onClick={manageBilling}
+            >
+              {portalBusy ? 'Opening…' : 'Manage billing'}
+            </button>
+          </>
+        ) : null}
       </p>
 
       <div className="discount-code">

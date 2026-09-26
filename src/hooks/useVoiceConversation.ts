@@ -32,8 +32,10 @@ import {
 } from '../lib/speech'
 import { askKea, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
-import { speakKeaLine, stopKeaSpeech } from '../services/keaSpeak'
+import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END } from '../services/keaSpeak'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
+import { DEFAULT_LISTEN_IDLE_SECONDS, MIN_LISTEN_IDLE_SECONDS } from '../data/keaListenIdle'
+import { heardKeaStop } from '../architecture/keaWakeWord'
 import type {
   LanguageCode,
   LearnerLevel,
@@ -104,7 +106,7 @@ export function useVoiceConversation({
   nativeLanguage,
   level,
   firstName = '',
-  listenIdleSeconds = 10,
+  listenIdleSeconds = DEFAULT_LISTEN_IDLE_SECONDS,
   answerAfterSilenceSeconds = 3,
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
@@ -205,6 +207,9 @@ export function useVoiceConversation({
 
   const pauseForBackground = useCallback(() => {
     saveTalkTranscript(historyRef.current)
+    // Speaker-icon replay can make phones briefly hide/freeze the page.
+    // Persist chat, but do not tear down the live session.
+    if (isKeaReplayActive()) return
     stopKeaSpeech()
     clearListenIdleTimer()
     clearRestartTimer()
@@ -245,9 +250,14 @@ export function useVoiceConversation({
         onLeave()
         return
       }
+      if (isKeaReplayActive()) return
       restoreTranscript()
-      setStatus('idle')
-      patchVoiceDiagnostics({ recognitionRunning: false })
+      // Real background return already cleared hands-free; don't idle a live session
+      // that survived a replay-related visibility blip.
+      if (!handsFreeRef.current) {
+        setStatus('idle')
+        patchVoiceDiagnostics({ recognitionRunning: false })
+      }
     }
     window.addEventListener('pagehide', onLeave)
     document.addEventListener('freeze', onLeave)
@@ -258,6 +268,47 @@ export function useVoiceConversation({
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [pauseForBackground, restoreTranscript])
+
+  // Soft-pause the mic while a paragraph is replayed so TTS does not kill tracks.
+  useEffect(() => {
+    let wasListening = false
+    function onReplayStart() {
+      wasListening =
+        handsFreeRef.current &&
+        (statusRef.current === 'listening' || Boolean(streamRef.current))
+      if (!wasListening) return
+      clearListenIdleTimer()
+      clearRestartTimer()
+      stoppingRecordRef.current = true
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        try {
+          recorderRef.current.stop()
+        } catch {
+          // ignore
+        }
+      }
+      recorderRef.current = null
+      chunksRef.current = []
+      stopAnalyser(false)
+      setStatus('idle')
+      patchVoiceDiagnostics({ recognitionRunning: false })
+    }
+    function onReplayEnd() {
+      if (!wasListening || !handsFreeRef.current || fatalListenRef.current) return
+      wasListening = false
+      window.setTimeout(() => {
+        if (handsFreeRef.current && !busyRef.current && !fatalListenRef.current) {
+          startListeningRef.current()
+        }
+      }, 180)
+    }
+    window.addEventListener(KEA_REPLAY_START, onReplayStart)
+    window.addEventListener(KEA_REPLAY_END, onReplayEnd)
+    return () => {
+      window.removeEventListener(KEA_REPLAY_START, onReplayStart)
+      window.removeEventListener(KEA_REPLAY_END, onReplayEnd)
+    }
+  }, [clearListenIdleTimer, clearRestartTimer, stopAnalyser])
   useEffect(() => {
     const refresh = () => setVoices(listVoices())
     refresh()
@@ -299,7 +350,7 @@ export function useVoiceConversation({
       if (busyRef.current || statusRef.current !== 'listening') return
       if (speechMsRef.current > MIN_SPEECH_MS) return
       pauseListening()
-    }, Math.max(3, listenIdleSeconds) * 1000)
+    }, Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds) * 1000)
   }, [clearListenIdleTimer, listenIdleSeconds, pauseListening])
 
   const captionSpanish = useCallback(
@@ -343,6 +394,22 @@ export function useVoiceConversation({
         else setStatus('idle')
         return
       }
+      if (heardKeaStop(result.text)) {
+        logSpeech('stop phrase', result.text)
+        busyRef.current = false
+        fatalListenRef.current = true
+        handsFreeRef.current = false
+        setHandsFree(false)
+        clearListenIdleTimer()
+        clearRestartTimer()
+        stoppingRecordRef.current = true
+        teardownAudio()
+        stopKeaSpeech()
+        setStatus('idle')
+        setMicLabel('')
+        patchVoiceDiagnostics({ recognitionRunning: false })
+        return
+      }
       patchVoiceDiagnostics({
         lastTranscript: result.text,
         lastConfidence: result.confidence,
@@ -359,7 +426,7 @@ export function useVoiceConversation({
       if (handsFreeRef.current) startListeningRef.current()
       else setStatus('idle')
     }
-  }, [clearListenIdleTimer])
+  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   const startListening = useCallback(() => {
     if (busyRef.current || fatalListenRef.current) return
@@ -504,6 +571,11 @@ export function useVoiceConversation({
         )
         if (afterSpeech) {
           afterSpeech()
+          return
+        }
+        // Speaker-icon replay interrupted this line — stay live, don't grab the mic yet.
+        if (isKeaReplayActive()) {
+          setStatus('idle')
           return
         }
         if (handsFreeRef.current) {

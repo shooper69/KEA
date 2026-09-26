@@ -18,6 +18,10 @@ import {
 import { isLanguageCode } from '../config/languages'
 import { DEFAULT_VOICE_CHARACTER } from '../config/voices'
 import { PLACEHOLDER_VOCABULARY } from '../data/placeholders'
+import {
+  DEFAULT_LISTEN_IDLE_SECONDS,
+  normalizeListenIdleSeconds,
+} from '../data/keaListenIdle'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
   fetchCloudProfile,
@@ -25,6 +29,7 @@ import {
   markPasswordRecovery,
 } from '../services/keaProfile'
 import { markAudioRoutePromptPending } from '../architecture/keaAudioRoute'
+import { applyCloudSubscription } from '../architecture/keaBilling'
 import type {
   ChatKeep,
   LanguageCode,
@@ -63,7 +68,7 @@ const DEFAULT_PROFILE: StoredProfile = {
   notifyMemory: true,
   notifyTalk: true,
   saveTranscripts: true,
-  listenIdleSeconds: 10,
+  listenIdleSeconds: DEFAULT_LISTEN_IDLE_SECONDS,
   answerAfterSilenceSeconds: 3,
   skyTheme: 'clouds',
   chatKeep: 'device',
@@ -96,10 +101,7 @@ function readProfile(): StoredProfile {
         preferredVoice === 'theo'
           ? preferredVoice
           : DEFAULT_VOICE_CHARACTER,
-      listenIdleSeconds:
-        Number.isFinite(listenIdleSeconds) && listenIdleSeconds >= 3
-          ? Math.min(60, Math.round(listenIdleSeconds))
-          : 10,
+      listenIdleSeconds: normalizeListenIdleSeconds(listenIdleSeconds),
       answerAfterSilenceSeconds:
         Number.isFinite(answerAfterSilenceSeconds) &&
         answerAfterSilenceSeconds >= 1
@@ -142,6 +144,7 @@ interface SessionContextValue {
   email: string
   photoDataUrl: string
   preferredVoice: VoicePersonalityId
+  userId: string | null
   isAdmin: boolean
   isOnboarded: boolean
   authReady: boolean
@@ -212,6 +215,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       cloud = await fetchCloudProfile(id)
     } catch {
       cloud = null
+    }
+    if (cloud) {
+      applyCloudSubscription({
+        planId: cloud.subscriptionPlanId,
+        status: cloud.subscriptionStatus,
+        customerId: cloud.stripeCustomerId,
+        subscriptionId: cloud.stripeSubscriptionId,
+        currentPeriodEnd: cloud.subscriptionCurrentPeriodEnd,
+      })
     }
     setProfileState((current) => {
       const next: StoredProfile = {
@@ -289,6 +301,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function setProfile(patch: Partial<StoredProfile>) {
     setProfileState((current) => {
       const next = { ...current, ...patch }
+      if (patch.listenIdleSeconds !== undefined) {
+        next.listenIdleSeconds = normalizeListenIdleSeconds(patch.listenIdleSeconds)
+      }
       persistProfile(next)
       if (patch.targetLanguage) {
         setVocabulary(vocabularyFor(patch.targetLanguage))
@@ -405,6 +420,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       email: profile.email,
       photoDataUrl: profile.photoDataUrl,
       preferredVoice: profile.preferredVoice,
+      userId,
       isAdmin,
       adminUnlocked,
       unlockAdmin,
@@ -440,6 +456,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       isSignedIn,
       level,
       profile,
+      userId,
       vocabulary,
     ],
   )

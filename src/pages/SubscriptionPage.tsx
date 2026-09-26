@@ -17,7 +17,7 @@ import {
 
 export function SubscriptionPage() {
   const [searchParams] = useSearchParams()
-  const { email, isAdmin } = useSession()
+  const { email, userId, isAdmin } = useSession()
   const [showUsage, setShowUsage] = useState(
     () => searchParams.get('view') === 'usage',
   )
@@ -78,6 +78,7 @@ export function SubscriptionPage() {
         ) : (
           <SubscriptionPanel
             email={email}
+            userId={userId}
             isAdmin={isAdmin}
             onViewUsage={() => setShowUsage(true)}
           />

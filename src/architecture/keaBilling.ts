@@ -4,6 +4,7 @@ import {
   type PlanId,
 } from './keaPlans'
 import { isAdminEmail } from './adminAuth'
+import { recordTalkPerformanceSeconds } from './keaTalkPerformance'
 
 const BILLING_KEY = 'kea-billing-v1'
 const USAGE_PREFIX = 'kea-usage-'
@@ -25,17 +26,25 @@ export function hasUnlimitedTalk(isAdminFlag = false) {
   return Boolean(isAdminFlag) || storedProfileIsAdmin()
 }
 
-export type BillingStatus = 'trial' | 'active' | 'expired'
+export type BillingStatus =
+  | 'trial'
+  | 'active'
+  | 'expired'
+  | 'past_due'
+  | 'canceled'
 
 export interface BillingState {
   trialStartedAt: string
   status: BillingStatus
   planId: PlanId | null
   stripeSessionId: string
+  stripeCustomerId: string
+  stripeSubscriptionId: string
   subscribedAt: string
+  currentPeriodEnd: string
 }
 
-export type TalkBlockReason = 'ok' | 'trial-expired' | 'daily-limit'
+export type TalkBlockReason = 'ok' | 'trial-expired' | 'daily-limit' | 'canceled'
 
 export interface TalkAccess {
   ok: boolean
@@ -82,8 +91,17 @@ function emptyBilling(): BillingState {
     status: 'trial',
     planId: null,
     stripeSessionId: '',
+    stripeCustomerId: '',
+    stripeSubscriptionId: '',
     subscribedAt: '',
+    currentPeriodEnd: '',
   }
+}
+
+function asPlanId(value: unknown): PlanId | null {
+  return value === 'starter' || value === 'companion' || value === 'unlimited'
+    ? value
+    : null
 }
 
 export function loadBilling(): BillingState {
@@ -94,12 +112,18 @@ export function loadBilling(): BillingState {
     return {
       ...emptyBilling(),
       ...parsed,
-      planId:
-        parsed.planId === 'starter' ||
-        parsed.planId === 'companion' ||
-        parsed.planId === 'unlimited'
-          ? parsed.planId
-          : null,
+      planId: asPlanId(parsed.planId),
+      status:
+        parsed.status === 'active' ||
+        parsed.status === 'expired' ||
+        parsed.status === 'past_due' ||
+        parsed.status === 'canceled' ||
+        parsed.status === 'trial'
+          ? parsed.status
+          : 'trial',
+      stripeCustomerId: String(parsed.stripeCustomerId ?? ''),
+      stripeSubscriptionId: String(parsed.stripeSubscriptionId ?? ''),
+      currentPeriodEnd: String(parsed.currentPeriodEnd ?? ''),
     }
   } catch {
     return emptyBilling()
@@ -108,6 +132,7 @@ export function loadBilling(): BillingState {
 
 export function saveBilling(state: BillingState) {
   localStorage.setItem(BILLING_KEY, JSON.stringify(state))
+  window.dispatchEvent(new Event('kea-billing-changed'))
 }
 
 export function ensureTrialStarted(): BillingState {
@@ -127,6 +152,15 @@ export function refreshBillingStatus(state = loadBilling()): BillingState {
     saveBilling(state)
     return state
   }
+  if (state.status === 'past_due' && state.planId) {
+    saveBilling(state)
+    return state
+  }
+  if (state.status === 'canceled') {
+    const next: BillingState = { ...state, status: 'canceled', planId: state.planId }
+    saveBilling(next)
+    return next
+  }
   const catalog = loadPlanCatalog()
   const started = state.trialStartedAt
     ? new Date(state.trialStartedAt).getTime()
@@ -140,14 +174,83 @@ export function refreshBillingStatus(state = loadBilling()): BillingState {
   return next
 }
 
-export function activatePlan(planId: PlanId, stripeSessionId = '') {
+export function activatePlan(
+  planId: PlanId,
+  stripeSessionId = '',
+  extras: {
+    customerId?: string
+    subscriptionId?: string
+    currentPeriodEnd?: string
+    status?: BillingStatus
+  } = {},
+) {
+  const current = loadBilling()
   const next: BillingState = {
-    ...loadBilling(),
-    status: 'active',
+    ...current,
+    status: extras.status === 'past_due' ? 'past_due' : 'active',
     planId,
     stripeSessionId,
+    stripeCustomerId: extras.customerId || current.stripeCustomerId,
+    stripeSubscriptionId: extras.subscriptionId || current.stripeSubscriptionId,
+    currentPeriodEnd: extras.currentPeriodEnd || current.currentPeriodEnd,
     subscribedAt: new Date().toISOString(),
-    trialStartedAt: loadBilling().trialStartedAt || new Date().toISOString(),
+    trialStartedAt: current.trialStartedAt || new Date().toISOString(),
+  }
+  saveBilling(next)
+  return next
+}
+
+/** Apply Stripe/cloud subscription fields onto local access state. */
+export function applyCloudSubscription(input: {
+  planId?: string | null
+  status?: string | null
+  customerId?: string | null
+  subscriptionId?: string | null
+  currentPeriodEnd?: string | null
+}) {
+  const planId = asPlanId(input.planId)
+  const statusRaw = (input.status || '').toLowerCase()
+  const current = loadBilling()
+  if (
+    statusRaw === 'active' ||
+    statusRaw === 'trialing' ||
+    statusRaw === 'past_due'
+  ) {
+    if (!planId) return current
+    return activatePlan(planId, current.stripeSessionId, {
+      customerId: input.customerId || undefined,
+      subscriptionId: input.subscriptionId || undefined,
+      currentPeriodEnd: input.currentPeriodEnd || undefined,
+      status: statusRaw === 'past_due' ? 'past_due' : 'active',
+    })
+  }
+  if (
+    statusRaw === 'canceled' ||
+    statusRaw === 'unpaid' ||
+    statusRaw === 'incomplete_expired'
+  ) {
+    const next: BillingState = {
+      ...current,
+      status: 'canceled',
+      planId: planId ?? current.planId,
+      stripeCustomerId: input.customerId || current.stripeCustomerId,
+      stripeSubscriptionId:
+        input.subscriptionId || current.stripeSubscriptionId,
+      currentPeriodEnd: input.currentPeriodEnd || current.currentPeriodEnd,
+    }
+    saveBilling(next)
+    return next
+  }
+  return current
+}
+
+export function clearPaidSubscription() {
+  const current = loadBilling()
+  const next: BillingState = {
+    ...current,
+    status: 'expired',
+    planId: null,
+    stripeSubscriptionId: '',
   }
   saveBilling(next)
   return next
@@ -219,9 +322,11 @@ export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
 }
 
 export function recordTalkSeconds(seconds: number) {
-  if (hasUnlimitedTalk()) return
   const add = Math.max(0, seconds)
   if (!add) return
+  // Performance chart tracks everyone; billing caps still skip unlimited accounts.
+  recordTalkPerformanceSeconds(add)
+  if (hasUnlimitedTalk()) return
   const used = minutesUsedToday() * 60 + add
   localStorage.setItem(todayKey(), JSON.stringify({ seconds: used }))
 }
@@ -243,7 +348,7 @@ export function getTalkAccess(isAdmin = false): TalkAccess {
     return {
       ok: true,
       reason: 'ok',
-      status: state.status === 'active' ? 'active' : 'trial',
+      status: state.status === 'active' || state.status === 'past_due' ? state.status : 'trial',
       planId: state.planId,
       trialDaysLeft: trialDaysLeft(state),
       dailyMinutesAllowed: 0,
@@ -251,7 +356,10 @@ export function getTalkAccess(isAdmin = false): TalkAccess {
       minutesLeftToday: 999,
     }
   }
-  if (state.status === 'active' && state.planId) {
+  if (
+    (state.status === 'active' || state.status === 'past_due') &&
+    state.planId
+  ) {
     const plan = getPlan(state.planId, catalog)
     const allowed = plan.dailyMinutes
     const left = allowed <= 0 ? 999 : Math.max(0, allowed - used)
@@ -259,12 +367,24 @@ export function getTalkAccess(isAdmin = false): TalkAccess {
     return {
       ok,
       reason: ok ? 'ok' : 'daily-limit',
-      status: 'active',
+      status: state.status,
       planId: state.planId,
       trialDaysLeft: 0,
       dailyMinutesAllowed: allowed,
       minutesUsedToday: used,
       minutesLeftToday: left,
+    }
+  }
+  if (state.status === 'canceled') {
+    return {
+      ok: false,
+      reason: 'canceled',
+      status: 'canceled',
+      planId: state.planId,
+      trialDaysLeft: 0,
+      dailyMinutesAllowed: catalog.trialDailyMinutes,
+      minutesUsedToday: used,
+      minutesLeftToday: 0,
     }
   }
   if (state.status === 'expired') {

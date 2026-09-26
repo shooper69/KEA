@@ -1,6 +1,7 @@
 import { getSupabase } from '../lib/supabase'
 import { isLanguageCode } from '../config/languages'
 import { DEFAULT_VOICE_CHARACTER } from '../config/voices'
+import { normalizeListenIdleSeconds } from '../data/keaListenIdle'
 import type { LanguageCode, VoicePersonalityId } from '../types'
 
 const VOICES: VoicePersonalityId[] = ['luna', 'mira', 'sage', 'rowan', 'theo']
@@ -21,6 +22,11 @@ export interface CloudProfile {
   notifyMemory: boolean
   notifyTalk: boolean
   saveTranscripts: boolean
+  stripeCustomerId?: string
+  stripeSubscriptionId?: string
+  subscriptionPlanId?: string
+  subscriptionStatus?: string
+  subscriptionCurrentPeriodEnd?: string
 }
 
 function asProfile(row: Record<string, unknown> | null): CloudProfile | null {
@@ -35,13 +41,30 @@ function asProfile(row: Record<string, unknown> | null): CloudProfile | null {
     targetLanguage: isLanguageCode(target) ? target : null,
     preferredVoice: isVoicePersonalityId(voice) ? voice : DEFAULT_VOICE_CHARACTER,
     avatarUrl: typeof row.avatar_url === 'string' ? row.avatar_url : '',
-    listenIdleSeconds:
-      Number.isFinite(listen) && listen >= 3 ? Math.min(60, Math.round(listen)) : 10,
+    listenIdleSeconds: normalizeListenIdleSeconds(listen),
     skyTheme: row.sky_theme === 'weather' ? 'weather' : 'clouds',
     chatKeep: row.chat_keep === 'cloud' ? 'cloud' : 'device',
     notifyMemory: row.notify_memory !== false,
     notifyTalk: row.notify_talk !== false,
     saveTranscripts: row.save_transcripts !== false,
+    stripeCustomerId:
+      typeof row.stripe_customer_id === 'string' ? row.stripe_customer_id : '',
+    stripeSubscriptionId:
+      typeof row.stripe_subscription_id === 'string'
+        ? row.stripe_subscription_id
+        : '',
+    subscriptionPlanId:
+      typeof row.subscription_plan_id === 'string'
+        ? row.subscription_plan_id
+        : '',
+    subscriptionStatus:
+      typeof row.subscription_status === 'string'
+        ? row.subscription_status
+        : 'none',
+    subscriptionCurrentPeriodEnd:
+      typeof row.subscription_current_period_end === 'string'
+        ? row.subscription_current_period_end
+        : '',
   }
 }
 
@@ -51,7 +74,7 @@ export async function fetchCloudProfile(userId: string): Promise<CloudProfile | 
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'first_name, native_language, target_language, preferred_voice, avatar_url, listen_idle_seconds, sky_theme, chat_keep, notify_memory, notify_talk, save_transcripts',
+      'first_name, native_language, target_language, preferred_voice, avatar_url, listen_idle_seconds, sky_theme, chat_keep, notify_memory, notify_talk, save_transcripts, stripe_customer_id, stripe_subscription_id, subscription_plan_id, subscription_status, subscription_current_period_end',
     )
     .eq('id', userId)
     .maybeSingle()

@@ -40,11 +40,13 @@ export function AdminPage() {
           <NavLink to="/admin/about">About Kea</NavLink>
           <NavLink to="/admin/costs">Cost analysis</NavLink>
           <NavLink to="/admin/offers">Offers</NavLink>
+          <NavLink to="/admin/onboarding">Onboarding</NavLink>
           <NavLink to="/admin/leave-funnel">Leave funnel</NavLink>
           <NavLink to="/admin" end>
             Overview
           </NavLink>
           <NavLink to="/admin/tiers">Subscription</NavLink>
+          <NavLink to="/admin/stripe">Stripe</NavLink>
           <NavLink to="/admin/voice-management">Voice Management</NavLink>
           <NavLink to="/admin/voices">Voice Tester</NavLink>
           <NavLink to="/admin/website-tracker">Website Tracker</NavLink>

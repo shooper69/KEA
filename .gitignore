@@ -17,6 +17,7 @@ dist-ssr
 !.env.example
 .kea/supabase-access-token
 .kea/netlify-auth-token
+.kea/stripe-webhook-secret
 .kea/*.token
 .kea/*.mjs
 .kea/*.sql

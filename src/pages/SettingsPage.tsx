@@ -16,11 +16,18 @@ import {
 import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
 import { UsagePanel } from '../components/companion/UsagePanel'
+import { PerformancePanel } from '../components/companion/PerformancePanel'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
 import {
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
+import {
+  DEFAULT_LISTEN_IDLE_SECONDS,
+  LISTEN_IDLE_MINUTE_OPTIONS,
+  listenIdleLabel,
+  normalizeListenIdleSeconds,
+} from '../data/keaListenIdle'
 import {
   applyAudioRouteMic,
   listAudioInputs,
@@ -120,6 +127,7 @@ export function SettingsPage() {
     | 'profile'
     | 'security'
     | 'usage'
+    | 'performance'
   >('choices')
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -130,6 +138,7 @@ export function SettingsPage() {
       return
     }
     if (next === 'usage') setTab('usage')
+    if (next === 'performance') setTab('performance')
   }, [searchParams, navigate])
 
   const catalog = loadVoiceCatalog()
@@ -240,6 +249,7 @@ export function SettingsPage() {
               ['profile', 'Profile'],
               ['security', 'Security'],
               ['usage', 'Usage'],
+              ['performance', 'Performance'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -491,21 +501,29 @@ export function SettingsPage() {
             </button>
           </div>
           <label className="welcome-field">
-            <span>Turn the microphone off after</span>
+            <span>Stay listening for</span>
             <select
-              value={draftListenIdle}
+              value={normalizeListenIdleSeconds(draftListenIdle)}
               onChange={(event) => {
                 setDraftListenIdle(Number(event.target.value))
                 setListeningSaved('')
               }}
             >
-              {[5, 8, 10, 15, 20, 30, 45, 60].map((seconds) => (
-                <option key={seconds} value={seconds}>
-                  {seconds} seconds
-                </option>
-              ))}
+              {LISTEN_IDLE_MINUTE_OPTIONS.map((minutes) => {
+                const seconds = minutes * 60
+                return (
+                  <option key={seconds} value={seconds}>
+                    {listenIdleLabel(seconds)}
+                    {seconds === DEFAULT_LISTEN_IDLE_SECONDS ? ' (default)' : ''}
+                  </option>
+                )
+              })}
             </select>
           </label>
+          <p className="settings-note">
+            After this much quiet, Kea stops listening. Say “Stop Kea” anytime to
+            stop sooner.
+          </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
@@ -531,9 +549,10 @@ export function SettingsPage() {
               saveAnswerSilenceSeconds(draftAnswerSilence)
               setAnswerSilence(draftAnswerSilence)
               setProfile({
-                listenIdleSeconds: draftListenIdle,
+                listenIdleSeconds: normalizeListenIdleSeconds(draftListenIdle),
                 answerAfterSilenceSeconds: draftAnswerSilence,
               })
+              setDraftListenIdle(normalizeListenIdleSeconds(draftListenIdle))
               setListeningSaved('Saved.')
             }}
           >
@@ -554,6 +573,7 @@ export function SettingsPage() {
           />
         ) : null}
         {tab === 'usage' ? <UsagePanel isAdmin={isAdmin} /> : null}
+        {tab === 'performance' ? <PerformancePanel embedded /> : null}
         {tab === 'profile' ? (
         <section className="settings-card">
           <h2>Profile</h2>
@@ -615,15 +635,23 @@ export function SettingsPage() {
         <section className="settings-card">
           <h2>Memory</h2>
           <p className="settings-note">
-            Two separate lists. Learn List is language gaps. Current Chat Topics
-            is conversation continuity.
+            Learn List is language gaps
+            {isAdmin
+              ? '. Current Chat Topics is conversation continuity (work in progress).'
+              : '.'}
           </p>
           <Link className="memory-button" to="/learn">
             Learn List
           </Link>
-          <Link className="memory-button" to="/topics">
-            Current Chat Topics
-          </Link>
+          {isAdmin ? (
+            <Link className="memory-button memory-button--wip" to="/topics">
+              Current Chat Topics
+            </Link>
+          ) : (
+            <Link className="memory-button" to="/performance">
+              Performance
+            </Link>
+          )}
         </section>
         ) : null}
         {tab === 'notifications' ? (

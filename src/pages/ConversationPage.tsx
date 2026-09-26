@@ -23,10 +23,17 @@ import {
   shouldShowPopup1,
   shouldShowSubLeaveOffer,
 } from '../data/keaOffers'
+import {
+  hasCompletedSpokenOnboarding,
+  ONBOARDING_CHANGED,
+} from '../data/keaOnboarding'
 import { useSession } from '../context/SessionContext'
 import { useVoiceConversation } from '../hooks/useVoiceConversation'
 import { useKeaWakeWord } from '../hooks/useKeaWakeWord'
+import { useSpokenOnboarding } from '../hooks/useSpokenOnboarding'
 import { getAnswerSilenceSeconds } from '../data/keaAnswerSilence'
+import { setScreenWakeLock } from '../architecture/keaScreenWakeLock'
+import type { VoicePresenceState } from '../types'
 
 export function ConversationPage() {
   const navigate = useNavigate()
@@ -36,6 +43,7 @@ export function ConversationPage() {
     level,
     listenIdleSeconds,
     firstName,
+    email,
     isAdmin,
   } = useSession()
   const { block, setBlock, guardStart } = useTalkGate(isAdmin)
@@ -47,6 +55,9 @@ export function ConversationPage() {
     if (!consumeSubLeaveOfferPending()) return false
     return shouldShowSubLeaveOffer(getTalkAccess(isAdmin).status === 'active')
   })
+  const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
+  const [onboardingActive, setOnboardingActive] = useState(false)
+  const [onboardLine, setOnboardLine] = useState('')
 
   const target = languageCode ?? 'es'
 
@@ -65,19 +76,45 @@ export function ConversationPage() {
   const lastTapAt = useRef(0)
 
   useEffect(() => {
+    function maybeStart() {
+      if (audioRouteOpen || block) return
+      if (hasCompletedSpokenOnboarding(userKey)) return
+      setOnboardingActive(true)
+    }
+    maybeStart()
+    window.addEventListener(ONBOARDING_CHANGED, maybeStart)
+    return () => window.removeEventListener(ONBOARDING_CHANGED, maybeStart)
+  }, [audioRouteOpen, block, userKey])
+
+  const onboard = useSpokenOnboarding({
+    active: onboardingActive,
+    nativeLanguage: nativeLanguage ?? 'en',
+    userKey,
+    onStepText: setOnboardLine,
+    onComplete: () => {
+      setOnboardingActive(false)
+      setOnboardLine('')
+    },
+  })
+
+  useEffect(() => {
     function maybeShow() {
-      setPopup1Open(!block && !audioRouteOpen && shouldShowPopup1('home'))
+      setPopup1Open(
+        !block &&
+          !audioRouteOpen &&
+          !onboardingActive &&
+          shouldShowPopup1('home'),
+      )
     }
     maybeShow()
     window.addEventListener('kea-offers-changed', maybeShow)
     return () => window.removeEventListener('kea-offers-changed', maybeShow)
-  }, [block, audioRouteOpen])
+  }, [block, audioRouteOpen, onboardingActive])
 
   function beginTalking() {
-    if (audioRouteOpen) return
+    if (audioRouteOpen || onboardingActive) return
     if (liveRef.current) return
     if (!guardStart()) return
-    // Welcome already on screen after login — do not say or write it again.
     if (
       isFreshTalkSession(voice.messages) &&
       voice.messages.some(isHomeGreetingMessage)
@@ -94,9 +131,18 @@ export function ConversationPage() {
   }
 
   const wake = useKeaWakeWord({
-    enabled: !live && !block && !audioRouteOpen,
+    enabled: !live && !block && !audioRouteOpen && !onboardingActive,
     onWake: beginTalking,
   })
+
+  useEffect(() => {
+    const keepAwake =
+      !block &&
+      !audioRouteOpen &&
+      (live || wake.armed || voice.handsFree || onboardingActive)
+    setScreenWakeLock(keepAwake)
+    return () => setScreenWakeLock(false)
+  }, [block, audioRouteOpen, live, wake.armed, voice.handsFree, onboardingActive])
 
   useEffect(() => {
     if (!live) return
@@ -114,13 +160,23 @@ export function ConversationPage() {
         : ''
     : ''
 
+  const micStatus: VoicePresenceState = onboardingActive
+    ? onboard.phase === 'listening'
+      ? 'listening'
+      : onboard.phase === 'speaking'
+        ? 'speaking'
+        : 'idle'
+    : voice.status
+
   return (
     <main
       className={`companion-screen conversation-screen${
-        block || popup1Open || audioRouteOpen ? ' has-offer-dock' : ''
+        block || popup1Open || audioRouteOpen || onboardingActive
+          ? ' has-offer-dock'
+          : ''
       }`}
     >
-      <CloudAtmosphere presence={voice.status} />
+      <CloudAtmosphere presence={micStatus} />
       <h1 className="visually-hidden">Talk with Kea</h1>
       <header className="conversation-screen__header">
         <CompanionNav micLabel={micLabel} />
@@ -133,13 +189,31 @@ export function ConversationPage() {
           targetLanguage={target}
         />
       </div>
+      {onboardingActive ? (
+        <div className="onboarding-banner" role="status" aria-live="polite">
+          <p className="onboarding-banner__eyebrow">
+            Getting started
+            {onboard.stepCount > 0
+              ? ` · ${onboard.stepIndex + 1} of ${onboard.stepCount}`
+              : ''}
+          </p>
+          <p className="onboarding-banner__line">
+            {onboardLine || 'Kea is explaining how things work…'}
+          </p>
+          <p className="onboarding-banner__hint">
+            {onboard.phase === 'listening'
+              ? 'Say “yes” when you are ready for the next tip.'
+              : 'Listen — then say yes after each OK?'}
+          </p>
+        </div>
+      ) : null}
       {voice.error ? <p className="voice-error">{voice.error}</p> : null}
       <VoiceMic
-        live={live}
-        status={voice.status}
-        wakePhrase={wake.listens && !audioRouteOpen}
+        live={live || onboardingActive}
+        status={micStatus}
+        wakePhrase={wake.listens && !audioRouteOpen && !onboardingActive}
         onToggle={() => {
-          if (audioRouteOpen) return
+          if (audioRouteOpen || onboardingActive) return
           const now = Date.now()
           if (now - lastTapAt.current < 450) return
           lastTapAt.current = now
@@ -157,7 +231,7 @@ export function ConversationPage() {
       {block ? (
         <PaywallModal reason={block} onClose={() => setBlock(null)} />
       ) : null}
-      {!block && !audioRouteOpen && popup1Open ? (
+      {!block && !audioRouteOpen && !onboardingActive && popup1Open ? (
         <OfferPopup
           offer={getOffer('home')}
           tone="home"
@@ -167,7 +241,7 @@ export function ConversationPage() {
           }}
         />
       ) : null}
-      {!block && !audioRouteOpen && subLeaveOpen ? (
+      {!block && !audioRouteOpen && !onboardingActive && subLeaveOpen ? (
         <SubLeaveOfferPopup
           offer={getOffer('subLeave')}
           onClose={() => {

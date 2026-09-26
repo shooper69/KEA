@@ -57,7 +57,21 @@ export function heardKeaWake(text: string) {
 export function heardKeaStop(text: string) {
   const n = normalizeHeard(text)
   if (!n) return false
-  return new RegExp(`\\b(stop|quit|end)\\s+${KEA_TOKEN}\\b`).test(n)
+  if (new RegExp(`\\b(stop|quit|end)\\s+${KEA_TOKEN}\\b`).test(n)) {
+    return true
+  }
+  // Soft variants: "stop listening Kea", "Kea stop", "stop words Kea"
+  if (
+    new RegExp(
+      `\\b(stop|quit|end)\\s+(listening|talking|words)?\\s*${KEA_TOKEN}\\b`,
+    ).test(n)
+  ) {
+    return true
+  }
+  if (new RegExp(`\\b${KEA_TOKEN}\\s+(stop|quit|end)\\b`).test(n)) {
+    return true
+  }
+  return false
 }
 
 export interface KeaSpeechRecognition {

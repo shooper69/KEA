@@ -4,9 +4,19 @@ type BillingEvent = {
   httpMethod: string
   path?: string
   rawUrl?: string
+  headers?: Record<string, string | undefined>
   queryStringParameters?: Record<string, string | undefined>
   body: string | null
   isBase64Encoded?: boolean
+}
+
+function normalizeHeaders(headers: BillingEvent['headers']) {
+  const out: Record<string, string | string[] | undefined> = {}
+  if (!headers) return out
+  for (const [key, value] of Object.entries(headers)) {
+    out[key.toLowerCase()] = value
+  }
+  return out
 }
 
 export async function handler(event: BillingEvent) {
@@ -17,17 +27,23 @@ export async function handler(event: BillingEvent) {
       if (value) url.searchParams.set(key, value)
     }
   }
+  const rawBody = event.isBase64Encoded
+    ? Buffer.from(event.body ?? '', 'base64')
+    : Buffer.from(event.body ?? '', 'utf8')
+  let emittedData = false
   const req = {
     method: event.httpMethod,
     url: `${url.pathname}${url.search}`,
+    headers: normalizeHeaders(event.headers),
     on(name: string, fn: (...args: unknown[]) => void) {
       if (name === 'data') {
-        const raw = event.isBase64Encoded
-          ? Buffer.from(event.body ?? '', 'base64')
-          : Buffer.from(event.body ?? '', 'utf8')
-        fn(raw)
+        emittedData = true
+        fn(rawBody)
       }
-      if (name === 'end') fn()
+      if (name === 'end') {
+        if (!emittedData) fn(rawBody)
+        else fn()
+      }
       return req
     },
   }
@@ -44,12 +60,12 @@ export async function handler(event: BillingEvent) {
       body = chunk ?? ''
     },
   }
-  await handleKeaBilling(
-    req as never,
-    res as never,
-    {
-      STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-    },
-  )
+  await handleKeaBilling(req as never, res as never, {
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    SUPABASE_URL:
+      process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  })
   return { statusCode: status, headers, body }
 }

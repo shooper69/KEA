@@ -52,8 +52,8 @@ export const DEFAULT_FUNNEL_PAGES: readonly WtFunnelPageDef[] = [
     pageNo: 6,
     id: 'topics',
     shortCode: 'TOPICS',
-    displayName: 'Topics',
-    route: '/topics',
+    displayName: 'Performance',
+    route: '/performance',
   },
   {
     pageNo: 7,

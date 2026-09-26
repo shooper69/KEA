@@ -36,7 +36,7 @@ export const DEFAULT_PLAN_CATALOG: KeaPlanCatalog = {
       monthlyPrice: 9.99,
       dailyMinutes: 15,
       featured: false,
-      stripePriceId: '',
+      stripePriceId: 'price_1UJqsa6G7iCRQAR8Scrj3QK0',
       bullets: [
         '15 minutes of talk a day',
         'Whisper listening and Kea’s voice',
@@ -50,7 +50,7 @@ export const DEFAULT_PLAN_CATALOG: KeaPlanCatalog = {
       monthlyPrice: 19.99,
       dailyMinutes: 45,
       featured: true,
-      stripePriceId: '',
+      stripePriceId: 'price_1UJqsb6G7iCRQAR8eywbl44K',
       bullets: [
         '45 minutes of talk a day',
         'All voices the admin has enabled',
@@ -64,7 +64,7 @@ export const DEFAULT_PLAN_CATALOG: KeaPlanCatalog = {
       monthlyPrice: 34.99,
       dailyMinutes: 0,
       featured: false,
-      stripePriceId: '',
+      stripePriceId: 'price_1UJqsd6G7iCRQAR87yJmgO4R',
       bullets: [
         'No daily time cap',
         'Longer sessions without watching the clock',
@@ -111,7 +111,9 @@ function normalizePlan(plan: Partial<KeaPlan> & { id: PlanId }, seed: KeaPlan): 
         : seed.dailyMinutes,
     bullets: bullets.length ? bullets : seed.bullets,
     stripePriceId:
-      typeof plan.stripePriceId === 'string' ? plan.stripePriceId.trim() : '',
+      typeof plan.stripePriceId === 'string' && plan.stripePriceId.trim()
+        ? plan.stripePriceId.trim()
+        : seed.stripePriceId,
     featured: Boolean(plan.featured),
   }
 }
