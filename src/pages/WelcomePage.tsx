@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { AuthPanel } from '../components/companion/AuthPanel'
@@ -8,6 +8,7 @@ import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
 import { OfferPopup } from '../components/companion/OfferPopup'
 import { PasswordField } from '../components/companion/PasswordField'
 import { StoreBadges } from '../components/companion/StoreBadges'
+import { InstallAppButton } from '../components/companion/InstallAppButton'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
@@ -86,6 +87,7 @@ export function WelcomePage() {
   )
   const [visibleCopy, setVisibleCopy] = useState('')
   const [introBusy, setIntroBusy] = useState(false)
+  const [introHeard, setIntroHeard] = useState(false)
   const [homeOfferOpen, setHomeOfferOpen] = useState(false)
   const [leavePromptOpen, setLeavePromptOpen] = useState(false)
   const [langSheet, setLangSheet] = useState<null | 'spoken' | 'learning'>(null)
@@ -293,7 +295,10 @@ export function WelcomePage() {
         }
       }
     } finally {
-      if (runId === introRunId.current) setIntroBusy(false)
+      if (runId === introRunId.current) {
+        setIntroBusy(false)
+        setIntroHeard(true)
+      }
     }
   }
 
@@ -427,6 +432,11 @@ export function WelcomePage() {
       <p className="settings-note">One moment…</p>
     ) : !authOpen ? (
       <div className="welcome-screen__actions welcome-screen__actions--home">
+        {introHeard ? (
+          <Link to="/method" className="welcome-method-cta">
+            The Method
+          </Link>
+        ) : null}
         <Button type="button" onClick={openRegister}>
           Create free account
         </Button>
@@ -573,6 +583,7 @@ export function WelcomePage() {
 
       {!authOpen ? (
         <footer className="welcome-screen__store-footer">
+          <InstallAppButton />
           <StoreBadges />
           <SiteFooter tone="marketing" />
         </footer>

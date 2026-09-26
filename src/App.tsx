@@ -12,6 +12,7 @@ import { AdminVoiceManagementPage } from './pages/AdminVoiceManagementPage'
 import { AdminVoiceTesterPage } from './pages/AdminVoiceTesterPage'
 import { AdminWebsiteTrackerPage } from './pages/AdminWebsiteTrackerPage'
 import { AboutKeaPage } from './pages/AboutKeaPage'
+import { MethodPage } from './pages/MethodPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
 import { LearnListPage } from './pages/LearnListPage'
@@ -67,6 +68,7 @@ export default function App() {
         <KeaPageMotion>
         <Routes>
           <Route path="/" element={<WelcomePage />} />
+          <Route path="/method" element={<MethodPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/cookie-policy" element={<CookiePolicyPage />} />

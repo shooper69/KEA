@@ -25,6 +25,16 @@ const pages: Array<[string, KeaPageSeo]> = [
     },
   ],
   [
+    '/method',
+    {
+      title: 'The Method · Kea',
+      description:
+        'How Kea acquires language like a child — unstructured talk, familiar companions, growth without lessons, and TAPs for talk time.',
+      path: '/method',
+      index: true,
+    },
+  ],
+  [
     '/home',
     {
       title: 'Talk · Kea',

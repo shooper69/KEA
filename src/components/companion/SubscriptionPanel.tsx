@@ -14,12 +14,17 @@ import {
 } from '../../architecture/keaDiscountCodes'
 import {
   formatDailyMinutes,
-  formatUsd,
   loadPlanCatalog,
   subscribePlanCatalog,
   type KeaPlanCatalog,
   type PlanId,
 } from '../../architecture/keaPlans'
+import {
+  ensureFxRates,
+  formatPlanPrice,
+  localPricingNote,
+  subscribeDisplayCurrency,
+} from '../../architecture/keaLocaleCurrency'
 import {
   confirmCheckoutSession,
   openKeaBillingPortal,
@@ -42,6 +47,7 @@ export function SubscriptionPanel({
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState<PlanId | null>(null)
   const [portalBusy, setPortalBusy] = useState(false)
+  const [pricingTick, setPricingTick] = useState(0)
   const [discountDraft, setDiscountDraft] = useState(
     () => getAppliedDiscount()?.code ?? '',
   )
@@ -55,6 +61,11 @@ export function SubscriptionPanel({
     }
     refreshCatalog()
     return subscribePlanCatalog(refreshCatalog)
+  }, [])
+
+  useEffect(() => {
+    void ensureFxRates()
+    return subscribeDisplayCurrency(() => setPricingTick((n) => n + 1))
   }, [])
 
   useEffect(() => {
@@ -89,12 +100,13 @@ export function SubscriptionPanel({
 
   const days = trialDaysLeft()
   const percentOff = applied?.percentOff ?? 0
+  void pricingTick
 
   function priceLabel(monthlyPrice: number) {
     const next = discountedPrice(monthlyPrice, percentOff)
-    if (percentOff <= 0) return formatUsd(monthlyPrice)
+    if (percentOff <= 0) return formatPlanPrice(monthlyPrice)
     if (next <= 0) return 'Free'
-    return formatUsd(next)
+    return formatPlanPrice(next)
   }
 
   function subscribe(plan: (typeof catalog.plans)[number]) {
@@ -159,6 +171,8 @@ export function SubscriptionPanel({
     access.status === 'past_due' ||
     access.status === 'canceled'
 
+  const pricingNote = localPricingNote()
+
   return (
     <section className="settings-card settings-card--plans">
       <p className="settings-note settings-note--lead">{catalog.trialBlurb}</p>
@@ -181,6 +195,9 @@ export function SubscriptionPanel({
           </>
         ) : null}
       </p>
+      {pricingNote ? (
+        <p className="settings-note settings-note--pricing">{pricingNote}</p>
+      ) : null}
 
       <div className="discount-code">
         <div className="discount-code__row">
@@ -284,7 +301,7 @@ export function SubscriptionPanel({
                 {percentOff > 0 && plan.monthlyPrice > 0 ? (
                   <span className="plan-card__was">
                     {' '}
-                    was {formatUsd(plan.monthlyPrice)}
+                    was {formatPlanPrice(plan.monthlyPrice)}
                   </span>
                 ) : null}
               </p>
@@ -311,7 +328,7 @@ export function SubscriptionPanel({
                       : 'Opening Stripe…'
                     : price <= 0
                       ? 'Subscribe free'
-                      : `Subscribe · ${formatUsd(price)}`}
+                      : `Subscribe · ${formatPlanPrice(price)}`}
               </button>
             </article>
           )

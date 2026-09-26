@@ -2024,19 +2024,19 @@ body:has(.welcome-screen),
 }
 
 .welcome-screen__actions--home {
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   justify-content: center;
-  align-items: stretch;
-  gap: 0.85rem;
-  width: min(36rem, 100%);
+  align-items: center;
+  gap: 0.65rem;
+  width: min(22rem, 100%);
 }
 
 .welcome-screen__actions--home .kea-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: auto;
+  width: 100%;
   min-width: 0;
   min-height: 3.15rem;
   height: 3.15rem;
@@ -2080,6 +2080,42 @@ body:has(.welcome-screen),
     0 4px 8px rgba(70, 16, 24, 0.14);
 }
 
+.welcome-method-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 3.15rem;
+  height: 3.15rem;
+  padding: 0 1.45rem;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 248, 240, 0.42);
+  background: rgba(8, 42, 48, 0.28);
+  color: #fff8f0;
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 120ms ease;
+}
+
+.welcome-method-cta:hover {
+  background: rgba(8, 42, 48, 0.42);
+  border-color: rgba(255, 248, 240, 0.62);
+}
+
+.welcome-method-cta:active {
+  transform: translateY(1px);
+}
+
 .welcome-screen__actions--home .kea-button:active:not(:disabled) {
   transform: translateY(1px);
   box-shadow:
@@ -2107,13 +2143,13 @@ body:has(.welcome-screen),
 }
 
 .welcome-screen__actions.welcome-screen__actions--home {
-  flex-direction: row;
-  flex-wrap: wrap;
+  flex-direction: column;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
   flex: 0 0 auto;
-  gap: 0.85rem;
-  width: min(36rem, 100%);
+  gap: 0.65rem;
+  width: min(22rem, 100%);
   margin-top: auto;
   padding-top: 0.75rem;
   padding-bottom: 1.15rem;
@@ -2167,8 +2203,41 @@ body:has(.welcome-screen),
 
 .welcome-screen__store-footer .store-badges,
 .welcome-screen__store-footer .store-badge,
-.welcome-screen__store-footer .site-footer {
+.welcome-screen__store-footer .site-footer,
+.welcome-screen__store-footer .install-app {
   pointer-events: auto;
+}
+
+.install-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 18rem;
+  text-align: center;
+}
+
+.install-app__button {
+  width: 100%;
+  min-height: 2.75rem;
+}
+
+.install-app__hint,
+.install-app__status {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.install-app__hint--quiet {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.install-app__hint strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .welcome-screen.welcome-screen--modal .welcome-screen__store-footer,
@@ -2237,6 +2306,13 @@ body:has(.welcome-screen),
     justify-content: flex-start;
     align-items: center;
     gap: 0.65rem;
+  }
+
+  .welcome-screen__store-footer .install-app {
+    width: auto;
+    max-width: 14rem;
+    align-items: flex-start;
+    text-align: left;
   }
 
   .welcome-screen__store-footer .store-badge__svg {
@@ -6452,4 +6528,156 @@ body:has(.welcome-screen),
   html.kea-motion .kea-button {
     animation-play-state: running !important;
   }
+}
+
+/* —— The Method (public marketing) —— */
+.method-screen {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 0;
+}
+
+.method-screen__content {
+  position: relative;
+  z-index: 2;
+  width: min(56rem, calc(100% - 1.5rem));
+  max-height: 100%;
+  margin: 0 auto;
+  padding: max(1rem, env(safe-area-inset-top)) 0.35rem
+    max(2rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.method-screen__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.method-screen__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  text-decoration: none;
+  color: rgba(12, 40, 52, 0.92);
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+
+.method-screen__logo {
+  height: 2.4rem;
+  width: auto;
+}
+
+.method-screen__hero {
+  margin-bottom: 2.4rem;
+  max-width: 36rem;
+}
+
+.method-screen__eyebrow {
+  margin: 0 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(20, 70, 84, 0.75);
+}
+
+.method-screen__hero h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.85rem, 4vw, 2.65rem);
+  line-height: 1.12;
+  color: rgba(10, 36, 48, 0.95);
+}
+
+.method-screen__lede {
+  margin: 0 0 1.25rem;
+  font-size: 1.08rem;
+  line-height: 1.45;
+  color: rgba(18, 48, 58, 0.88);
+}
+
+.method-screen__cta {
+  display: inline-flex;
+}
+
+.method-set {
+  margin-bottom: 2.5rem;
+}
+
+.method-set h2 {
+  margin: 0 0 0.55rem;
+  font-size: clamp(1.35rem, 2.6vw, 1.75rem);
+  color: rgba(10, 36, 48, 0.95);
+}
+
+.method-set__lead {
+  margin: 0 0 1.15rem;
+  max-width: 40rem;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  color: rgba(18, 48, 58, 0.86);
+}
+
+.method-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 720px) {
+  .method-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.method-tile {
+  margin: 0;
+  padding: 1.05rem 1.15rem 1.15rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px) saturate(1.05);
+  -webkit-backdrop-filter: blur(10px) saturate(1.05);
+}
+
+.method-tile h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  color: rgba(10, 40, 52, 0.95);
+}
+
+.method-tile p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(22, 52, 62, 0.88);
+}
+
+.method-set--close {
+  text-align: center;
+  padding: 1.5rem 1rem 0.5rem;
+}
+
+.method-set--close .method-set__lead {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.method-screen__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.method-screen .site-footer {
+  margin-top: 2rem;
 }

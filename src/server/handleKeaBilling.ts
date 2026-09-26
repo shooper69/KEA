@@ -324,6 +324,8 @@ export async function handleKeaBilling(
     form.set('saved_payment_method_options[payment_method_save]', 'enabled')
     form.set('integration_identifier', 'hosted_web_0001')
     form.set('origin_context', 'web')
+    // Present Checkout amounts in the customer’s local currency when eligible.
+    form.set('adaptive_pricing[enabled]', 'true')
     form.set('success_url', `${success}${joiner}session_id={CHECKOUT_SESSION_ID}`)
     form.set('cancel_url', cancel)
     form.set('metadata[planId]', payload.planId)

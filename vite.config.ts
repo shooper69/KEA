@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 import { handleKeaBilling } from './src/server/handleKeaBilling.ts'
 import { handleKeaChat } from './src/server/handleKeaChat.ts'
 import { handleKeaTranscribe } from './src/server/handleKeaTranscribe.ts'
@@ -151,6 +152,61 @@ export default defineConfig(({ mode }) => {
 
   return {
     publicDir: 'assets/images',
-    plugins: [react(), keaApiPlugin(env)],
+    plugins: [
+      react(),
+      keaApiPlugin(env),
+      VitePWA({
+        registerType: 'autoUpdate',
+        includeAssets: [
+          'favicon.ico',
+          'favicon-48.png',
+          'favicon-96.png',
+          'favicon-192.png',
+          'favicon-512.png',
+          'apple-touch-icon.png',
+          'kea-05.png',
+          'kea-mark.png',
+        ],
+        manifest: {
+          name: 'Kea',
+          short_name: 'Kea',
+          description:
+            'A conversational companion for language. Talk naturally, remember topics, keep a Learn List.',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          background_color: '#060a12',
+          theme_color: '#4ec4d4',
+          lang: 'en',
+          icons: [
+            {
+              src: '/favicon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/favicon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/favicon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          navigateFallback: '/index.html',
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+        },
+        devOptions: {
+          enabled: false,
+        },
+      }),
+    ],
   }
 })

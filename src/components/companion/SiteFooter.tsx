@@ -11,6 +11,7 @@ export function SiteFooter({
       className={`site-footer${tone === 'plain' ? ' site-footer--plain' : ''}`}
     >
       <nav className="site-footer__nav" aria-label="Legal">
+        <Link to="/method">The Method</Link>
         <Link to="/privacy-policy">Privacy</Link>
         <Link to="/terms-of-service">Terms of Service</Link>
         <Link to="/cookie-policy">Cookies</Link>

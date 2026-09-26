@@ -218,6 +218,15 @@ export function AdminStripePage() {
               browser).
             </dd>
           </div>
+          <div>
+            <dt>Adaptive Pricing</dt>
+            <dd>
+              Checkout sets <code>adaptive_pricing[enabled]=true</code>. The
+              subscription page converts USD catalog amounts for local display.
+              Confirm Adaptive Pricing is enabled in Stripe Dashboard → payment
+              settings.
+            </dd>
+          </div>
         </dl>
         <p className="settings-note">
           Template: see <code>.env.example</code> in the Kea repo.
