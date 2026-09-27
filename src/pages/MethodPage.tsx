@@ -1,140 +1,139 @@
 import { Link } from 'react-router-dom'
-import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { SiteFooter } from '../components/companion/SiteFooter'
+import { StoreBadges } from '../components/companion/StoreBadges'
 
-const METHOD = [
+const METHOD_CARDS = [
   {
-    id: 'method',
-    title: 'The method',
-    lead: 'Kea is not a language learning platform. Kea is a language acquisition platform.',
-    items: [
-      {
-        title: 'Not a course',
-        body: 'No grammar books. No verb tables. No tests. Humans do not acquire their first language through lessons — and Kea does not pretend they do.',
-      },
-      {
-        title: 'Learn like a child',
-        body: 'Listening, repetition, experience, emotion, and meaningful conversation. Understanding comes first. Speech emerges naturally.',
-      },
-      {
-        title: 'Unstructured talk',
-        body: 'You do not follow a lesson plan. You live inside everyday moments — greetings, meals, curiosity, stories, play — with a friend who stays.',
-      },
-      {
-        title: 'Meaning first',
-        body: 'Language is never isolated words. Meaning comes first. Language follows — the way it did when you learned to speak the first time.',
-      },
-      {
-        title: 'No levels. Only growth',
-        body: 'Progress is what you can understand, the conversations you can follow, and how naturally communication feels — not Level 1, 2, or 3.',
-      },
+    title: 'Not a course',
+    body: [
+      'Kea is not a language learning course. Kea is a language acquisition app. No grammar books. No verb tables. No tests.',
+      'Humans do not acquire their first language through lessons, they learn naturally through experience.',
     ],
+    image: '/method/method-not-a-course.webp',
+    alt: 'A closed grammar book left behind outdoors',
   },
   {
-    id: 'stones',
-    title: 'Stepping stones',
-    lead: 'You begin in a small circle of trusted voices. As understanding grows, your world expands — while the familiar faces remain.',
-    items: [
-      {
-        title: '1 · Family',
-        body: 'A handful of recurring companions. Daily routines, play, meals, and gentle talk. Safety first. Comprehension before performance.',
-      },
-      {
-        title: '2 · Village',
-        body: 'The family stays. New people enter — shop owner, neighbour, café, local friend. Language grows because life just got bigger.',
-      },
-      {
-        title: '3 · Community',
-        body: 'Work, hobbies, teammates, wider society. Faster talk, humour, emotion, different styles — still through participation, not instruction.',
-      },
-      {
-        title: '4 · World & many friends',
-        body: 'Accents, ages, cultures, richer social life. On Kea’s highest plan, your circle can open to multiple companions — same relationships, a wider world. Coming as we grow with you.',
-      },
+    title: 'Learn like a child',
+    body: [
+      'Listening, repetition, observation, emotion, and personalised conversation. Understanding comes first. Speech emerges naturally.',
+      'Language is never isolated words. Meaning comes first. Language follows, the way it did when you learned to speak the first time.',
     ],
+    image: '/method/method-learn-like-child.webp',
+    alt: 'A child listening closely to a friend outdoors',
   },
   {
-    id: 'taps',
-    title: 'Talk, track, earn TAPs',
-    lead: 'Talk time is how you grow — and how you earn. TAPs are Kea’s Talk2Earn tokens. They stay in Kea. No outside bridges.',
-    items: [
-      {
-        title: 'Your talk is tracked',
-        body: 'Minutes you speak are measured so you can see real usage — not a fake level bar, but time spent living in the language.',
-      },
-      {
-        title: 'Growth you can feel',
-        body: 'What you understand. Which conversations you can follow. Which relationships you keep. That is the score that matters.',
-      },
-      {
-        title: 'Earn TAPs',
-        body: 'Speak with Kea and earn TAPs. The simple rule: 50 TAPs for every 10 minutes of your speech. Rates can be refined in Admin as we launch earning.',
-      },
-      {
-        title: 'Redeem for discounts',
-        body: 'TAPs can be redeemed for product discounts on Kea subscriptions — a thank-you for showing up and talking. See your balance in Settings → Usage when earning goes live.',
-      },
+    title: 'Unstructured talk',
+    body: [
+      'With Kea you don’t follow a lesson plan, you just talk to a friend about everyday moments — greetings, meals, curiosity, stories, work and play. There’s no gamification, so when you fail to answer correctly, you don’t get sent back to the beginning, to yet again discuss ‘coffee or greetings’ for the umpteenth time.',
     ],
+    image: '/method/method-unstructured-talk.webp',
+    alt: 'Friends chatting casually over coffee',
+  },
+  {
+    title: 'The Tech',
+    body: [
+      'Kea is AI powered. She engages at your level, tracks your mistakes and uses the words you need to learn repeatedly, until you’ve proven that you’ve remembered them and know how to use them.',
+      'Each subscription tier offers more sophistication, and at the highest level, you can communicate with different characters, that chat with real personality, and that learn about your life and remember your conversations, just like in any relationship.',
+    ],
+    image: '/method/method-meaning-first.webp',
+    alt: 'Two people sharing meaning while looking out over a town',
+  },
+  {
+    title: 'Progress',
+    body: [
+      'You’ll feel your progress as your ability to chat grows. Your confidence will increase and your desire to advance will flourish. You’ll experience the pleasure in learning.',
+      'Sure, use books for grammar and structure, but you’ll find that without conversation, you’ll fall into the trap of ‘use it or lose it’.',
+    ],
+    image: '/method/method-talk-results.webp',
+    alt: 'Speaking with Kea while voice becomes real progress',
+  },
+  {
+    title: 'Earn real rewards',
+    body: [
+      'Your progress is tracked in background so you can monitor your performance. You do not need levels and streaks, as you’ll find in most apps. For you know best what and when you want to learn.',
+      'And instead of stars, emojis and pings, with Kea you earn real rewards for your progress, that can be converted into discounts when you shop online.',
+    ],
+    image: '/method/method-earn-taps.webp',
+    alt: 'Glowing tokens rising from a friendly conversation',
   },
 ] as const
 
 export function MethodPage() {
   return (
     <main className="companion-screen method-screen">
-      <CloudAtmosphere presence="idle" tempo="sunrise" />
+      <div className="method-screen__sky" aria-hidden="true">
+        <span className="method-screen__sky-wash" />
+      </div>
       <div className="method-screen__content">
         <header className="method-screen__top">
           <Link to="/" className="method-screen__brand" aria-label="Kea home">
-            <img src="/kea-05.png" alt="" className="method-screen__logo" />
-            <span>Kea</span>
+            <img
+              className="method-screen__logo"
+              src="/kea-05.png"
+              alt="Kea"
+              width={180}
+              height={90}
+            />
           </Link>
-          <Link to="/" className="settings-close" aria-label="Close The Method">
-            ×
-          </Link>
+          <nav className="method-screen__nav" aria-label="Site">
+            <Link to="/" className="method-screen__home">
+              Home
+            </Link>
+            <Link to="/method" className="method-screen__page-title">
+              The Method
+            </Link>
+          </nav>
         </header>
 
         <div className="method-screen__hero">
-          <p className="method-screen__eyebrow">The Method</p>
-          <h1>Acquire a language. Don’t study it.</h1>
-          <p className="method-screen__lede">
-            A friend always around. Listening, repetition, experience, growth —
-            not lessons. Your world expands as you do.
+          <p className="method-screen__difference">
+            <span className="method-screen__difference-shade">Kea is different</span>
+            <span className="method-screen__difference-rest">
+              {' '}
+              from other language apps
+            </span>
           </p>
-          <Link to="/" className="kea-button method-screen__cta">
-            Create free account
-          </Link>
+          <h1>Acquire a language. Don’t study it.</h1>
         </div>
 
-        {METHOD.map((set) => (
-          <section key={set.id} className="method-set" id={set.id}>
-            <h2>{set.title}</h2>
-            <p className="method-set__lead">{set.lead}</p>
-            <div className="method-grid">
-              {set.items.map((item) => (
-                <article key={item.title} className="method-tile">
+        <section className="method-set" aria-label="The Method">
+          <div className="method-rows">
+            {METHOD_CARDS.map((item) => (
+              <article key={item.title} className="method-row">
+                <div className="method-row__media">
+                  <img
+                    src={item.image}
+                    alt={item.alt}
+                    loading="lazy"
+                    decoding="async"
+                    width={960}
+                    height={720}
+                  />
+                </div>
+                <div className="method-row__copy">
                   <h3>{item.title}</h3>
-                  <p>{item.body}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-        ))}
-
-        <section className="method-set method-set--close">
-          <h2>Ready to talk?</h2>
-          <p className="method-set__lead">
-            Start free. Install Kea on your phone when you like. Earn TAPs as you
-            speak — coming soon in Settings → Usage.
-          </p>
-          <div className="method-screen__actions">
-            <Link to="/" className="kea-button">
-              Back to Kea
-            </Link>
+                  {item.body.map((paragraph) => (
+                    <p key={paragraph.slice(0, 32)}>{paragraph}</p>
+                  ))}
+                </div>
+              </article>
+            ))}
           </div>
         </section>
 
-        <SiteFooter tone="plain" />
+        <div className="method-screen__cta">
+          <Link to="/?register=1" className="kea-button method-screen__cta-button">
+            Create free account
+          </Link>
+        </div>
       </div>
+
+      <footer className="welcome-screen__store-footer method-screen__store-footer">
+        <div className="welcome-screen__store-footer-bar">
+          <StoreBadges />
+          <SiteFooter tone="marketing" />
+        </div>
+      </footer>
     </main>
   )
 }

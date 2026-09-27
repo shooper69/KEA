@@ -5,6 +5,7 @@ import { AdminAboutPage } from './pages/AdminAboutPage'
 import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminLeaveFunnelPage } from './pages/AdminLeaveFunnelPage'
 import { AdminOffersPage } from './pages/AdminOffersPage'
+import { AdminHomePage } from './pages/AdminHomePage'
 import { AdminOnboardingPage } from './pages/AdminOnboardingPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminStripePage } from './pages/AdminStripePage'
@@ -158,6 +159,7 @@ export default function App() {
           >
             <Route index element={<AdminOverview />} />
             <Route path="about" element={<AdminAboutPage />} />
+            <Route path="home" element={<AdminHomePage />} />
             <Route path="offers" element={<AdminOffersPage />} />
             <Route path="onboarding" element={<AdminOnboardingPage />} />
             <Route path="leave-funnel" element={<AdminLeaveFunnelPage />} />

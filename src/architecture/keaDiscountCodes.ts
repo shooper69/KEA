@@ -21,6 +21,12 @@ export const DEFAULT_DISCOUNT_CODES: KeaDiscountCode[] = [
     percentOff: 100,
   },
   {
+    id: 'marketing-flying',
+    title: 'Marketing popup',
+    code: 'Flying',
+    percentOff: 50,
+  },
+  {
     id: 'exit-superlearner',
     title: 'Exit popup',
     code: 'Superlearner',

@@ -129,10 +129,12 @@ export function SubscriptionPanel({
     void startKeaCheckout({
       planId: plan.id,
       planName: plan.name,
-      monthlyPrice: price,
-      stripePriceId: percentOff > 0 ? '' : plan.stripePriceId,
+      monthlyPrice: plan.monthlyPrice,
+      stripePriceId: plan.stripePriceId,
       email,
       userId: userId || undefined,
+      discountCode: applied?.code,
+      discountPercent: percentOff > 0 ? percentOff : 0,
     }).catch((error: unknown) => {
       setMessage(
         error instanceof Error ? error.message : 'Could not start payment.',

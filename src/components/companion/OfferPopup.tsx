@@ -49,8 +49,17 @@ export function OfferPopup({ offer, onClose, tone = 'home' }: OfferPopupProps) {
           {offer.title}
         </h2>
         <p className="offer-popup__body">{offer.body}</p>
+        {offer.discountCode?.trim() ? (
+          <p className="offer-popup__code">
+            Code: <strong>{offer.discountCode.trim()}</strong>
+          </p>
+        ) : null}
         <div className="offer-popup__actions">
-          <Link className="kea-button" to={offer.ctaPath} onClick={takeOffer}>
+          <Link
+            className="offer-popup__cta"
+            to={offer.ctaPath}
+            onClick={takeOffer}
+          >
             {offer.ctaLabel}
           </Link>
           <button

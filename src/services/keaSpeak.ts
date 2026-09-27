@@ -60,6 +60,8 @@ type SpeakOptions = {
   onCharIndex?: (charIndex: number) => void
   /** Optional pre-fetched OpenAI TTS object URL (from prefetchManagedVoiceAudio). */
   prefetchedUrl?: string | null
+  /** In-flight prefetch — awaited before play so canned lines can start fetch earlier. */
+  prefetchPromise?: Promise<string | null> | null
 }
 
 /** Fetch OpenAI TTS ahead of time so marketing paragraphs can chain tightly. */
@@ -201,7 +203,15 @@ export async function speakKeaLine(
     })
     return
   }
-  await speakManagedVoice(voice, text, options)
+  let prefetchedUrl = options.prefetchedUrl ?? null
+  if (!prefetchedUrl && options.prefetchPromise) {
+    try {
+      prefetchedUrl = await options.prefetchPromise
+    } catch {
+      prefetchedUrl = null
+    }
+  }
+  await speakManagedVoice(voice, text, { ...options, prefetchedUrl })
 }
 
 /**

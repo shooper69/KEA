@@ -14,6 +14,8 @@ export async function startKeaCheckout(options: {
   stripePriceId: string
   email: string
   userId?: string
+  discountCode?: string
+  discountPercent?: number
 }) {
   const origin = window.location.origin
   const response = await fetch('/api/billing/checkout', {
@@ -26,6 +28,8 @@ export async function startKeaCheckout(options: {
       stripePriceId: options.stripePriceId,
       email: options.email,
       userId: options.userId || '',
+      discountCode: options.discountCode || '',
+      discountPercent: options.discountPercent ?? 0,
       successUrl: `${origin}/subscription?checkout=success`,
       cancelUrl: `${origin}/subscription?checkout=cancel`,
     }),

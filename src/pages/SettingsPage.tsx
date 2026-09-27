@@ -521,8 +521,9 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            After this much quiet, Kea stops listening. Say “Stop Kea” anytime to
-            stop sooner.
+            After this much quiet, Kea stops listening (default 10 minutes). Say
+            “Stop Kea” anytime to stop sooner. While a session is live she keeps
+            listening through that window.
           </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>

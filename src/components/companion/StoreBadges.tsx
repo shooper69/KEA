@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { InstallAppButton } from './InstallAppButton'
 
 /** App Store + Google Play badges (SVG, transparent outside the pill). */
 
@@ -153,6 +154,7 @@ export function StoreBadges() {
       >
         {playSoon ? <ComingSoonBadge wide /> : <GooglePlayBadge />}
       </button>
+      <InstallAppButton variant="store" />
     </div>
   )
 }

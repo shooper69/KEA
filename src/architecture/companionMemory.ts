@@ -238,7 +238,7 @@ function looksLikeEnglishToken(token: string) {
 
 /**
  * Native-language (English) words dropped into a target-language sentence.
- * These are highlighted in red and auto-saved onto the Learn List.
+ * These are highlighted in orange and auto-saved onto the Learn List.
  */
 export function extractNativeIntrusions(text: string): string[] {
   const cleaned = text.replace(/\s+/g, ' ').trim()
@@ -282,7 +282,27 @@ function askedTerm(userText: string) {
   return ''
 }
 
-/** Wrap matching words in red highlight markers for chat display. */
+const OPEN_QUOTE = /["“‘'«]$/
+const CLOSE_QUOTE = /^["”’'»]/
+
+/** Drop the quotes Kea puts on either side of a highlighted word. */
+function stripQuotesAroundHighlights(
+  parts: Array<{ text: string; highlight: boolean }>,
+) {
+  const next = parts.map((part) => ({ ...part }))
+  for (let index = 0; index < next.length; index += 1) {
+    if (!next[index].highlight) continue
+    const before = next[index - 1]
+    const after = next[index + 1]
+    if (!before || !after || before.highlight || after.highlight) continue
+    if (!OPEN_QUOTE.test(before.text) || !CLOSE_QUOTE.test(after.text)) continue
+    before.text = before.text.slice(0, -1)
+    after.text = after.text.slice(1)
+  }
+  return next.filter((part) => part.text.length > 0)
+}
+
+/** Wrap matching words in orange highlight markers for chat display. */
 export function highlightNativeIntrusions(
   text: string,
   highlights: string[],
@@ -305,7 +325,8 @@ export function highlightNativeIntrusions(
     last = start + match[0].length
   }
   if (last < text.length) parts.push({ text: text.slice(last), highlight: false })
-  return parts.length ? parts : [{ text, highlight: false }]
+  const marked = parts.length ? parts : [{ text, highlight: false }]
+  return stripQuotesAroundHighlights(marked)
 }
 
 export function splitTalkParagraphs(text: string): string[] {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { openKeaMicrophone } from '../architecture/keaMicrophone'
 import {
+  connectSpeechAnalyser,
+  createSpeechVad,
+  SPEECH_RMS_FLOOR,
+} from '../architecture/keaSpeechVad'
+import {
   getSpeechRecognition,
   heardKeaWake,
   speechRecognitionAvailable,
@@ -16,13 +21,13 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_RMS_FLOOR = 0.04
-const SPEECH_HOLD_MS = 420
+const SPEECH_HOLD_MS = 380
 const SHOT_COOLDOWN_MS = 3500
 const WAKE_SILENCE_MS = 520
 /** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 480
+const MIN_SPEECH_BURST_MS = 400
 const MAX_UTTERANCE_MS = 2800
+const AMBIENT_CALIBRATE_MS = 650
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
@@ -105,7 +110,6 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     let recorder: MediaRecorder | null = null
     let chunks: Blob[] = []
     let mime = ''
-    let speechRms = SPEECH_RMS_FLOOR
     let utteranceStartedAt = 0
     let recordingUtterance = false
 
@@ -385,16 +389,13 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         )
         audioContext = new AudioContext()
         if (audioContext.state === 'suspended') await audioContext.resume()
-        const source = audioContext.createMediaStreamSource(watchStream)
-        analyser = audioContext.createAnalyser()
-        analyser.fftSize = 1024
-        source.connect(analyser)
+        const linked = connectSpeechAnalyser(audioContext, watchStream)
+        analyser = linked.analyser
+        const vad = createSpeechVad(SPEECH_RMS_FLOOR)
 
         const samples = new Uint8Array(analyser.fftSize)
         let last = performance.now()
-        const calibrateUntil = performance.now() + 500
-        let ambientSum = 0
-        let ambientN = 0
+        const calibrateUntil = performance.now() + AMBIENT_CALIBRATE_MS
         logWake('armed', {
           preferSpeech,
           mic: opened.info.label,
@@ -417,19 +418,10 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           const rms = Math.sqrt(sum / samples.length)
           const delta = now - last
           last = now
-          if (now < calibrateUntil) {
-            ambientSum += rms
-            ambientN += 1
-            if (ambientN > 3) {
-              const ambient = ambientSum / ambientN
-              speechRms = Math.max(
-                SPEECH_RMS_FLOOR,
-                Math.min(0.09, ambient * 4.2 + 0.018),
-              )
-            }
-            return
-          }
-          if (rms > speechRms) {
+          const calibrating = now < calibrateUntil
+          vad.observe(rms, { calibrating })
+          if (calibrating) return
+          if (vad.isSpeech(rms)) {
             speechHold += delta
             speechBurstMs += delta
             silenceHold = 0

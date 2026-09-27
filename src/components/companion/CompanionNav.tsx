@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
+import { keaRestartUrl, requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
 import {
   formatTrendPercent,
   getTalkTrendPercent,
@@ -8,6 +8,7 @@ import {
 } from '../../architecture/keaTalkPerformance'
 import { useSession } from '../../context/SessionContext'
 import { KeaMark } from './KeaMark'
+import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
 
 function ClearChatIcon() {
@@ -20,6 +21,30 @@ function ClearChatIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M4.2 12a7.8 7.8 0 0 1 13.3-5.5L20 8.4M19.8 12a7.8 7.8 0 0 1-13.3 5.5L4 15.6M20 4.2v4.2h-4.2M4 19.8v-4.2h4.2"
+      />
+    </svg>
+  )
+}
+
+function TypeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="3"
+        y="6"
+        width="18"
+        height="12"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.85"
+      />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.85"
+        strokeLinecap="round"
+        d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"
       />
     </svg>
   )
@@ -50,9 +75,16 @@ function TrendIcon() {
 interface CompanionNavProps {
   /** Optional mic name shown under the profile avatar (admin chat). */
   micLabel?: string
+  /** Quiet typing mode: no microphone and no spoken replies. */
+  textMode?: boolean
+  onToggleTextMode?: () => void
 }
 
-export function CompanionNav({ micLabel = '' }: CompanionNavProps) {
+export function CompanionNav({
+  micLabel = '',
+  textMode = false,
+  onToggleTextMode,
+}: CompanionNavProps) {
   const { isAdmin } = useSession()
   const [clearOpen, setClearOpen] = useState(false)
   const [trend, setTrend] = useState(() => getTalkTrendPercent())
@@ -83,6 +115,7 @@ export function CompanionNav({ micLabel = '' }: CompanionNavProps) {
         <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
         </Link>
+        <LanguageSwitcher />
         <NavLink
           to="/conversation"
           className={({ isActive }) =>
@@ -124,15 +157,30 @@ export function CompanionNav({ micLabel = '' }: CompanionNavProps) {
             <span className="perf-badge__value">{trendLabel}</span>
           </NavLink>
         )}
-        <button
-          type="button"
+        {onToggleTextMode ? (
+          <button
+            type="button"
+            className={`companion-nav__text${textMode ? ' is-on' : ''}`}
+            aria-pressed={textMode}
+            aria-label={textMode ? 'Switch back to voice' : 'Type instead of speaking'}
+            title={textMode ? 'Switch back to voice' : 'Type instead of speaking'}
+            onClick={onToggleTextMode}
+          >
+            <TypeIcon />
+          </button>
+        ) : null}
+        <a
+          href={keaRestartUrl()}
           className="companion-nav__clear"
-          aria-label="Clear chat"
-          title="Clear chat"
-          onClick={() => setClearOpen(true)}
+          aria-label="Reset Kea"
+          title="Reset Kea"
+          onClick={(event) => {
+            event.preventDefault()
+            setClearOpen(true)
+          }}
         >
           <ClearChatIcon />
-        </button>
+        </a>
         <UserMenu micLabel={micLabel} />
       </nav>
       {clearOpen ? (
@@ -162,7 +210,7 @@ export function CompanionNav({ micLabel = '' }: CompanionNavProps) {
                 Cancel
               </button>
               <button type="button" className="kea-button" onClick={confirmClear}>
-                Clear
+                Reset
               </button>
             </div>
           </div>

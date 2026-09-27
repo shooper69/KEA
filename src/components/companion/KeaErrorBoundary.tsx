@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { clearTalkTranscript, keaRestartUrl } from '../../architecture/keaTalkMemory'
 
 interface Props {
   children: ReactNode
@@ -30,20 +31,20 @@ export class KeaErrorBoundary extends Component<Props, State> {
               Kea hit a glitch. You are still signed in. Reset clears stuck
               listening and speech without logging you out.
             </p>
-            <button
-              type="button"
+            <a
               className="kea-button settings-save"
+              href={keaRestartUrl()}
               onClick={() => {
+                clearTalkTranscript()
                 try {
                   window.speechSynthesis?.cancel()
                 } catch {
                   // ignore
                 }
-                window.location.assign(`${window.location.origin}/conversation`)
               }}
             >
               Reset Kea
-            </button>
+            </a>
           </section>
         </div>
       </main>

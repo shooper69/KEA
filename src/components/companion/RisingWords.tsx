@@ -14,6 +14,8 @@ interface RisingWordsProps {
   live?: boolean
   userName?: string
   targetLanguage: LanguageCode
+  /** When false, lines stay written and the listen buttons stay hidden. */
+  allowListen?: boolean
 }
 
 function SpokenWithHighlights({
@@ -42,9 +44,11 @@ function SpokenWithHighlights({
 function TalkMessageCopy({
   message,
   targetLanguage,
+  allowListen,
 }: {
   message: TranscriptMessage
   targetLanguage: LanguageCode
+  allowListen: boolean
 }) {
   const spokenParts = splitTalkParagraphs(message.text)
   const englishParts = message.english
@@ -57,11 +61,13 @@ function TalkMessageCopy({
         <div className="rising-words__pair" key={`${message.id}-${index}`}>
           <div className="rising-words__spoken-row">
             <SpokenWithHighlights text={part} highlights={highlights} />
-            <SpeakButton
-              text={part}
-              languageCode={targetLanguage}
-              label="Listen to this paragraph"
-            />
+            {allowListen ? (
+              <SpeakButton
+                text={part}
+                languageCode={targetLanguage}
+                label="Listen to this paragraph"
+              />
+            ) : null}
           </div>
           {englishParts[index] ? (
             <p className="rising-words__english">{englishParts[index]}</p>
@@ -76,6 +82,7 @@ export function RisingWords({
   messages,
   userName = '',
   targetLanguage,
+  allowListen = true,
 }: RisingWordsProps) {
   const initial = (userName || 'Y').slice(0, 1).toUpperCase()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -86,10 +93,19 @@ export function RisingWords({
     const root = rootRef.current
     if (!root) return
 
+    let stickToEnd = true
+    const nearEnd = () =>
+      root.scrollHeight - root.scrollTop - root.clientHeight < 120
+
+    const onScroll = () => {
+      stickToEnd = nearEnd()
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+
     const measure = () => {
       const overflows = root.scrollHeight > root.clientHeight + 4
-      setFilling(overflows)
-      if (overflows) {
+      setFilling((current) => (current === overflows ? current : overflows))
+      if (overflows && stickToEnd) {
         root.scrollTop = root.scrollHeight
       }
     }
@@ -97,7 +113,10 @@ export function RisingWords({
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(root)
-    return () => observer.disconnect()
+    return () => {
+      root.removeEventListener('scroll', onScroll)
+      observer.disconnect()
+    }
   }, [messages])
 
   return (
@@ -126,7 +145,11 @@ export function RisingWords({
               <span>{initial}</span>
             </span>
           )}
-          <TalkMessageCopy message={message} targetLanguage={targetLanguage} />
+          <TalkMessageCopy
+            message={message}
+            targetLanguage={targetLanguage}
+            allowListen={allowListen}
+          />
         </div>
       ))}
       <div ref={endRef} className="rising-words__end" />

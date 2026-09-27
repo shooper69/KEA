@@ -21,6 +21,11 @@ import {
 } from '../config/voices'
 import { openKeaMicrophone } from '../architecture/keaMicrophone'
 import {
+  connectSpeechAnalyser,
+  createSpeechVad,
+  SPEECH_RMS_FLOOR,
+} from '../architecture/keaSpeechVad'
+import {
   getLanguage,
   HOME_GREETING_ID,
   isHomeGreetingMessage,
@@ -47,10 +52,9 @@ import type {
 
 const CHARACTER_KEY = 'kea-voice-character'
 const RESTART_LISTEN_MS = 80
-const MIN_SPEECH_MS = 480
+const MIN_SPEECH_MS = 420
 const MAX_RECORD_MS = 22000
-/** Floor for speech; live threshold is raised from ambient noise. */
-const SPEECH_RMS_FLOOR = 0.02
+const AMBIENT_CALIBRATE_MS = 750
 const DEFAULT_ANSWER_SILENCE_MS = 3000
 
 function readCharacter(): VoicePersonalityId {
@@ -121,7 +125,7 @@ export function useVoiceConversation({
   const [micLabel, setMicLabel] = useState('')
 
   const handsFreeRef = useRef(false)
-  const speechRmsRef = useRef(SPEECH_RMS_FLOOR)
+  const speechVadRef = useRef(createSpeechVad(SPEECH_RMS_FLOOR))
   const busyRef = useRef(false)
   const historyRef = useRef<TranscriptMessage[]>([])
   const statusRef = useRef<VoicePresenceState>('idle')
@@ -345,12 +349,15 @@ export function useVoiceConversation({
 
   const armListenIdle = useCallback(() => {
     clearListenIdleTimer()
+    const idleMs =
+      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
+      1000
     listenIdleTimerRef.current = window.setTimeout(() => {
       listenIdleTimerRef.current = null
       if (busyRef.current || statusRef.current !== 'listening') return
       if (speechMsRef.current > MIN_SPEECH_MS) return
       pauseListening()
-    }, Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds) * 1000)
+    }, idleMs)
   }, [clearListenIdleTimer, listenIdleSeconds, pauseListening])
 
   const captionSpanish = useCallback(
@@ -463,18 +470,15 @@ export function useVoiceConversation({
         audioContextRef.current = context
       }
       if (context.state === 'suspended') void context.resume()
-      const source = context.createMediaStreamSource(stream)
-      const analyser = context.createAnalyser()
-      analyser.fftSize = 1024
-      source.connect(analyser)
-      sourceRef.current = source
-      analyserRef.current = analyser
+      const linked = connectSpeechAnalyser(context, stream)
+      sourceRef.current = linked.source
+      analyserRef.current = linked.analyser
+      const analyser = linked.analyser
       const samples = new Uint8Array(analyser.fftSize)
       let last = performance.now()
-      let ambientSum = 0
-      let ambientSamples = 0
-      const ambientUntil = performance.now() + 280
-      speechRmsRef.current = SPEECH_RMS_FLOOR
+      const ambientUntil = performance.now() + AMBIENT_CALIBRATE_MS
+      const vad = createSpeechVad(SPEECH_RMS_FLOOR)
+      speechVadRef.current = vad
       const finishForAnswer = () => {
         if (recorder.state !== 'recording') return
         stopAnalyser()
@@ -498,18 +502,9 @@ export function useVoiceConversation({
         const rms = Math.sqrt(sum / samples.length)
         const delta = now - last
         last = now
-        if (now < ambientUntil && speechMsRef.current === 0) {
-          ambientSum += rms
-          ambientSamples += 1
-          if (ambientSamples > 4) {
-            const ambient = ambientSum / ambientSamples
-            speechRmsRef.current = Math.max(
-              SPEECH_RMS_FLOOR,
-              Math.min(0.05, ambient * 2.4 + 0.006),
-            )
-          }
-        }
-        if (rms > speechRmsRef.current) {
+        const calibrating = now < ambientUntil && speechMsRef.current === 0
+        vad.observe(rms, { calibrating })
+        if (vad.isSpeech(rms)) {
           speechMsRef.current += delta
           silenceMsRef.current = 0
           lastActivityAtRef.current = now
@@ -552,7 +547,14 @@ export function useVoiceConversation({
   }, [startListening])
 
   const speakReply = useCallback(
-    (text: string, afterSpeech?: () => void) => {
+    (
+      text: string,
+      afterSpeech?: () => void,
+      speechOpts?: {
+        prefetchedUrl?: string | null
+        prefetchPromise?: Promise<string | null> | null
+      },
+    ) => {
       busyRef.current = true
       setStatus('speaking')
       setMessages((current) =>
@@ -589,14 +591,17 @@ export function useVoiceConversation({
         lang: getLanguage(targetLanguage).speechLocale,
         onend: finish,
         onerror: finish,
+        prefetchedUrl: speechOpts?.prefetchedUrl,
+        prefetchPromise: speechOpts?.prefetchPromise,
       })
     },
     [targetLanguage],
   )
 
   const sendToKea = useCallback(
-    async (userText: string) => {
+    async (userText: string, options?: { written?: boolean }) => {
       if (sendingRef.current) return
+      const written = Boolean(options?.written)
       sendingRef.current = true
       busyRef.current = true
       clearListenIdleTimer()
@@ -639,6 +644,12 @@ export function useVoiceConversation({
         })
         touchChatTopic(userText, reply)
         patchVoiceDiagnostics({ lastAiResponse: reply, lastTranscript: userText })
+        if (written) {
+          busyRef.current = false
+          sendingRef.current = false
+          setStatus('idle')
+          return
+        }
         speakReply(reply)
       } catch (caught) {
         busyRef.current = false
@@ -670,6 +681,10 @@ export function useVoiceConversation({
     greeting?: string,
     englishCaption?: string,
     kind?: 'welcome' | 'welcome-back',
+    speechOpts?: {
+      prefetchedUrl?: string | null
+      prefetchPromise?: Promise<string | null> | null
+    },
   ) => {
     if (startingRef.current || handsFreeRef.current) return
     startingRef.current = true
@@ -705,19 +720,23 @@ export function useVoiceConversation({
         historyRef.current = next
         return next
       })
-      // Speak immediately; open the mic in parallel so the first line is not delayed.
-      speakReply(text, () => {
-        if (!handsFreeRef.current) {
-          setStatus('idle')
-          return
-        }
-        if (streamRef.current) {
-          logSpeech('listening again')
-          window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
-          return
-        }
-        listenWhenMicReadyRef.current = true
-      })
+      // Canned welcome / welcome-back: speak immediately (prefetch when ready).
+      speakReply(
+        text,
+        () => {
+          if (!handsFreeRef.current) {
+            setStatus('idle')
+            return
+          }
+          if (streamRef.current) {
+            logSpeech('listening again')
+            window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+            return
+          }
+          listenWhenMicReadyRef.current = true
+        },
+        speechOpts,
+      )
     }
 
     try {
@@ -826,6 +845,7 @@ export function useVoiceConversation({
     toggle,
     start,
     stop,
+    sendText: (text: string) => sendToKea(text, { written: true }),
     clearMessages,
     pauseSpeech,
     resumeSpeech,

@@ -346,10 +346,15 @@ export function AdminStripePage() {
       <section className="settings-card">
         <h2>Discounts and Price IDs</h2>
         <p className="settings-note">
-          Admin discount codes that change the charged amount clear{' '}
-          <code>stripePriceId</code> for that checkout so Stripe uses{' '}
-          <code>price_data</code> at the discounted monthly figure. Full-price
-          checkouts keep the catalog Price ID.
+          Kea discount codes (Admin → Subscription) map to Stripe Coupons at
+          checkout. When a code is applied, Checkout keeps the catalog{' '}
+          <code>stripePriceId</code> (full plan price) and attaches{' '}
+          <code>discounts[0][coupon]</code> so Stripe shows the % off on the
+          payment page. Coupons are created once in Stripe as{' '}
+          <code>kea_&lt;code&gt;_&lt;percent&gt;</code> with{' '}
+          <code>duration=once</code> (first invoice). 100% codes still activate
+          locally with no Stripe charge. Without a Kea code, Checkout still
+          allows Stripe promotion codes.
         </p>
       </section>
 

@@ -51,12 +51,13 @@ export const DEFAULT_OFFERS: KeaOffer[] = [
     id: 'home',
     enabled: true,
     badge: '50% off',
-    title: 'Talk more with Kea',
-    body: 'Welcome home. Take half off your first month and keep the conversation going.',
+    title: "We're flying.",
+    body: "You've found Kea at a good time. You can get a big discount if you move fast. Let's get talking.",
     ctaLabel: 'Grab Special offer',
     ctaPath: '/subscription',
     backgroundImage: '',
     appearOn: 'marketing',
+    discountCode: 'Flying',
   },
   {
     id: 'limit',
@@ -133,13 +134,23 @@ export function loadOffers(): KeaOffer[] {
     return DEFAULT_OFFERS.map((base) => {
       const saved = byId.get(base.id)
       if (!saved) return { ...base }
+      const title =
+        base.id === 'home' &&
+        saved.title.trim() === 'Talk more with Kea'
+          ? base.title
+          : saved.title.trim() || base.title
+      const body =
+        base.id === 'home' &&
+        saved.body.trim().startsWith('Welcome home.')
+          ? base.body
+          : saved.body.trim() || base.body
       return {
         ...base,
         ...saved,
         id: base.id,
         badge: saved.badge.trim() || base.badge,
-        title: saved.title.trim() || base.title,
-        body: saved.body.trim() || base.body,
+        title,
+        body,
         ctaLabel:
           !saved.ctaLabel.trim() ||
           saved.ctaLabel.trim().toLowerCase() === 'see subscriptions'

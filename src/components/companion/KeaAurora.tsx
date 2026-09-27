@@ -19,33 +19,34 @@ export function KeaAurora() {
     const context = canvas.getContext('2d', { alpha: true })
     if (!context) return
 
-    const backingScale = () => {
-      const large = window.matchMedia('(min-width: 721px)').matches
-      if (large) return 0.5
-      return Math.min(1.5, window.devicePixelRatio || 1)
+    let lastDraw = 0
+    let scrolling = false
+    let scrollTimer = 0
+
+    const onScroll = () => {
+      scrolling = true
+      window.clearTimeout(scrollTimer)
+      scrollTimer = window.setTimeout(() => {
+        scrolling = false
+      }, 160)
     }
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
 
-    const fit = () => {
+    const paint = (time: number) => {
       const parent = canvas.parentElement
-      const width = parent?.clientWidth || window.innerWidth
-      const height = parent?.clientHeight || window.innerHeight
-      const scale = backingScale()
-      canvas.width = Math.max(1, Math.floor(width * scale))
-      canvas.height = Math.max(1, Math.floor(height * scale))
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      context.setTransform(scale, 0, 0, scale, 0, 0)
-    }
-
-    fit()
-    const observer = new ResizeObserver(fit)
-    if (canvas.parentElement) observer.observe(canvas.parentElement)
-
-    const unsubscribe = subscribeKeaMotion((time) => {
-      const parent = canvas.parentElement
-      const width = parent?.clientWidth || window.innerWidth
-      const height = parent?.clientHeight || window.innerHeight
-      context.clearRect(0, 0, width, height)
+      if (!parent) return
+      const width = parent.clientWidth
+      const height = parent.clientHeight
+      if (width < 2 || height < 2) return
+      const scale = window.matchMedia('(min-width: 721px)').matches ? 0.4 : 0.5
+      const bitmapW = Math.max(1, Math.floor(width * scale))
+      const bitmapH = Math.max(1, Math.floor(height * scale))
+      if (canvas.width !== bitmapW || canvas.height !== bitmapH) {
+        canvas.width = bitmapW
+        canvas.height = bitmapH
+      }
+      context.setTransform(bitmapW / width, 0, 0, bitmapH / height, 0, 0)
+      context.clearRect(0, 0, width + 2, height + 2)
       const t = time / 1000
       context.globalCompositeOperation = 'lighter'
       for (const blob of BLOBS) {
@@ -68,18 +69,19 @@ export function KeaAurora() {
         context.fill()
       }
       context.globalCompositeOperation = 'source-over'
-      const mist = context.createLinearGradient(0, 0, width, height)
-      const drift = (Math.sin(t * 0.04) + 1) / 2
-      mist.addColorStop(0, `rgba(180, 220, 255, ${0.05 + drift * 0.04})`)
-      mist.addColorStop(0.5, `rgba(255, 210, 230, ${0.04 + (1 - drift) * 0.03})`)
-      mist.addColorStop(1, `rgba(160, 230, 210, ${0.05 + drift * 0.03})`)
-      context.fillStyle = mist
-      context.fillRect(0, 0, width, height)
+    }
+
+    const unsubscribe = subscribeKeaMotion((time) => {
+      if (scrolling || document.hidden) return
+      if (time - lastDraw < 1000 / 12) return
+      lastDraw = time
+      paint(time)
     })
 
     return () => {
       unsubscribe()
-      observer.disconnect()
+      document.removeEventListener('scroll', onScroll, true)
+      window.clearTimeout(scrollTimer)
     }
   }, [])
 

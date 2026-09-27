@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { AuthPanel } from '../components/companion/AuthPanel'
@@ -8,7 +8,7 @@ import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
 import { OfferPopup } from '../components/companion/OfferPopup'
 import { PasswordField } from '../components/companion/PasswordField'
 import { StoreBadges } from '../components/companion/StoreBadges'
-import { InstallAppButton } from '../components/companion/InstallAppButton'
+import { HomeCommentsStrip } from '../components/companion/HomeCommentsStrip'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
@@ -59,6 +59,7 @@ function markLeavePromptShown() {
 
 export function WelcomePage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     firstName,
     email,
@@ -110,6 +111,18 @@ export function WelcomePage() {
       spoken !== learning &&
       (!isAdminEmail(mail) || adminUnlocked || password.length > 0),
   )
+
+  useEffect(() => {
+    if (!authReady) return
+    if (isSignedIn) return
+    if (isPasswordRecoveryLocation()) return
+    if (searchParams.get('register') !== '1') return
+    setLeavePromptOpen(false)
+    setAuthOpen('register')
+    const next = new URLSearchParams(searchParams)
+    next.delete('register')
+    setSearchParams(next, { replace: true })
+  }, [authReady, isSignedIn, searchParams, setSearchParams])
 
   useEffect(() => {
     if (!authReady) return
@@ -433,16 +446,21 @@ export function WelcomePage() {
     ) : !authOpen ? (
       <div className="welcome-screen__actions welcome-screen__actions--home">
         {introHeard ? (
-          <Link to="/method" className="welcome-method-cta">
+          <Link
+            to="/method"
+            className="welcome-method-cta welcome-method-cta--dock"
+          >
             The Method
           </Link>
         ) : null}
-        <Button type="button" onClick={openRegister}>
-          Create free account
-        </Button>
-        <Button type="button" variant="ghost" onClick={openLogin}>
-          Sign in
-        </Button>
+        <div className="welcome-screen__auth-pair">
+          <Button type="button" onClick={openRegister}>
+            Create free account
+          </Button>
+          <Button type="button" variant="ghost" onClick={openLogin}>
+            Sign in
+          </Button>
+        </div>
       </div>
     ) : null
 
@@ -549,15 +567,33 @@ export function WelcomePage() {
       className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}`}
     >
       <CloudAtmosphere presence="idle" tempo="sunrise" />
+      {!authOpen ? (
+        <header className="welcome-screen__header method-screen__top">
+          <Link to="/" className="method-screen__brand" aria-label="Kea home">
+            <img
+              className="method-screen__logo"
+              src="/kea-05.png"
+              alt="Kea"
+              width={180}
+              height={90}
+            />
+          </Link>
+          <nav className="method-screen__nav" aria-label="Site">
+            <Link to="/" className="method-screen__home">
+              Home
+            </Link>
+            <Link to="/method" className="method-screen__page-title">
+              The Method
+            </Link>
+          </nav>
+        </header>
+      ) : null}
       <div
         className={`welcome-screen__shell${
           introMode ? ' welcome-screen__shell--intro' : ''
         }`}
       >
         <div className="welcome-screen__pinned">
-          <div className="welcome-screen__brand">
-            <img className="welcome-screen__logo" src="/kea-05.png" alt="Kea" />
-          </div>
           {introMode ? (
             <>
               <h1>{welcomeTitle}</h1>
@@ -583,9 +619,11 @@ export function WelcomePage() {
 
       {!authOpen ? (
         <footer className="welcome-screen__store-footer">
-          <InstallAppButton />
-          <StoreBadges />
-          <SiteFooter tone="marketing" />
+          {!introMode ? <HomeCommentsStrip /> : null}
+          <div className="welcome-screen__store-footer-bar">
+            <StoreBadges />
+            <SiteFooter tone="marketing" />
+          </div>
         </footer>
       ) : null}
 

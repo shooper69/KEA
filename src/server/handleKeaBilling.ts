@@ -25,6 +25,8 @@ type CheckoutPayload = {
   successUrl?: string
   cancelUrl?: string
   stripePriceId?: string
+  discountCode?: string
+  discountPercent?: number
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -74,6 +76,39 @@ async function stripeGet(apiKey: string, path: string) {
   })
   const data = (await response.json()) as Record<string, unknown>
   return { ok: response.ok, data }
+}
+
+function couponIdFromCode(code: string, percentOff: number) {
+  const slug = code
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 36)
+  return `kea_${slug || 'offer'}_${percentOff}`
+}
+
+/** Ensure a percent-off coupon exists in Stripe (first invoice / move-fast offers). */
+async function ensurePercentOffCoupon(
+  apiKey: string,
+  code: string,
+  percentOff: number,
+) {
+  const id = couponIdFromCode(code, percentOff)
+  const existing = await stripeGet(apiKey, `coupons/${id}`)
+  if (existing.ok) return id
+  const form = new URLSearchParams()
+  form.set('id', id)
+  form.set('name', `Kea ${code.trim()} · ${percentOff}% off`)
+  form.set('percent_off', String(percentOff))
+  form.set('duration', 'once')
+  form.set('metadata[kea_discount_code]', code.trim())
+  const created = await stripeForm(apiKey, 'coupons', form)
+  if (!created.ok) {
+    throw new Error(
+      stripeErrorMessage(created.data) || 'Could not create Stripe coupon',
+    )
+  }
+  return id
 }
 
 function verifyStripeWebhook(
@@ -304,6 +339,25 @@ export async function handleKeaBilling(
       json(res, 400, { error: 'Unknown Kea plan.' })
       return
     }
+    const discountPercent = Math.min(
+      100,
+      Math.max(0, Math.round(Number(payload.discountPercent) || 0)),
+    )
+    const discountCode = String(payload.discountCode ?? '').trim()
+    let couponId: string | null = null
+    if (discountPercent > 0 && discountPercent < 100 && discountCode) {
+      try {
+        couponId = await ensurePercentOffCoupon(key, discountCode, discountPercent)
+      } catch (caught) {
+        json(res, 502, {
+          error:
+            caught instanceof Error
+              ? caught.message
+              : 'Could not prepare Stripe discount',
+        })
+        return
+      }
+    }
     const success =
       payload.successUrl?.trim() ||
       'https://kea.chat/subscription?checkout=success'
@@ -318,7 +372,6 @@ export async function handleKeaBilling(
     form.set('billing_address_collection', 'auto')
     form.set('phone_number_collection[enabled]', 'false')
     form.set('automatic_tax[enabled]', 'false')
-    form.set('allow_promotion_codes', 'true')
     form.set('payment_method_collection', 'always')
     form.set('submit_type', 'auto')
     form.set('saved_payment_method_options[payment_method_save]', 'enabled')
@@ -330,6 +383,17 @@ export async function handleKeaBilling(
     form.set('cancel_url', cancel)
     form.set('metadata[planId]', payload.planId)
     form.set('subscription_data[metadata][planId]', payload.planId)
+    if (discountCode) {
+      form.set('metadata[kea_discount_code]', discountCode)
+      form.set('subscription_data[metadata][kea_discount_code]', discountCode)
+    }
+    if (discountPercent > 0) {
+      form.set('metadata[kea_discount_percent]', String(discountPercent))
+      form.set(
+        'subscription_data[metadata][kea_discount_percent]',
+        String(discountPercent),
+      )
+    }
     if (payload.userId?.trim()) {
       form.set('client_reference_id', payload.userId.trim())
       form.set('metadata[userId]', payload.userId.trim())
@@ -354,6 +418,12 @@ export async function handleKeaBilling(
         'line_items[0][price_data][product_data][metadata][kea_plan_id]',
         payload.planId,
       )
+    }
+    // Stripe: discounts XOR allow_promotion_codes
+    if (couponId) {
+      form.set('discounts[0][coupon]', couponId)
+    } else {
+      form.set('allow_promotion_codes', 'true')
     }
     const { ok, data } = await stripeForm(key, 'checkout/sessions', form)
     if (!ok) {

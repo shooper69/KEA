@@ -63,11 +63,7 @@ export async function listAudioInputs(): Promise<MediaDeviceInfo[]> {
 async function unlockMicLabels() {
   if (!navigator.mediaDevices?.getUserMedia) return
   const probe = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
+    audio: baseAudioConstraints(),
   })
   probe.getTracks().forEach((track) => track.stop())
 }
@@ -84,11 +80,23 @@ async function ensureMicLabels() {
 }
 
 function baseAudioConstraints(): MediaTrackConstraints {
-  return {
+  // Prefer browser noise fighting when available (Chromium voiceIsolation / goog*).
+  const advanced: Record<string, boolean | number> = {
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
+    channelCount: 1,
   }
+  // Chromium / Edge hints — ignored when unsupported.
+  advanced.voiceIsolation = true
+  advanced.googEchoCancellation = true
+  advanced.googNoiseSuppression = true
+  advanced.googNoiseSuppression2 = true
+  advanced.googAutoGainControl = true
+  advanced.googAutoGainControl2 = true
+  advanced.googHighpassFilter = true
+  advanced.googTypingNoiseDetection = true
+  return advanced as MediaTrackConstraints
 }
 
 async function openWithConstraints(

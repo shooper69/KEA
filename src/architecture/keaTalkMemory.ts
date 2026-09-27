@@ -112,9 +112,16 @@ export function requestClearTalkTranscript() {
   window.dispatchEvent(new Event(TALK_CLEARED_EVENT))
 }
 
+/** Full document load. A same-URL assign does not reload, so a frozen Kea stayed frozen. */
+export function keaRestartUrl() {
+  const url = new URL('/conversation', window.location.origin)
+  url.searchParams.set('restart', String(Date.now()))
+  return url.toString()
+}
+
 /**
- * Clear the chat and soft-reset runtime (mic, speech, AudioContext) without signing out.
- * Full navigation remounts the app so stuck mobile listeners cannot linger.
+ * Clear the chat and reload Kea without signing out.
+ * The new URL forces a real navigation so stuck mic, speech, and paint state cannot linger.
  */
 export function requestClearTalkAndSoftReset() {
   clearTalkTranscript()
@@ -123,9 +130,5 @@ export function requestClearTalkAndSoftReset() {
   } catch {
     // ignore
   }
-  window.dispatchEvent(new Event(TALK_CLEARED_EVENT))
-  const next = `${window.location.origin}/conversation`
-  window.setTimeout(() => {
-    window.location.assign(next)
-  }, 0)
+  window.location.replace(keaRestartUrl())
 }
