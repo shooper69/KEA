@@ -22,6 +22,7 @@ interface ChatRequest {
   masterDefinition?: string
   aboutKea?: string
   memoryBlock?: string
+  learnerProfile?: string
   averageReplyWords?: number
 }
 
@@ -114,6 +115,7 @@ export async function handleKeaChat(
                 payload.masterDefinition?.trim() || DEFAULT_KEA_MASTER_DEFINITION,
               aboutKea: payload.aboutKea,
               memoryBlock: payload.memoryBlock,
+              learnerProfile: payload.learnerProfile,
               averageReplyWords,
             }),
           },

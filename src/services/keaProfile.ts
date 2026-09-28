@@ -2,6 +2,8 @@ import { getSupabase } from '../lib/supabase'
 import { isLanguageCode } from '../config/languages'
 import { DEFAULT_VOICE_CHARACTER } from '../config/voices'
 import { normalizeListenIdleSeconds } from '../data/keaListenIdle'
+import type { LearnerAnswers } from '../data/keaLearnerProfile'
+import { parseLearnerAnswers } from '../data/keaLearnerProfile'
 import type { LanguageCode, VoicePersonalityId } from '../types'
 
 const VOICES: VoicePersonalityId[] = ['luna', 'mira', 'sage', 'rowan', 'theo']
@@ -27,6 +29,7 @@ export interface CloudProfile {
   subscriptionPlanId?: string
   subscriptionStatus?: string
   subscriptionCurrentPeriodEnd?: string
+  learnerProfile: LearnerAnswers | null
 }
 
 function asProfile(row: Record<string, unknown> | null): CloudProfile | null {
@@ -65,6 +68,7 @@ function asProfile(row: Record<string, unknown> | null): CloudProfile | null {
       typeof row.subscription_current_period_end === 'string'
         ? row.subscription_current_period_end
         : '',
+    learnerProfile: parseLearnerAnswers(row.learner_profile),
   }
 }
 
@@ -74,7 +78,7 @@ export async function fetchCloudProfile(userId: string): Promise<CloudProfile | 
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'first_name, native_language, target_language, preferred_voice, avatar_url, listen_idle_seconds, sky_theme, chat_keep, notify_memory, notify_talk, save_transcripts, stripe_customer_id, stripe_subscription_id, subscription_plan_id, subscription_status, subscription_current_period_end',
+      'first_name, native_language, target_language, preferred_voice, avatar_url, listen_idle_seconds, sky_theme, chat_keep, notify_memory, notify_talk, save_transcripts, stripe_customer_id, stripe_subscription_id, subscription_plan_id, subscription_status, subscription_current_period_end, learner_profile',
     )
     .eq('id', userId)
     .maybeSingle()
@@ -102,6 +106,7 @@ export async function upsertCloudProfile(
   if (patch.notifyMemory !== undefined) row.notify_memory = patch.notifyMemory
   if (patch.notifyTalk !== undefined) row.notify_talk = patch.notifyTalk
   if (patch.saveTranscripts !== undefined) row.save_transcripts = patch.saveTranscripts
+  if (patch.learnerProfile !== undefined) row.learner_profile = patch.learnerProfile
   const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'id' })
   if (error) throw error
 }

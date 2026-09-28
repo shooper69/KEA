@@ -45,31 +45,63 @@ export function useSpokenOnboarding({
   const [phase, setPhase] = useState<'idle' | 'speaking' | 'listening' | 'done'>(
     'idle',
   )
+  const [canAdvance, setCanAdvance] = useState(false)
   const [steps, setSteps] = useState<OnboardingStep[]>([])
   const cancelledRef = useRef(false)
+  const finishedRef = useRef(false)
+  const advanceNowRef = useRef(false)
+  const advanceWaitRef = useRef<(() => void) | null>(null)
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
   const onStepTextRef = useRef(onStepText)
   onStepTextRef.current = onStepText
 
   const finish = useCallback(() => {
+    if (finishedRef.current) return
+    finishedRef.current = true
     markSpokenOnboardingComplete(userKey)
+    setCanAdvance(false)
     setPhase('done')
     onCompleteRef.current()
   }, [userKey])
 
+  const advance = useCallback(() => {
+    if (advanceNowRef.current) return
+    advanceNowRef.current = true
+    try {
+      stopKeaSpeech()
+    } catch {
+      // ignore
+    }
+    advanceWaitRef.current?.()
+  }, [])
+
   useEffect(() => {
     if (!active) {
       cancelledRef.current = true
-      stopKeaSpeech()
+      finishedRef.current = false
+      try {
+        stopKeaSpeech()
+      } catch {
+        // ignore
+      }
       setPhase('idle')
+      setCanAdvance(false)
       setStepIndex(0)
       setSteps([])
       return
     }
 
     cancelledRef.current = false
-    const list = loadOnboardingSteps().filter((item) => item.spoken.trim())
+    finishedRef.current = false
+    advanceNowRef.current = false
+    setCanAdvance(false)
+    let list: OnboardingStep[] = []
+    try {
+      list = loadOnboardingSteps().filter((item) => item.spoken.trim())
+    } catch {
+      list = []
+    }
     setSteps(list)
     setStepIndex(0)
 
@@ -87,6 +119,7 @@ export function useSpokenOnboarding({
     let mime = ''
 
     const teardownMic = () => {
+      advanceWaitRef.current = null
       if (raf) {
         cancelAnimationFrame(raf)
         raf = 0
@@ -104,19 +137,39 @@ export function useSpokenOnboarding({
       stream = null
       chunks = []
       if (audioContext) {
-        void audioContext.close()
+        void audioContext.close().catch(() => {})
         audioContext = null
       }
     }
 
+    const speakLine = (text: string, lang: string) =>
+      new Promise<void>((resolve) => {
+        let settled = false
+        const done = () => {
+          if (settled) return
+          settled = true
+          resolve()
+        }
+        try {
+          void speakKeaLine(text, {
+            lang,
+            onend: done,
+            onerror: done,
+          })
+        } catch {
+          done()
+        }
+      })
+
     const listenForYes = async (): Promise<boolean> => {
       if (cancelledRef.current) return false
+      if (advanceNowRef.current) return true
       setPhase('listening')
       try {
         const opened = await openKeaMicrophone()
-        if (cancelledRef.current) {
+        if (cancelledRef.current || advanceNowRef.current) {
           opened.stream.getTracks().forEach((track) => track.stop())
-          return false
+          return Boolean(advanceNowRef.current)
         }
         stream = opened.stream
         mime = pickRecorderMime()
@@ -125,7 +178,8 @@ export function useSpokenOnboarding({
             ? new MediaRecorder(stream, { mimeType: mime })
             : new MediaRecorder(stream)
         } catch {
-          return false
+          opened.stream.getTracks().forEach((track) => track.stop())
+          return Boolean(advanceNowRef.current)
         }
         chunks = []
         recorder.ondataavailable = (event) => {
@@ -147,7 +201,12 @@ export function useSpokenOnboarding({
         const silenceEnd = 700
         const maxMs = 6000
 
-        recorder.start()
+        try {
+          recorder.start()
+        } catch {
+          teardownMic()
+          return Boolean(advanceNowRef.current)
+        }
         const startedAt = performance.now()
         let settled = false
 
@@ -178,12 +237,23 @@ export function useSpokenOnboarding({
             }
           }
           const tick = (now: number) => {
-            if (cancelledRef.current || settled || !analyser || !recorder) {
+            if (
+              cancelledRef.current ||
+              advanceNowRef.current ||
+              settled ||
+              !analyser ||
+              !recorder
+            ) {
               finishClip()
               return
             }
             raf = requestAnimationFrame(tick)
-            analyser.getByteTimeDomainData(samples)
+            try {
+              analyser.getByteTimeDomainData(samples)
+            } catch {
+              finishClip()
+              return
+            }
             let sum = 0
             for (const value of samples) {
               const n = (value - 128) / 128
@@ -208,11 +278,18 @@ export function useSpokenOnboarding({
               }),
             )
           }
+          advanceWaitRef.current = () => {
+            advanceNowRef.current = true
+            finishClip()
+          }
           raf = requestAnimationFrame(tick)
         })
 
+        advanceWaitRef.current = null
         teardownMic()
-        if (cancelledRef.current || blob.size < 1200) return false
+        if (cancelledRef.current) return false
+        if (advanceNowRef.current) return true
+        if (blob.size < 1200) return false
         const result = await transcribeWithWhisper(blob, {
           prompt: 'The speaker may simply say yes, okay, or sure.',
           language: 'en',
@@ -224,56 +301,57 @@ export function useSpokenOnboarding({
         return heardOnboardingYes(result.text)
       } catch {
         teardownMic()
-        return false
+        return Boolean(advanceNowRef.current)
       }
     }
 
     const run = async () => {
-      const locale = getLanguage(nativeLanguage).speechLocale
-      for (let i = 0; i < list.length; i++) {
-        if (cancelledRef.current) return
-        setStepIndex(i)
-        const line = withOkPrompt(list[i].spoken)
-        onStepTextRef.current?.(line)
-        setPhase('speaking')
-        await new Promise<void>((resolve) => {
-          void speakKeaLine(line, {
-            lang: locale,
-            onend: () => resolve(),
-            onerror: () => resolve(),
-          })
-        })
-        if (cancelledRef.current) return
-
-        let confirmed = false
-        for (let attempt = 0; attempt < 4 && !confirmed; attempt++) {
+      try {
+        const locale = getLanguage(nativeLanguage).speechLocale
+        for (let i = 0; i < list.length; i++) {
           if (cancelledRef.current) return
-          confirmed = await listenForYes()
-          if (confirmed) break
-          if (cancelledRef.current) return
-          // Soft re-prompt
+          setStepIndex(i)
+          setCanAdvance(false)
+          advanceNowRef.current = false
+          const line = withOkPrompt(list[i].spoken)
+          onStepTextRef.current?.(line)
           setPhase('speaking')
-          await new Promise<void>((resolve) => {
-            void speakKeaLine('Just say yes when you are ready. OK?', {
-              lang: locale,
-              onend: () => resolve(),
-              onerror: () => resolve(),
-            })
-          })
+          await speakLine(line, locale)
+          if (cancelledRef.current) return
+          if (advanceNowRef.current) {
+            setCanAdvance(false)
+            continue
+          }
+          setCanAdvance(true)
+
+          let confirmed = false
+          for (let attempt = 0; attempt < 4 && !confirmed; attempt++) {
+            if (cancelledRef.current) return
+            confirmed = await listenForYes()
+            if (confirmed) break
+            if (cancelledRef.current) return
+            setPhase('speaking')
+            await speakLine('Just say yes when you are ready. OK?', locale)
+            if (cancelledRef.current) return
+            setCanAdvance(true)
+          }
         }
-        if (!confirmed && !cancelledRef.current) {
-          // Don't block forever — advance after failed attempts.
-          continue
-        }
+        if (!cancelledRef.current) finish()
+      } catch {
+        if (!cancelledRef.current) finish()
       }
-      if (!cancelledRef.current) finish()
     }
 
     void run()
 
     return () => {
       cancelledRef.current = true
-      stopKeaSpeech()
+      advanceWaitRef.current = null
+      try {
+        stopKeaSpeech()
+      } catch {
+        // ignore
+      }
       teardownMic()
     }
   }, [active, nativeLanguage, finish])
@@ -282,6 +360,8 @@ export function useSpokenOnboarding({
     stepIndex,
     stepCount: steps.length,
     phase,
+    canAdvance,
     current: steps[stepIndex] ?? null,
+    advance,
   }
 }

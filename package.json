@@ -8,6 +8,7 @@
     "guard": "node scripts/assert-kea-isolation.mjs",
     "build": "npm run guard && tsc -b && vite build",
     "lint": "oxlint",
+    "test:e2e": "playwright test",
     "preview": "vite preview",
     "kea:auth-emails": "node scripts/kea-auth-emails.mjs && node scripts/kea-sync-auth-emails.mjs",
     "kea:supabase": "node scripts/kea-cli.mjs supabase",
@@ -21,6 +22,7 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

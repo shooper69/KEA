@@ -5,6 +5,7 @@ import {
   highlightNativeIntrusions,
   splitTalkParagraphs,
 } from '../../architecture/companionMemory'
+import { isRejoinWelcomeLine } from '../../architecture/keaStartSpeech'
 import { looksLikeSystemText } from '../../architecture/whisperText'
 import { SpeakButton } from './SpeakButton'
 import type { LanguageCode, TranscriptMessage } from '../../types'
@@ -70,7 +71,13 @@ function TalkMessageCopy({
             ) : null}
           </div>
           {englishParts[index] ? (
-            <p className="rising-words__english">{englishParts[index]}</p>
+            <p
+              className={`rising-words__english${
+                isRejoinWelcomeLine(message.text) ? ' rising-words__english--welcome' : ''
+              }`}
+            >
+              {englishParts[index]}
+            </p>
           ) : null}
         </div>
       ))}

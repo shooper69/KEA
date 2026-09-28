@@ -10,13 +10,13 @@ const METHOD_CARDS = [
       'Humans do not acquire their first language through lessons, they learn naturally through experience.',
     ],
     image: '/method/method-not-a-course.webp',
-    alt: 'A closed grammar book left behind outdoors',
+    alt: 'A young man and a kea sharing a table outdoors, with coffee and a sandwich on unused papers and a book',
   },
   {
     title: 'Learn like a child',
     body: [
       'Listening, repetition, observation, emotion, and personalised conversation. Understanding comes first. Speech emerges naturally.',
-      'Language is never isolated words. Meaning comes first. Language follows, the way it did when you learned to speak the first time.',
+      'Language is never isolated words. It’s a process. The desire to learn, pleasure in the experience, meaning recognised. Language follows, the way it did when you learned to speak the first time.',
     ],
     image: '/method/method-learn-like-child.webp',
     alt: 'A child listening closely to a friend outdoors',
@@ -24,7 +24,8 @@ const METHOD_CARDS = [
   {
     title: 'Unstructured talk',
     body: [
-      'With Kea you don’t follow a lesson plan, you just talk to a friend about everyday moments — greetings, meals, curiosity, stories, work and play. There’s no gamification, so when you fail to answer correctly, you don’t get sent back to the beginning, to yet again discuss ‘coffee or greetings’ for the umpteenth time.',
+      'With Kea you don’t follow a lesson plan, you just talk to a friend about everyday moments — greetings, meals, curiosity, stories, work and play.',
+      'There’s no gamification, so when you fail to answer correctly, you don’t get sent back to the beginning, to yet again discuss ‘coffee or greetings’ for the umpteenth time.',
     ],
     image: '/method/method-unstructured-talk.webp',
     alt: 'Friends chatting casually over coffee',
@@ -33,7 +34,7 @@ const METHOD_CARDS = [
     title: 'The Tech',
     body: [
       'Kea is AI powered. She engages at your level, tracks your mistakes and uses the words you need to learn repeatedly, until you’ve proven that you’ve remembered them and know how to use them.',
-      'Each subscription tier offers more sophistication, and at the highest level, you can communicate with different characters, that chat with real personality, and that learn about your life and remember your conversations, just like in any relationship.',
+      'Each subscription tier offers more sophistication, and at the highest level you can communicate with different characters that chat with real personality, and that learn about your life and remember your conversations. Just like in any relationship.',
     ],
     image: '/method/method-meaning-first.webp',
     alt: 'Two people sharing meaning while looking out over a town',
@@ -82,6 +83,9 @@ export function MethodPage() {
             <Link to="/method" className="method-screen__page-title">
               The Method
             </Link>
+            <Link to="/?login=1" className="method-screen__page-title method-screen__login">
+              Login
+            </Link>
           </nav>
         </header>
 
@@ -93,7 +97,14 @@ export function MethodPage() {
               from other language apps
             </span>
           </p>
-          <h1>Acquire a language. Don’t study it.</h1>
+          <h1>
+            <span className="method-screen__hero-line">
+              You acquire a language through experience,
+            </span>
+            <span className="method-screen__hero-line">
+              not by studying to remember by rote.
+            </span>
+          </h1>
         </div>
 
         <section className="method-set" aria-label="The Method">
@@ -122,6 +133,9 @@ export function MethodPage() {
         </section>
 
         <div className="method-screen__cta">
+          <p className="method-screen__invite">
+            So let’s see if we’re going to become friends.
+          </p>
           <Link to="/?register=1" className="kea-button method-screen__cta-button">
             Create free account
           </Link>

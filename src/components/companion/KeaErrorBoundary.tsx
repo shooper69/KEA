@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { clearTalkTranscript, keaRestartUrl } from '../../architecture/keaTalkMemory'
+import { keaRestartUrl } from '../../architecture/keaTalkMemory'
 
 interface Props {
   children: ReactNode
@@ -34,16 +34,17 @@ export class KeaErrorBoundary extends Component<Props, State> {
             <a
               className="kea-button settings-save"
               href={keaRestartUrl()}
-              onClick={() => {
-                clearTalkTranscript()
+              onClick={(event) => {
+                event.preventDefault()
                 try {
                   window.speechSynthesis?.cancel()
                 } catch {
                   // ignore
                 }
+                window.location.reload()
               }}
             >
-              Reset Kea
+              Reload
             </a>
           </section>
         </div>

@@ -29,6 +29,11 @@ import {
   normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
 import {
+  DEFAULT_SESSION_TIMEOUT_MINUTES,
+  SESSION_TIMEOUT_MINUTE_OPTIONS,
+  sessionTimeoutLabel,
+} from '../data/keaSessionTimeout'
+import {
   applyAudioRouteMic,
   listAudioInputs,
   savePreferredMicId,
@@ -96,6 +101,7 @@ export function SettingsPage() {
     notifyTalk,
     saveTranscripts,
     listenIdleSeconds,
+    sessionTimeoutMinutes,
     skyTheme,
     chatKeep,
   } = useSession()
@@ -635,24 +641,13 @@ export function SettingsPage() {
         {tab === 'memory' ? (
         <section className="settings-card">
           <h2>Memory</h2>
-          <p className="settings-note">
-            Learn List is language gaps
-            {isAdmin
-              ? '. Current Chat Topics is conversation continuity (work in progress).'
-              : '.'}
-          </p>
+          <p className="settings-note">Learn List is language gaps.</p>
           <Link className="memory-button" to="/learn">
             Learn List
           </Link>
-          {isAdmin ? (
-            <Link className="memory-button memory-button--wip" to="/topics">
-              Current Chat Topics
-            </Link>
-          ) : (
-            <Link className="memory-button" to="/performance">
-              Performance
-            </Link>
-          )}
+          <Link className="memory-button" to="/performance">
+            Performance
+          </Link>
         </section>
         ) : null}
         {tab === 'notifications' ? (
@@ -706,6 +701,26 @@ export function SettingsPage() {
             Kea is meant to feel private: a conversation with a friend, not a
             product watching you. Nothing here is sold. Your account lives in
             Kea Production only.
+          </p>
+          <label className="welcome-field">
+            <span>Stay signed in for</span>
+            <select
+              value={sessionTimeoutMinutes}
+              onChange={(event) => {
+                setProfile({ sessionTimeoutMinutes: Number(event.target.value) })
+              }}
+            >
+              {SESSION_TIMEOUT_MINUTE_OPTIONS.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  {sessionTimeoutLabel(minutes)}
+                  {minutes === DEFAULT_SESSION_TIMEOUT_MINUTES ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="settings-note">
+            After this long with no taps, speech, or scrolling, Kea signs out.
+            A live conversation keeps you signed in. Default is 10 minutes.
           </p>
           <label className="settings-choice">
             <input

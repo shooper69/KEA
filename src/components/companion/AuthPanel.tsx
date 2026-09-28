@@ -5,6 +5,7 @@ import { KeaOptionSheet } from './KeaOptionSheet'
 import { PasswordField } from './PasswordField'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../../config/languages'
 import { isAdminEmail } from '../../architecture/adminAuth'
+import { markAudioRoutePromptPending } from '../../architecture/keaAudioRoute'
 import { getSupabase } from '../../lib/supabase'
 import {
   authMessage,
@@ -156,6 +157,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
         return
       }
       setMessage('Signing you in…')
+      markAudioRoutePromptPending()
       navigate('/conversation', { replace: true })
     } catch (caught) {
       setMessage(authMessage(caught, 'Could not sign in.'))
@@ -235,6 +237,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setPassword('')
     setConfirm('')
     setMessage('Password saved. You are signed in.')
+    markAudioRoutePromptPending()
     navigate('/conversation', { replace: true })
   }
 

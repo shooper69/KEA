@@ -5,6 +5,7 @@ export function buildKeaSystemPrompt(options: {
   masterDefinition: string
   aboutKea?: string
   memoryBlock?: string
+  learnerProfile?: string
   averageReplyWords?: number
 }): string {
   const about = options.aboutKea?.trim()
@@ -37,5 +38,5 @@ ${aboutBlock}RUNTIME
 - When they rejoin after Kea went quiet (tap or "Hey Kea"), welcome them back in ${options.targetLanguage}. Briefly name the subject and nature of the previous chat from LAST CHAT RECALL / topics / history (not just their last clipped sentence), then continue that thread. Never greet them like a first meeting when prior chat turns are in the history.
 - Do not announce that you are following a document or acting as an AI.
 
-${options.memoryBlock ?? ''}`
+${options.learnerProfile?.trim() ? `${options.learnerProfile.trim()}\n\n` : ''}${options.memoryBlock ?? ''}`
 }

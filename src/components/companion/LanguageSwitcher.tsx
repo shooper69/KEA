@@ -1,42 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../../config/languages'
 import { useSession } from '../../context/SessionContext'
+import { useStickyMenu } from '../../hooks/useStickyMenu'
 import type { LanguageCode } from '../../types'
-
-function codeLabel(code: LanguageCode | null) {
-  if (!code) return '—'
-  return code.toUpperCase()
-}
+import { LanguageFlag } from './LanguageFlag'
 
 /**
  * Compact nav control to change spoken (native) and learning (target) languages.
  */
 export function LanguageSwitcher({ className = '' }: { className?: string }) {
   const { nativeLanguage, languageCode, setProfile } = useSession()
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-
-    function onPointerDown(event: PointerEvent) {
-      const node = rootRef.current
-      if (!node) return
-      if (event.target instanceof Node && node.contains(event.target)) return
-      setOpen(false)
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    document.addEventListener('pointerdown', onPointerDown, true)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
+  const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
 
   function pickOther(excluding: LanguageCode): LanguageCode {
     return (
@@ -66,38 +39,27 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
     setProfile({ targetLanguage: code })
   }
 
-  const nativeName = nativeLanguage
-    ? getLanguage(nativeLanguage).name
-    : 'Your language'
-  const learningName = languageCode
-    ? getLanguage(languageCode).name
-    : 'Learning'
+  const spokenCode = nativeLanguage ?? 'en'
+  const learningCode = languageCode ?? 'es'
+  const nativeName = getLanguage(spokenCode).name
+  const learningName = getLanguage(learningCode).name
 
   return (
     <div
       className={`language-switcher ${className}`.trim()}
       ref={rootRef}
+      onPointerLeave={onPointerLeave}
     >
       <button
         type="button"
-        className="memory-button language-switcher__trigger"
+        className="language-switcher__trigger companion-nav__icon"
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={`Languages: ${nativeName} to ${learningName}`}
-        title={`${nativeName} → ${learningName}`}
+        aria-label={`Learning ${learningName}. Spoken language is ${nativeName}.`}
+        title={`Learning ${learningName}`}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="language-switcher__pair">
-          {codeLabel(nativeLanguage)}
-          <span aria-hidden="true">→</span>
-          {codeLabel(languageCode)}
-        </span>
-        <span
-          className={`language-switcher__arrow${open ? ' is-open' : ''}`}
-          aria-hidden="true"
-        >
-          ▾
-        </span>
+        <LanguageFlag code={learningCode} />
       </button>
       {open ? (
         <div
@@ -108,7 +70,7 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
           <label className="language-switcher__field">
             <span>I speak</span>
             <select
-              value={nativeLanguage ?? ''}
+              value={spokenCode}
               onChange={(event) => {
                 const next = event.target.value as LanguageCode
                 if (next) setNative(next)
@@ -127,7 +89,7 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
           <label className="language-switcher__field">
             <span>I am learning</span>
             <select
-              value={languageCode ?? ''}
+              value={learningCode}
               onChange={(event) => {
                 const next = event.target.value as LanguageCode
                 if (next) setLearning(next)

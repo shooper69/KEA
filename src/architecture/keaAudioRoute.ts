@@ -56,7 +56,6 @@ export function clearAudioRoutePromptPending() {
 }
 
 export function shouldOfferAudioRoutePrompt(): boolean {
-  if (!isKeaMobileDevice()) return false
   try {
     return sessionStorage.getItem(PROMPT_KEY) === '1'
   } catch {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
@@ -116,11 +116,14 @@ export function WelcomePage() {
     if (!authReady) return
     if (isSignedIn) return
     if (isPasswordRecoveryLocation()) return
-    if (searchParams.get('register') !== '1') return
+    const register = searchParams.get('register') === '1'
+    const login = searchParams.get('login') === '1'
+    if (!register && !login) return
     setLeavePromptOpen(false)
-    setAuthOpen('register')
+    setAuthOpen(login ? 'login' : 'register')
     const next = new URLSearchParams(searchParams)
     next.delete('register')
+    next.delete('login')
     setSearchParams(next, { replace: true })
   }, [authReady, isSignedIn, searchParams, setSearchParams])
 
@@ -218,21 +221,21 @@ export function WelcomePage() {
 
   useEffect(() => {
     if (!langMenuOpen) return
-    function onPointer(event: MouseEvent) {
-      if (!langMenuRef.current?.contains(event.target as Node)) {
-        setLangMenuOpen(false)
-      }
-    }
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') setLangMenuOpen(false)
     }
-    window.addEventListener('mousedown', onPointer)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('mousedown', onPointer)
-      window.removeEventListener('keydown', onKey)
-    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
   }, [langMenuOpen])
+
+  function onLangPointerLeave(event: PointerEvent<HTMLDivElement>) {
+    const root = langMenuRef.current
+    if (!root) return
+    const next = event.relatedTarget
+    if (next instanceof Node && root.contains(next)) return
+    if (next == null) return
+    setLangMenuOpen(false)
+  }
 
   useEffect(() => {
     return () => {
@@ -383,25 +386,31 @@ export function WelcomePage() {
     if (!introMode) return
     const scroller = introScrollRef.current
     if (!scroller) return
-    const latest = scroller.querySelector(
-      '.welcome-screen__speech:last-of-type, .welcome-screen__lede--hint',
-    ) as HTMLElement | null
-    if (!latest) return
-    const scrollerRect = scroller.getBoundingClientRect()
-    const latestRect = latest.getBoundingClientRect()
-    const room = scrollerRect.bottom - 12
-    if (latestRect.bottom <= room && latestRect.top >= scrollerRect.top + 8) {
-      return
-    }
-    const nextTop = scroller.scrollTop + (latestRect.bottom - room) + 8
-    scroller.scrollTo({
-      top: Math.max(0, nextTop),
-      behavior: 'smooth',
+    let frame = 0
+    frame = window.requestAnimationFrame(() => {
+      const latest = (scroller.querySelector('.welcome-method-cta--after-intro') ||
+        scroller.querySelector(
+          '.welcome-screen__speech:last-of-type, .welcome-screen__lede--hint',
+        )) as HTMLElement | null
+      if (!latest) return
+      const scrollerRect = scroller.getBoundingClientRect()
+      const latestRect = latest.getBoundingClientRect()
+      const room = scrollerRect.bottom - 12
+      if (latestRect.bottom <= room && latestRect.top >= scrollerRect.top + 8) {
+        return
+      }
+      const nextTop = scroller.scrollTop + (latestRect.bottom - room) + 8
+      scroller.scrollTop = Math.max(0, nextTop)
     })
-  }, [visibleCopy, introBusy, visibleParagraphs.length, introMode])
+    return () => window.cancelAnimationFrame(frame)
+  }, [visibleCopy, introBusy, introHeard, visibleParagraphs.length, introMode])
 
   const langPicker = !authOpen ? (
-    <div className="welcome-lang-picker" ref={langMenuRef}>
+    <div
+      className="welcome-lang-picker"
+      ref={langMenuRef}
+      onPointerLeave={onLangPointerLeave}
+    >
       <button
         type="button"
         className="welcome-lang-picker__trigger"
@@ -410,7 +419,7 @@ export function WelcomePage() {
         disabled={introBusy}
         onClick={() => setLangMenuOpen((open) => !open)}
       >
-        <span>Choose language for Kea to say hi</span>
+        <span>Choose to chat with Kea</span>
         <span
           className={`welcome-lang-picker__arrow${langMenuOpen ? ' is-open' : ''}`}
           aria-hidden="true"
@@ -445,20 +454,9 @@ export function WelcomePage() {
       <p className="settings-note">One moment…</p>
     ) : !authOpen ? (
       <div className="welcome-screen__actions welcome-screen__actions--home">
-        {introHeard ? (
-          <Link
-            to="/method"
-            className="welcome-method-cta welcome-method-cta--dock"
-          >
-            The Method
-          </Link>
-        ) : null}
         <div className="welcome-screen__auth-pair">
           <Button type="button" onClick={openRegister}>
             Create free account
-          </Button>
-          <Button type="button" variant="ghost" onClick={openLogin}>
-            Sign in
           </Button>
         </div>
       </div>
@@ -483,6 +481,11 @@ export function WelcomePage() {
           {paragraph}
         </p>
       ))}
+      {introHeard && !introBusy ? (
+        <Link to="/method" className="welcome-method-cta welcome-method-cta--after-intro">
+          The Method
+        </Link>
+      ) : null}
     </div>
   ) : null
 
@@ -564,7 +567,7 @@ export function WelcomePage() {
 
   return (
     <main
-      className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}`}
+      className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}${introMode ? ' welcome-screen--intro' : ''}`}
     >
       <CloudAtmosphere presence="idle" tempo="sunrise" />
       {!authOpen ? (
@@ -585,6 +588,13 @@ export function WelcomePage() {
             <Link to="/method" className="method-screen__page-title">
               The Method
             </Link>
+            <button
+              type="button"
+              className="method-screen__page-title method-screen__login"
+              onClick={openLogin}
+            >
+              Login
+            </button>
           </nav>
         </header>
       ) : null}

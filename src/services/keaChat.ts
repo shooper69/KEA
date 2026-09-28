@@ -20,6 +20,7 @@ export async function askKea(options: {
   level: LearnerLevel
   history: TranscriptMessage[]
   userText: string
+  learnerProfile?: string
 }): Promise<string> {
   const history = options.history
     .filter((item) => item.text.trim())
@@ -44,8 +45,9 @@ export async function askKea(options: {
       level: options.level,
       masterDefinition: getMasterDefinition(),
       aboutKea: getAboutKea(),
-      memoryBlock: memoryPromptBlock(userText, options.history),
-      averageReplyWords: getAverageReplyWords(),
+  memoryBlock: memoryPromptBlock(userText, options.history),
+  learnerProfile: options.learnerProfile,
+  averageReplyWords: getAverageReplyWords(),
       messages,
     }),
   })

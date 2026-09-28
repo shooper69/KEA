@@ -20,6 +20,7 @@ import {
   migrateCharmMoodDefault,
 } from '../config/voices'
 import { openKeaMicrophone } from '../architecture/keaMicrophone'
+import { withoutRejoinWelcomes } from '../architecture/keaStartSpeech'
 import {
   connectSpeechAnalyser,
   createSpeechVad,
@@ -39,7 +40,7 @@ import { askKea, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END } from '../services/keaSpeak'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
-import { DEFAULT_LISTEN_IDLE_SECONDS, MIN_LISTEN_IDLE_SECONDS } from '../data/keaListenIdle'
+import { learnerProfilePrompt } from '../data/keaLearnerProfile'
 import { heardKeaStop } from '../architecture/keaWakeWord'
 import type {
   LanguageCode,
@@ -115,7 +116,9 @@ export function useVoiceConversation({
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
   const [messages, setMessages] = useState<TranscriptMessage[]>(() =>
-    withHomeGreeting(loadTalkTranscript(), targetLanguage, firstName),
+    withoutRejoinWelcomes(
+      withHomeGreeting(loadTalkTranscript(), targetLanguage, firstName),
+    ),
   )
   const [error, setError] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
@@ -624,6 +627,7 @@ export function useVoiceConversation({
           level,
           history: historyRef.current,
           userText,
+          learnerProfile: learnerProfilePrompt(),
         })
         const { reply, signals } = splitKeaReply(raw)
         logAi('response', reply)
@@ -684,6 +688,10 @@ export function useVoiceConversation({
     speechOpts?: {
       prefetchedUrl?: string | null
       prefetchPromise?: Promise<string | null> | null
+      /** When false, speak the greeting only — do not open the mic. */
+      listenAfter?: boolean
+      /** Show the line without speaking (typing mode). */
+      silent?: boolean
     },
   ) => {
     if (startingRef.current || handsFreeRef.current) return
@@ -691,6 +699,45 @@ export function useVoiceConversation({
     listenWhenMicReadyRef.current = false
     setError(null)
     fatalListenRef.current = false
+    const listenAfter = speechOpts?.listenAfter !== false
+    const hasGreeting = Boolean(greeting?.trim())
+
+    if (!listenAfter) {
+      if (hasGreeting) {
+        const text = greeting!.trim()
+        const english = englishCaption?.trim() || undefined
+        const isWelcome = kind === 'welcome'
+        const keaMessage: TranscriptMessage = {
+          id: isWelcome ? HOME_GREETING_ID : crypto.randomUUID(),
+          speaker: 'kea',
+          text,
+          english:
+            kind === 'welcome-back'
+              ? targetLanguage === 'en'
+                ? undefined
+                : english
+              : english,
+          active: true,
+        }
+        setMessages((current) => {
+          const base =
+            kind === 'welcome-back' ? withoutRejoinWelcomes(current) : current
+          const next = isWelcome
+            ? [keaMessage, ...base.filter((item) => !isHomeGreetingMessage(item))]
+            : [...base, keaMessage]
+          historyRef.current = next
+          return next
+        })
+        if (speechOpts?.silent) {
+          setStatus('idle')
+        } else {
+          speakReply(text, () => setStatus('idle'), speechOpts)
+        }
+      }
+      startingRef.current = false
+      return
+    }
+
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       startingRef.current = false
       setError('This browser cannot record the microphone for Whisper.')
@@ -701,7 +748,6 @@ export function useVoiceConversation({
     handsFreeRef.current = true
     setHandsFree(true)
 
-    const hasGreeting = Boolean(greeting?.trim())
     if (hasGreeting) {
       const text = greeting!.trim()
       const english = englishCaption?.trim() || undefined
@@ -710,13 +756,20 @@ export function useVoiceConversation({
         id: isWelcome ? HOME_GREETING_ID : crypto.randomUUID(),
         speaker: 'kea',
         text,
-        english: targetLanguage === 'en' ? undefined : english,
+        english:
+          kind === 'welcome-back'
+            ? targetLanguage === 'en'
+              ? undefined
+              : english
+            : english,
         active: true,
       }
       setMessages((current) => {
+        const base =
+          kind === 'welcome-back' ? withoutRejoinWelcomes(current) : current
         const next = isWelcome
-          ? [keaMessage, ...current.filter((item) => !isHomeGreetingMessage(item))]
-          : [...current, keaMessage]
+          ? [keaMessage, ...base.filter((item) => !isHomeGreetingMessage(item))]
+          : [...base, keaMessage]
         historyRef.current = next
         return next
       })

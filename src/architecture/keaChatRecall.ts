@@ -308,7 +308,7 @@ export function lastChatRecallPromptBlock(
   if (recall.topic) lines.push(`- Subject: ${recall.topic}`)
   if (recall.nature) lines.push(`- Where it left off: ${recall.nature}`)
   lines.push(
-    '- On rejoin: welcome them back, briefly name this subject and the nature of that chat in one short beat, then continue from there.',
+    '- The app already says a short welcome in the learning language. Do not add another welcome-back. Use this subject only after they speak.',
   )
   return `${lines.join('\n')}\n\n`
 }

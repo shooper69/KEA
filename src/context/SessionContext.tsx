@@ -22,6 +22,10 @@ import {
   DEFAULT_LISTEN_IDLE_SECONDS,
   normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
+import {
+  DEFAULT_SESSION_TIMEOUT_MINUTES,
+  normalizeSessionTimeoutMinutes,
+} from '../data/keaSessionTimeout'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
   fetchCloudProfile,
@@ -30,6 +34,12 @@ import {
 } from '../services/keaProfile'
 import { markAudioRoutePromptPending } from '../architecture/keaAudioRoute'
 import { applyCloudSubscription } from '../architecture/keaBilling'
+import {
+  learnerLevelToSession,
+  loadLegacyLearnerAnswers,
+  setActiveLearnerAnswers,
+  type LearnerAnswers,
+} from '../data/keaLearnerProfile'
 import type {
   ChatKeep,
   LanguageCode,
@@ -53,6 +63,7 @@ export interface StoredProfile {
   notifyTalk: boolean
   saveTranscripts: boolean
   listenIdleSeconds: number
+  sessionTimeoutMinutes: number
   answerAfterSilenceSeconds: number
   skyTheme: SkyTheme
   chatKeep: ChatKeep
@@ -69,6 +80,7 @@ const DEFAULT_PROFILE: StoredProfile = {
   notifyTalk: true,
   saveTranscripts: true,
   listenIdleSeconds: DEFAULT_LISTEN_IDLE_SECONDS,
+  sessionTimeoutMinutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
   answerAfterSilenceSeconds: 3,
   skyTheme: 'clouds',
   chatKeep: 'device',
@@ -82,6 +94,7 @@ function readProfile(): StoredProfile {
     const nativeLanguage = parsed.nativeLanguage
     const targetLanguage = parsed.targetLanguage
     const listenIdleSeconds = Number(parsed.listenIdleSeconds)
+    const sessionTimeoutMinutes = Number(parsed.sessionTimeoutMinutes)
     const answerAfterSilenceSeconds = Number(parsed.answerAfterSilenceSeconds)
     const skyTheme = parsed.skyTheme === 'weather' ? 'weather' : 'clouds'
     const chatKeep = parsed.chatKeep === 'cloud' ? 'cloud' : 'device'
@@ -102,6 +115,7 @@ function readProfile(): StoredProfile {
           ? preferredVoice
           : DEFAULT_VOICE_CHARACTER,
       listenIdleSeconds: normalizeListenIdleSeconds(listenIdleSeconds),
+      sessionTimeoutMinutes: normalizeSessionTimeoutMinutes(sessionTimeoutMinutes),
       answerAfterSilenceSeconds:
         Number.isFinite(answerAfterSilenceSeconds) &&
         answerAfterSilenceSeconds >= 1
@@ -166,9 +180,12 @@ interface SessionContextValue {
   notifyTalk: boolean
   saveTranscripts: boolean
   listenIdleSeconds: number
+  sessionTimeoutMinutes: number
   answerAfterSilenceSeconds: number
   skyTheme: SkyTheme
   chatKeep: ChatKeep
+  learnerAnswers: LearnerAnswers | null | undefined
+  saveLearnerProfile: (answers: LearnerAnswers) => Promise<void>
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null)
@@ -177,6 +194,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfileState] = useState<StoredProfile>(readProfile)
   const [adminUnlocked, setAdminUnlocked] = useState(isAdminSessionOpen)
   const [level, setLevel] = useState<LearnerLevel>('intermediate')
+  const [learnerAnswers, setLearnerAnswers] = useState<
+    LearnerAnswers | null | undefined
+  >(isKeaCloudConfigured() ? undefined : null)
   const [vocabulary, setVocabulary] = useState<VocabularyMemoryItem[]>(() =>
     vocabularyFor(readProfile().targetLanguage),
   )
@@ -244,6 +264,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         saveTranscripts: cloud?.saveTranscripts ?? current.saveTranscripts,
       }
       persistProfile(next)
+      const fromCloud = cloud?.learnerProfile ?? null
+      const legacy = fromCloud ? null : loadLegacyLearnerAnswers(email)
+      const answers = fromCloud ?? legacy
+      setLearnerAnswers(answers)
+      setActiveLearnerAnswers(answers)
+      if (answers) setLevel(learnerLevelToSession(answers.level))
+      if (!fromCloud && legacy) {
+        void upsertCloudProfile(id, { learnerProfile: legacy })
+      }
       setVocabulary(vocabularyFor(next.targetLanguage))
       if (
         (!cloud?.nativeLanguage || !cloud?.targetLanguage) &&
@@ -262,6 +291,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = getSupabase()
     if (!supabase) {
+      setLearnerAnswers(null)
+      setActiveLearnerAnswers(null)
       setAuthReady(true)
       return
     }
@@ -287,6 +318,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!session?.user) {
         userIdRef.current = null
         setUserId(null)
+        setLearnerAnswers(null)
+        setActiveLearnerAnswers(null)
         return
       }
       void applyCloudUser(session.user)
@@ -303,6 +336,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const next = { ...current, ...patch }
       if (patch.listenIdleSeconds !== undefined) {
         next.listenIdleSeconds = normalizeListenIdleSeconds(patch.listenIdleSeconds)
+      }
+      if (patch.sessionTimeoutMinutes !== undefined) {
+        next.sessionTimeoutMinutes = normalizeSessionTimeoutMinutes(
+          patch.sessionTimeoutMinutes,
+        )
       }
       persistProfile(next)
       if (patch.targetLanguage) {
@@ -331,6 +369,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  async function saveLearnerProfile(answers: LearnerAnswers) {
+    const id = userIdRef.current
+    if (!id || !isKeaCloudConfigured()) {
+      throw new Error('Sign in again so Kea can save your answers.')
+    }
+    await upsertCloudProfile(id, { learnerProfile: answers })
+    setLearnerAnswers(answers)
+    setActiveLearnerAnswers(answers)
+    setLevel(learnerLevelToSession(answers.level))
+  }
   function setLanguageCode(code: LanguageCode) {
     setProfile({ targetLanguage: code })
   }
@@ -354,21 +402,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     persistProfile(empty)
     setProfileState(empty)
     setVocabulary([])
+    setLearnerAnswers(null)
+    setActiveLearnerAnswers(null)
     // Keep talk transcript so the chat is still there after they sign back in.
   }
 
   useEffect(() => {
     if (!userId) return
-    const IDLE_MS = 5 * 60 * 1000
+    const idleMs = normalizeSessionTimeoutMinutes(profile.sessionTimeoutMinutes) * 60 * 1000
     let timer = window.setTimeout(() => {
       void signOut()
-    }, IDLE_MS)
+    }, idleMs)
 
     const bump = () => {
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         void signOut()
-      }, IDLE_MS)
+      }, idleMs)
     }
 
     const onActivity = () => bump()
@@ -399,7 +449,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     // signOut is stable enough for idle logout; re-bind when user signs in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId])
+  }, [userId, profile.sessionTimeoutMinutes])
 
   const emailIsAdmin = isAdminEmail(profile.email)
   const cloudAuth = isKeaCloudConfigured()
@@ -442,9 +492,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       notifyTalk: profile.notifyTalk,
       saveTranscripts: profile.saveTranscripts,
       listenIdleSeconds: profile.listenIdleSeconds,
+      sessionTimeoutMinutes: profile.sessionTimeoutMinutes,
       answerAfterSilenceSeconds: profile.answerAfterSilenceSeconds,
       skyTheme: profile.skyTheme,
       chatKeep: profile.chatKeep,
+      learnerAnswers,
+      saveLearnerProfile,
     }),
     [
       activeVocabulary,
@@ -456,6 +509,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       isSignedIn,
       level,
       profile,
+      learnerAnswers,
       userId,
       vocabulary,
     ],

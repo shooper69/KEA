@@ -3,6 +3,7 @@ import {
   isHomeGreetingMessage,
 } from '../config/languages'
 import type { LanguageCode, TranscriptMessage } from '../types'
+import { withoutRejoinWelcomes } from './keaStartSpeech'
 import { looksLikeSystemText } from './whisperText'
 
 const TALK_KEY = 'kea-talk-transcript-v1'
@@ -47,11 +48,13 @@ export function loadTalkTranscript(): TranscriptMessage[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
-    return keepHomeGreeting(
+    return withoutRejoinWelcomes(
+      keepHomeGreeting(
       parsed
         .filter(isMessage)
         .filter((item) => item.text.trim() && !item.interim)
         .filter((item) => !looksLikeSystemText(item.text)),
+    ),
     ).map((item) => ({
         ...item,
         interim: false,

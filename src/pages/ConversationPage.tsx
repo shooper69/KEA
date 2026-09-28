@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { MobileAudioRoutePopup } from '../components/companion/MobileAudioRoutePopup'
@@ -9,13 +9,18 @@ import { PaywallModal, useTalkGate } from '../components/companion/PaywallModal'
 import { RisingWords } from '../components/companion/RisingWords'
 import { TextComposer } from '../components/companion/TextComposer'
 import { VoiceMic } from '../components/companion/VoiceMic'
+import { LearnerQuestionnaire } from '../components/companion/LearnerQuestionnaire'
+import { KEA_FLY_SRC } from '../data/keaAbout'
 import { shouldOfferAudioRoutePrompt } from '../architecture/keaAudioRoute'
+import {
+  shouldShowLearnerQuiz,
+  shouldShowSpokenTour,
+} from '../architecture/learnerQuizGate'
+import { hasUserTalked } from '../data/keaLearnerProfile'
 import { getTalkAccess, recordTalkSeconds } from '../architecture/keaBilling'
 import {
   buildStartSpeechLine,
-  isFreshTalkSession,
 } from '../architecture/keaStartSpeech'
-import { isHomeGreetingMessage } from '../config/languages'
 import {
   consumeSubLeaveOfferPending,
   dismissHomeOffer,
@@ -58,6 +63,7 @@ function saveTextMode(on: boolean) {
 
 export function ConversationPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const {
     languageCode,
     nativeLanguage,
@@ -66,18 +72,30 @@ export function ConversationPage() {
     firstName,
     email,
     isAdmin,
+    learnerAnswers,
   } = useSession()
   const { block, setBlock, guardStart } = useTalkGate(isAdmin)
-  const [audioRouteOpen, setAudioRouteOpen] = useState(() =>
-    shouldOfferAudioRoutePrompt(),
-  )
+  const [audioRouteOpen, setAudioRouteOpen] = useState(shouldOfferAudioRoutePrompt)
+
+  useEffect(() => {
+    if (shouldOfferAudioRoutePrompt()) setAudioRouteOpen(true)
+  }, [])
   const [popup1Open, setPopup1Open] = useState(() => shouldShowPopup1('home'))
   const [subLeaveOpen, setSubLeaveOpen] = useState(() => {
     if (!consumeSubLeaveOfferPending()) return false
     return shouldShowSubLeaveOffer(getTalkAccess(isAdmin).status === 'active')
   })
   const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
-  const [onboardingActive, setOnboardingActive] = useState(false)
+  const profileKnown = learnerAnswers !== undefined
+  const reviewOnboarding = searchParams.get('onboarding') === '1'
+  const quizOpen = shouldShowLearnerQuiz({
+    isAdmin,
+    review: reviewOnboarding,
+    profileKnown,
+    hasAnswers: learnerAnswers != null,
+    hasTalked: hasUserTalked(),
+  })
+  const [onboardingRevision, setOnboardingRevision] = useState(0)
   const [onboardLine, setOnboardLine] = useState('')
   const [textMode, setTextMode] = useState(loadTextMode)
   const [keyboardInset, setKeyboardInset] = useState(0)
@@ -97,27 +115,29 @@ export function ConversationPage() {
   const liveRef = useRef(live)
   liveRef.current = live
   const lastTapAt = useRef(0)
+  const sessionGreetedRef = useRef('')
 
   useEffect(() => {
-    function maybeStart() {
-      if (audioRouteOpen || block || textMode) return
-      if (hasCompletedSpokenOnboarding(userKey)) return
-      setOnboardingActive(true)
-    }
-    maybeStart()
-    window.addEventListener(ONBOARDING_CHANGED, maybeStart)
-    return () => window.removeEventListener(ONBOARDING_CHANGED, maybeStart)
-  }, [audioRouteOpen, block, userKey, textMode])
+    const bump = () => setOnboardingRevision((n) => n + 1)
+    window.addEventListener(ONBOARDING_CHANGED, bump)
+    return () => window.removeEventListener(ONBOARDING_CHANGED, bump)
+  }, [])
+
+  const spokenTour = shouldShowSpokenTour({
+    isAdmin,
+    profileKnown,
+    hasName: Boolean(firstName.trim()),
+    hasTalked: hasUserTalked(),
+    completed: onboardingRevision >= 0 && hasCompletedSpokenOnboarding(userKey),
+    busy: Boolean(block) || audioRouteOpen || textMode || quizOpen,
+  })
 
   const onboard = useSpokenOnboarding({
-    active: onboardingActive && !textMode,
+    active: spokenTour,
     nativeLanguage: nativeLanguage ?? 'en',
     userKey,
     onStepText: setOnboardLine,
-    onComplete: () => {
-      setOnboardingActive(false)
-      setOnboardLine('')
-    },
+    onComplete: () => setOnboardLine(''),
   })
 
   useEffect(() => {
@@ -125,26 +145,25 @@ export function ConversationPage() {
       setPopup1Open(
         !block &&
           !audioRouteOpen &&
-          !onboardingActive &&
+          !spokenTour &&
           shouldShowPopup1('home'),
       )
     }
     maybeShow()
     window.addEventListener('kea-offers-changed', maybeShow)
     return () => window.removeEventListener('kea-offers-changed', maybeShow)
-  }, [block, audioRouteOpen, onboardingActive])
+  }, [block, audioRouteOpen, spokenTour])
 
   function beginTalking() {
-    if (audioRouteOpen || onboardingActive) return
+    if (audioRouteOpen || spokenTour || quizOpen) return
     if (liveRef.current) return
     if (!guardStart()) return
-    if (
-      isFreshTalkSession(voice.messages) &&
-      voice.messages.some(isHomeGreetingMessage)
-    ) {
+    // Already greeted this session — just listen.
+    if (sessionGreetedRef.current) {
       void voice.start()
       return
     }
+    sessionGreetedRef.current = 'talk'
     const line = buildStartSpeechLine({
       languageCode: target,
       firstName,
@@ -167,18 +186,15 @@ export function ConversationPage() {
     void voice.start(line.spoken, line.english, line.kind, speechOpts)
   }
 
-  const beginTalkingRef = useRef(beginTalking)
-  beginTalkingRef.current = beginTalking
-
   const greetingPrefetchRef = useRef<{
     text: string
     url: string | null
     promise: Promise<string | null>
   } | null>(null)
 
-  // Prefetch canned welcome / welcome-back TTS so the first line starts quickly.
+  // Prefetch the short welcome-back line.
   useEffect(() => {
-    if (audioRouteOpen || block || onboardingActive) return
+    if (audioRouteOpen || block || spokenTour || quizOpen) return
     const line = buildStartSpeechLine({
       languageCode: target,
       firstName,
@@ -197,27 +213,58 @@ export function ConversationPage() {
   }, [
     audioRouteOpen,
     block,
-    onboardingActive,
+    spokenTour,
+    quizOpen,
     target,
     firstName,
     voice.messages,
   ])
 
-  // After blockers clear, start hands-free listening so Kea stays live
-  // for the configured idle window (default 10 minutes).
+  // On login / Talk ready: one short welcome in the learning language.
   useEffect(() => {
-    if (audioRouteOpen || block || onboardingActive || textMode) return
-    if (liveRef.current) return
-    const timer = window.setTimeout(() => {
-      if (audioRouteOpen || block || onboardingActive || textMode) return
-      if (liveRef.current) return
-      beginTalkingRef.current()
-    }, 180)
-    return () => window.clearTimeout(timer)
-  }, [audioRouteOpen, block, onboardingActive, textMode])
+    if (audioRouteOpen || block || spokenTour || quizOpen || !profileKnown) {
+      return
+    }
+    const line = buildStartSpeechLine({
+      languageCode: target,
+      firstName,
+      messages: voice.messages,
+    })
+    if (sessionGreetedRef.current === line.spoken) return
+    sessionGreetedRef.current = line.spoken
+    const pref = greetingPrefetchRef.current
+    const speechOpts =
+      pref && pref.text === line.spoken
+        ? {
+            listenAfter: false as const,
+            silent: textMode,
+            prefetchedUrl: pref.url,
+            prefetchPromise: pref.url ? null : pref.promise,
+          }
+        : { listenAfter: false as const, silent: textMode }
+    void voice.start(line.spoken, line.english, line.kind, speechOpts)
+    // Intentionally omit `voice` — greet once per Talk visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    audioRouteOpen,
+    block,
+    spokenTour,
+    textMode,
+    quizOpen,
+    profileKnown,
+    target,
+    firstName,
+  ])
 
   const wake = useKeaWakeWord({
-    enabled: !live && !block && !audioRouteOpen && !onboardingActive && !textMode,
+    enabled:
+      profileKnown &&
+      !live &&
+      !block &&
+      !audioRouteOpen &&
+      !spokenTour &&
+      !textMode &&
+      !quizOpen,
     onWake: beginTalking,
   })
 
@@ -225,26 +272,21 @@ export function ConversationPage() {
     const keepAwake =
       !block &&
       !audioRouteOpen &&
-      (live || wake.armed || voice.handsFree || onboardingActive)
+      (live || wake.armed || voice.handsFree || spokenTour)
     setScreenWakeLock(keepAwake)
     return () => setScreenWakeLock(false)
-  }, [block, audioRouteOpen, live, wake.armed, voice.handsFree, onboardingActive])
+  }, [block, audioRouteOpen, live, wake.armed, voice.handsFree, spokenTour])
 
   useEffect(() => {
     if (!live) return
     const timer = window.setInterval(() => {
-      if (liveRef.current) recordTalkSeconds(1)
+      if (liveRef.current) {
+        recordTalkSeconds(1)
+        window.dispatchEvent(new Event('kea-user-activity'))
+      }
     }, 1000)
     return () => window.clearInterval(timer)
   }, [live])
-
-  const micLabel = isAdmin
-    ? live
-      ? voice.micLabel
-      : wake.armed
-        ? wake.wakeMic
-        : ''
-    : ''
 
   useEffect(() => {
     if (!textMode) {
@@ -273,7 +315,6 @@ export function ConversationPage() {
     if (next) {
       wake.release()
       voice.stop()
-      setOnboardingActive(false)
       setOnboardLine('')
     }
   }
@@ -285,7 +326,7 @@ export function ConversationPage() {
     void voice.sendText(text)
   }
 
-  const micStatus: VoicePresenceState = onboardingActive
+  const micStatus: VoicePresenceState = spokenTour
     ? onboard.phase === 'listening'
       ? 'listening'
       : onboard.phase === 'speaking'
@@ -298,7 +339,7 @@ export function ConversationPage() {
       className={`companion-screen conversation-screen${
         textMode ? ' conversation-screen--text' : ''
       }${
-        block || popup1Open || audioRouteOpen || onboardingActive
+        block || popup1Open || audioRouteOpen || spokenTour || quizOpen
           ? ' has-offer-dock'
           : ''
       }`}
@@ -307,53 +348,68 @@ export function ConversationPage() {
       <h1 className="visually-hidden">Talk with Kea</h1>
       <header className="conversation-screen__header">
         <CompanionNav
-          micLabel={micLabel}
           textMode={textMode}
           onToggleTextMode={toggleTextMode}
         />
       </header>
       <div className="conversation-screen__stage">
-        <RisingWords
-          messages={voice.messages}
-          live={false}
-          userName={firstName}
-          targetLanguage={target}
-          allowListen={!textMode}
-        />
+        {quizOpen ? (
+          <LearnerQuestionnaire
+            targetLanguage={target}
+            onDone={() => {
+              if (searchParams.get('onboarding') === '1') {
+                const next = new URLSearchParams(searchParams)
+                next.delete('onboarding')
+                setSearchParams(next, { replace: true })
+              }
+            }}
+          />
+        ) : spokenTour && !textMode ? (
+          <div className="onboarding-caption" role="status" aria-live="polite">
+            <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
+              <img src={KEA_FLY_SRC} alt="" />
+            </span>
+            {onboardLine ? (
+              <p className="onboarding-caption__line">{onboardLine}</p>
+            ) : null}
+            {onboard.canAdvance ? (
+              <div className="onboarding-caption__actions">
+                <button
+                  type="button"
+                  className="kea-button onboarding-caption__next"
+                  onClick={onboard.advance}
+                >
+                  Next
+                </button>
+                <p className="onboarding-caption__hint">Or say yes</p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <RisingWords
+            messages={voice.messages}
+            live={false}
+            userName={firstName}
+            targetLanguage={target}
+            allowListen={!textMode}
+          />
+        )}
       </div>
-      {onboardingActive && !textMode ? (
-        <div className="onboarding-banner" role="status" aria-live="polite">
-          <p className="onboarding-banner__eyebrow">
-            Getting started
-            {onboard.stepCount > 0
-              ? ` · ${onboard.stepIndex + 1} of ${onboard.stepCount}`
-              : ''}
-          </p>
-          <p className="onboarding-banner__line">
-            {onboardLine || 'Kea is explaining how things work…'}
-          </p>
-          <p className="onboarding-banner__hint">
-            {onboard.phase === 'listening'
-              ? 'Say “yes” when you are ready for the next tip.'
-              : 'Listen — then say yes after each OK?'}
-          </p>
-        </div>
-      ) : null}
       {voice.error ? <p className="voice-error">{voice.error}</p> : null}
-      {textMode ? (
+      {textMode && !quizOpen ? (
         <div
           className="text-composer-dock"
           style={keyboardInset > 0 ? { bottom: keyboardInset } : undefined}
         >
           <TextComposer busy={voice.status === 'thinking'} onSend={sendTyped} />
         </div>
-      ) : (
+      ) : !quizOpen ? (
       <VoiceMic
-        live={live || onboardingActive}
+        live={live || spokenTour}
         status={micStatus}
-        wakePhrase={wake.listens && !audioRouteOpen && !onboardingActive}
+        wakePhrase={wake.listens && !audioRouteOpen && !spokenTour}
         onToggle={() => {
-          if (audioRouteOpen || onboardingActive) return
+          if (audioRouteOpen || spokenTour || quizOpen) return
           const now = Date.now()
           if (now - lastTapAt.current < 450) return
           lastTapAt.current = now
@@ -365,14 +421,14 @@ export function ConversationPage() {
           beginTalking()
         }}
       />
-      )}
+      ) : null}
       {audioRouteOpen ? (
         <MobileAudioRoutePopup onDone={() => setAudioRouteOpen(false)} />
       ) : null}
       {block ? (
         <PaywallModal reason={block} onClose={() => setBlock(null)} />
       ) : null}
-      {!block && !audioRouteOpen && !onboardingActive && popup1Open ? (
+      {!block && !audioRouteOpen && !spokenTour && !quizOpen && popup1Open ? (
         <OfferPopup
           offer={getOffer('home')}
           tone="home"
@@ -382,7 +438,7 @@ export function ConversationPage() {
           }}
         />
       ) : null}
-      {!block && !audioRouteOpen && !onboardingActive && subLeaveOpen ? (
+      {!block && !audioRouteOpen && !spokenTour && !quizOpen && subLeaveOpen ? (
         <SubLeaveOfferPopup
           offer={getOffer('subLeave')}
           onClose={() => {
