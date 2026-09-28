@@ -7,6 +7,8 @@ import { withoutRejoinWelcomes } from './keaStartSpeech'
 import { looksLikeSystemText } from './whisperText'
 
 const TALK_KEY = 'kea-talk-transcript-v1'
+/** What is on screen for this visit. The archive above is kept for Kea's memory. */
+const SCREEN_KEY = 'kea-talk-screen-v1'
 const MAX_SAVED = 400
 
 function isMessage(value: unknown): value is TranscriptMessage {
@@ -42,31 +44,40 @@ export function withHomeGreeting(
   return [greeting, ...messages]
 }
 
-export function loadTalkTranscript(): TranscriptMessage[] {
+function readStoredMessages(key: string): TranscriptMessage[] {
   try {
-    const raw = localStorage.getItem(TALK_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
     return withoutRejoinWelcomes(
       keepHomeGreeting(
-      parsed
-        .filter(isMessage)
-        .filter((item) => item.text.trim() && !item.interim)
-        .filter((item) => !looksLikeSystemText(item.text)),
-    ),
+        parsed
+          .filter(isMessage)
+          .filter((item) => item.text.trim() && !item.interim)
+          .filter((item) => !looksLikeSystemText(item.text)),
+      ),
     ).map((item) => ({
-        ...item,
-        interim: false,
-        pending: false,
-        active: false,
-        highlights: Array.isArray(item.highlights)
-          ? item.highlights.filter((h): h is string => typeof h === 'string')
-          : undefined,
-      }))
+      ...item,
+      interim: false,
+      pending: false,
+      active: false,
+      highlights: Array.isArray(item.highlights)
+        ? item.highlights.filter((h): h is string => typeof h === 'string')
+        : undefined,
+    }))
   } catch {
     return []
   }
+}
+
+export function loadTalkTranscript(): TranscriptMessage[] {
+  return readStoredMessages(TALK_KEY)
+}
+
+/** Lines shown in the chat. A missing screen starts blank, not from the archive. */
+export function loadTalkScreen(): TranscriptMessage[] {
+  return readStoredMessages(SCREEN_KEY)
 }
 
 function keepHomeGreeting(messages: TranscriptMessage[]): TranscriptMessage[] {
@@ -76,34 +87,84 @@ function keepHomeGreeting(messages: TranscriptMessage[]): TranscriptMessage[] {
   return [first, ...messages.slice(1).slice(-(MAX_SAVED - 1))]
 }
 
-export function saveTalkTranscript(messages: TranscriptMessage[]) {
+function compactMessages(messages: TranscriptMessage[]) {
+  return keepHomeGreeting(
+    messages
+      .filter((item) => item.text.trim() && !item.interim)
+      .filter((item) => !looksLikeSystemText(item.text)),
+  ).map((item) => ({
+    id: item.id,
+    speaker: item.speaker,
+    text: item.text,
+    english: item.english,
+    highlights: item.highlights?.length ? item.highlights : undefined,
+  }))
+}
+
+function writeStoredMessages(key: string, messages: TranscriptMessage[]) {
   try {
-    const compact = keepHomeGreeting(
-      messages
-        .filter((item) => item.text.trim() && !item.interim)
-        .filter((item) => !looksLikeSystemText(item.text)),
-    ).map((item) => ({
-        id: item.id,
-        speaker: item.speaker,
-        text: item.text,
-        english: item.english,
-        highlights: item.highlights?.length ? item.highlights : undefined,
-      }))
+    const compact = compactMessages(messages)
     if (compact.length === 0) {
-      localStorage.removeItem(TALK_KEY)
+      localStorage.removeItem(key)
       return
     }
-    localStorage.setItem(TALK_KEY, JSON.stringify(compact))
+    localStorage.setItem(key, JSON.stringify(compact))
   } catch {
     // ignore quota / private mode
   }
 }
 
+export function saveTalkTranscript(messages: TranscriptMessage[]) {
+  writeStoredMessages(TALK_KEY, messages)
+}
+
+export function saveTalkScreen(messages: TranscriptMessage[]) {
+  writeStoredMessages(SCREEN_KEY, messages)
+}
+
+/** Add new on-screen lines to Kea's memory without putting old lines back on screen. */
+export function appendTalkArchive(messages: TranscriptMessage[]) {
+  const prior = loadTalkTranscript()
+  const seen = new Set(prior.map((item) => item.id))
+  const extra = messages.filter((item) => item.id && !seen.has(item.id))
+  if (extra.length === 0) return
+  saveTalkTranscript([...prior, ...extra])
+}
+
 export const TALK_CLEARED_EVENT = 'kea-talk-cleared'
+const HOLD_GREETING_KEY = 'kea-hold-greeting'
+
+/** Block a new welcome while a language change is being saved, then the page reloads. */
+export function holdTalkForLanguageChange() {
+  try {
+    sessionStorage.setItem(HOLD_GREETING_KEY, '1')
+  } catch {
+    // ignore
+  }
+  requestClearTalkTranscript()
+}
+
+export function isTalkHeld() {
+  try {
+    return sessionStorage.getItem(HOLD_GREETING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 export function clearTalkTranscript() {
   try {
     localStorage.removeItem(TALK_KEY)
+    localStorage.removeItem(SCREEN_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/** Next time the chat opens, show a blank screen and the welcome only. */
+export function markFreshChatScreen() {
+  try {
+    localStorage.removeItem(SCREEN_KEY)
   } catch {
     // ignore
   }
@@ -126,9 +187,38 @@ export function keaRestartUrl() {
  * Clear the chat and reload Kea without signing out.
  * The new URL forces a real navigation so stuck mic, speech, and paint state cannot linger.
  */
+const RESTART_LISTEN_KEY = 'kea-restart-listen'
+let restartListenLatched: boolean | null = null
+
+/**
+ * True on the conversation page that opens right after Reset.
+ * Stays stable if React mounts the page twice, then goes false once that page leaves.
+ */
+export function peekRestartListen(): boolean {
+  if (restartListenLatched === null) {
+    try {
+      restartListenLatched = sessionStorage.getItem(RESTART_LISTEN_KEY) === '1'
+      if (restartListenLatched) sessionStorage.removeItem(RESTART_LISTEN_KEY)
+    } catch {
+      restartListenLatched = false
+    }
+  }
+  return restartListenLatched
+}
+
+export function releaseRestartListen() {
+  restartListenLatched = false
+}
+
 export function requestClearTalkAndSoftReset() {
+  try {
+    sessionStorage.removeItem(HOLD_GREETING_KEY)
+  } catch {
+    // ignore
+  }
   clearTalkTranscript()
   try {
+    sessionStorage.setItem(RESTART_LISTEN_KEY, '1')
     window.speechSynthesis?.cancel()
   } catch {
     // ignore

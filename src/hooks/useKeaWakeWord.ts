@@ -21,29 +21,43 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_HOLD_MS = 380
-const SHOT_COOLDOWN_MS = 3500
-const WAKE_SILENCE_MS = 520
+const SPEECH_HOLD_MS = 80
+const SHOT_COOLDOWN_MS = 1600
+const WAKE_SILENCE_MS = 420
 /** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 400
+const MIN_SPEECH_BURST_MS = 220
 const MAX_UTTERANCE_MS = 2800
+const RING_SECONDS = 1.8
 const AMBIENT_CALIBRATE_MS = 650
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
-const MIN_WAKE_BLOB = 1800
-/** Soft floor only for non-wake noise; matching "Hey Kea" bypasses this. */
-const MIN_WAKE_CONFIDENCE = 0.28
-const MIN_WAKE_MATCH_CONFIDENCE = 0.12
-
-function pickRecorderMime(): string {
-  const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus',
-  ]
-  return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const buffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(buffer)
+  const write = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  write(0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  write(8, 'WAVE')
+  write(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  write(36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+  let offset = 44
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+    offset += 2
+  }
+  return new Blob([buffer], { type: 'audio/wav' })
 }
 
 function logWake(event: string, detail?: unknown, extra?: unknown) {
@@ -107,11 +121,11 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     let listeningShot = false
     let lastShotAt = 0
     let cancelled = false
-    let recorder: MediaRecorder | null = null
-    let chunks: Blob[] = []
-    let mime = ''
     let utteranceStartedAt = 0
     let recordingUtterance = false
+    let ring: Float32Array | null = null
+    let ringPos = 0
+    let processor: ScriptProcessorNode | null = null
 
     const stopRecognition = () => {
       try {
@@ -122,30 +136,24 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       recognition = null
     }
 
-    const stopRecorder = () => {
-      if (recorder && recorder.state !== 'inactive') {
-        try {
-          recorder.stop()
-        } catch {
-          // ignore
-        }
-      }
-      recorder = null
-      recordingUtterance = false
-    }
-
     const teardownMic = () => {
       if (raf) {
         cancelAnimationFrame(raf)
         raf = 0
       }
-      stopRecorder()
+      recordingUtterance = false
       analyser = null
+      if (processor) {
+        processor.onaudioprocess = null
+        processor.disconnect()
+        processor = null
+      }
+      ring = null
+      ringPos = 0
       watchStream?.getTracks().forEach((track) => track.stop())
       watchStream = null
       stream?.getTracks().forEach((track) => track.stop())
       stream = null
-      chunks = []
       if (audioContext) {
         void audioContext.close()
         audioContext = null
@@ -169,207 +177,46 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       window.setTimeout(() => onWakeRef.current(), 120)
     }
 
-    const beginUtterance = () => {
-      if (!stream || recordingUtterance || listeningShot || dead || waking) return
-      if (typeof MediaRecorder === 'undefined') return
-      chunks = []
-      mime = pickRecorderMime()
-      try {
-        recorder = mime
-          ? new MediaRecorder(stream, { mimeType: mime })
-          : new MediaRecorder(stream)
-      } catch (caught) {
-        logWake('recorder failed', caught)
-        recorder = null
-        return
-      }
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data)
-      }
-      try {
-        // No timeslice: one complete container on stop (valid for Whisper).
-        recorder.start()
-        recordingUtterance = true
-        utteranceStartedAt = performance.now()
-        logWake('utterance record start')
-      } catch (caught) {
-        logWake('recorder start failed', caught)
-        recorder = null
-        recordingUtterance = false
-      }
-    }
-
-    const finishUtterance = async (reason: string) => {
+    const finishFromRing = async (reason: string) => {
       if (dead || waking || cancelled || !enabledRef.current || listeningShot) return
-      if (!recordingUtterance || !recorder) return
+      if (!ring || !audioContext) return
       if (Date.now() - lastShotAt < SHOT_COOLDOWN_MS) {
-        stopRecorder()
-        chunks = []
+        recordingUtterance = false
+        utteranceStartedAt = 0
         speechHold = 0
         silenceHold = 0
         speechBurstMs = 0
         return
       }
-
       listeningShot = true
       lastShotAt = Date.now()
+      recordingUtterance = false
+      utteranceStartedAt = 0
       speechHold = 0
       silenceHold = 0
       speechBurstMs = 0
-      logWake(`check (${reason})`)
-
-      const active = recorder
-      const blob = await new Promise<Blob>((resolve) => {
-        if (!active || active.state === 'inactive') {
-          resolve(new Blob(chunks, { type: mime || 'audio/webm' }))
-          return
-        }
-        active.onstop = () => {
-          recorder = null
-          recordingUtterance = false
-          resolve(
-            new Blob(chunks, {
-              type: active.mimeType || mime || 'audio/webm',
-            }),
-          )
-        }
-        try {
-          active.requestData()
-        } catch {
-          // ignore
-        }
-        try {
-          active.stop()
-        } catch {
-          recorder = null
-          recordingUtterance = false
-          resolve(new Blob(chunks, { type: mime || 'audio/webm' }))
-        }
-      })
-      chunks = []
-
+      const ordered = new Float32Array(ring.length)
+      let index = 0
+      for (let p = ringPos; p < ring.length; p++) ordered[index++] = ring[p]
+      for (let p = 0; p < ringPos; p++) ordered[index++] = ring[p]
+      const blob = encodeWav(ordered, audioContext.sampleRate)
+      logWake(`check (${reason})`, blob.size)
       try {
-        if (blob.size < MIN_WAKE_BLOB) {
-          logWake('clip too small', blob.size)
-          return
-        }
         const result = await transcribeWithWhisper(blob, {
           prompt: WAKE_PROMPT,
           language: 'en',
         })
         logWake('transcript', result.text || '(empty)', result.confidence)
-        patchVoiceDiagnostics({
-          lastTranscript: result.text,
-          recognitionLanguage: 'wake-whisper',
-          lastRecognitionError: '',
-        })
         if (dead || waking || cancelled || !enabledRef.current) return
-        if (!result.text.trim()) {
-          logWake('empty transcript — ignore')
-          return
-        }
-        if (looksLikeWhisperHallucination(result.text)) {
-          logWake('noise hallucination — ignore', result.text)
-          return
-        }
-        const conf =
-          result.confidence > 0 && result.confidence <= 1
-            ? result.confidence
-            : 1
-        // Short wake phrases often score low — match text first.
+        if (!result.text.trim() || looksLikeWhisperHallucination(result.text)) return
         if (heardKeaWake(result.text)) {
-          if (conf < MIN_WAKE_MATCH_CONFIDENCE) {
-            logWake('wake match but confidence too low', conf)
-            return
-          }
-          logWake('wake matched', result.text, conf)
+          logWake('wake matched', result.text)
           fireWake()
-          return
         }
-        if (conf < MIN_WAKE_CONFIDENCE) {
-          logWake('low confidence — ignore', conf)
-          return
-        }
-        logWake('no wake match', result.text || '(empty)')
       } catch (caught) {
-        const message =
-          caught instanceof Error ? caught.message : 'Wake listen failed'
-        logWake('error', message)
-        patchVoiceDiagnostics({ lastRecognitionError: message })
+        logWake('error', caught instanceof Error ? caught.message : 'Wake listen failed')
       } finally {
         listeningShot = false
-      }
-    }
-
-    const startSpeechShot = () => {
-      if (!Ctor) return
-      if (dead || waking || cancelled || !enabledRef.current || listeningShot) return
-      if (document.visibilityState !== 'visible') return
-      if (Date.now() - lastShotAt < SHOT_COOLDOWN_MS) return
-      listeningShot = true
-      lastShotAt = Date.now()
-      heard = ''
-      logWake('speech shot')
-      teardownMic()
-      try {
-        const next = new Ctor()
-        recognition = next
-        next.lang = 'en-US'
-        next.continuous = false
-        next.interimResults = true
-        next.maxAlternatives = 5
-        next.onresult = (event) => {
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const piece = event.results[i]
-            const alts: string[] = []
-            const count = Math.max(1, piece.length ?? 1)
-            for (let a = 0; a < count; a++) {
-              const said = piece?.[a]?.transcript ?? ''
-              if (said) alts.push(said)
-            }
-            for (const said of alts) {
-              if (looksLikeWhisperHallucination(said)) continue
-              if (heardKeaWake(said)) {
-                logWake('speech wake matched', said)
-                fireWake()
-                return
-              }
-            }
-            const joined = alts.join(' ')
-            heard = `${heard} ${joined}`.replace(/\s+/g, ' ').trim().slice(-160)
-            logWake('speech heard', heard)
-            if (looksLikeWhisperHallucination(heard)) return
-            if (heardKeaWake(heard)) {
-              logWake('speech wake matched', heard)
-              fireWake()
-            }
-          }
-        }
-        next.onerror = (event) => {
-          const err = event.error || ''
-          logWake('speech error', err)
-          // Permission denied: stop. Other errors (no-speech, network, aborted)
-          // must not kill wake forever — fall back to energy + Whisper.
-          if (err === 'not-allowed' || err === 'service-not-allowed') {
-            if (!canWhisper) {
-              dead = true
-              setArmed(false)
-            }
-          }
-        }
-        next.onend = () => {
-          recognition = null
-          listeningShot = false
-          speechHold = 0
-          if (!dead && !waking && !cancelled && enabledRef.current) {
-            void armEnergy()
-          }
-        }
-        next.start()
-        setArmed(true)
-      } catch {
-        listeningShot = false
-        void armEnergy()
       }
     }
 
@@ -391,6 +238,22 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         if (audioContext.state === 'suspended') await audioContext.resume()
         const linked = connectSpeechAnalyser(audioContext, watchStream)
         analyser = linked.analyser
+        ring = new Float32Array(Math.floor(audioContext.sampleRate * RING_SECONDS))
+        ringPos = 0
+        processor = audioContext.createScriptProcessor(4096, 1, 1)
+        const mute = audioContext.createGain()
+        mute.gain.value = 0
+        linked.source.connect(processor)
+        processor.connect(mute)
+        mute.connect(audioContext.destination)
+        processor.onaudioprocess = (event) => {
+          const input = event.inputBuffer.getChannelData(0)
+          if (!ring) return
+          for (let i = 0; i < input.length; i++) {
+            ring[ringPos] = input[i]
+            ringPos = (ringPos + 1) % ring.length
+          }
+        }
         const vad = createSpeechVad(SPEECH_RMS_FLOOR)
 
         const samples = new Uint8Array(analyser.fftSize)
@@ -425,27 +288,23 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             speechHold += delta
             speechBurstMs += delta
             silenceHold = 0
-            if (speechHold >= SPEECH_HOLD_MS) {
-              if (preferSpeech) startSpeechShot()
-              else beginUtterance()
+            if (speechHold >= SPEECH_HOLD_MS && speechBurstMs >= MIN_SPEECH_BURST_MS) {
+              recordingUtterance = true
+              if (!utteranceStartedAt) utteranceStartedAt = now
             }
             if (
-              !preferSpeech &&
               recordingUtterance &&
+              utteranceStartedAt &&
               now - utteranceStartedAt >= MAX_UTTERANCE_MS
             ) {
-              void finishUtterance('max')
+              void finishFromRing('max')
             }
           } else {
             speechHold = Math.max(0, speechHold - delta * 0.7)
-            if (
-              !preferSpeech &&
-              recordingUtterance &&
-              speechBurstMs >= MIN_SPEECH_BURST_MS
-            ) {
+            if (recordingUtterance && speechBurstMs >= MIN_SPEECH_BURST_MS) {
               silenceHold += delta
               if (silenceHold >= WAKE_SILENCE_MS) {
-                void finishUtterance('silence')
+                void finishFromRing('silence')
               }
             } else if (!recordingUtterance) {
               speechBurstMs = Math.max(0, speechBurstMs - delta * 1.2)
@@ -470,18 +329,86 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
     }
 
-    void armEnergy()
+    const startContinuous = () => {
+      if (!Ctor || dead || waking || cancelled || !enabledRef.current || recognition) return
+      try {
+        const next = new Ctor()
+        recognition = next
+        next.lang = 'en-US'
+        next.continuous = true
+        next.interimResults = true
+        next.maxAlternatives = 3
+        next.onresult = (event) => {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const piece = event.results[i]
+            const alts: string[] = []
+            const count = Math.max(1, piece.length ?? 1)
+            for (let a = 0; a < count; a++) {
+              const said = piece?.[a]?.transcript ?? ''
+              if (said) alts.push(said)
+            }
+            for (const said of alts) {
+              if (heardKeaWake(said)) {
+                logWake('speech wake matched', said)
+                fireWake()
+                return
+              }
+            }
+            heard = `${heard} ${alts.join(' ')}`.replace(/\s+/g, ' ').trim().slice(-180)
+            if (heardKeaWake(heard)) {
+              logWake('speech wake matched', heard)
+              fireWake()
+            }
+          }
+        }
+        next.onerror = (event) => {
+          const err = event.error || ''
+          logWake('speech error', err)
+          if (
+            err === 'not-allowed' ||
+            err === 'service-not-allowed' ||
+            err === 'network' ||
+            err === 'audio-capture'
+          ) {
+            stopRecognition()
+            if (canWhisper && !stream) void armEnergy()
+          }
+        }
+        next.onend = () => {
+          recognition = null
+          if (dead || waking || cancelled || !enabledRef.current || stream) return
+          window.setTimeout(() => {
+            if (!dead && !waking && !cancelled && enabledRef.current && !recognition && !stream) {
+              startContinuous()
+            }
+          }, 400)
+        }
+        next.start()
+        setArmed(true)
+        logWake('listening for Hey Kea')
+      } catch (caught) {
+        logWake('speech start failed', caught)
+        recognition = null
+        if (canWhisper) void armEnergy()
+      }
+    }
+
+    if (preferSpeech) startContinuous()
+    else void armEnergy()
 
     function onVisibility() {
       if (document.visibilityState !== 'visible') {
         stopRecognition()
-        stopRecorder()
+        teardownMic()
         listeningShot = false
         speechHold = 0
         silenceHold = 0
         speechBurstMs = 0
-        chunks = []
+        return
       }
+      if (dead || waking || cancelled || !enabledRef.current) return
+      if (preferSpeech) startContinuous()
+      else void armEnergy()
     }
     document.addEventListener('visibilitychange', onVisibility)
 

@@ -27,8 +27,13 @@ export function shouldShowSpokenTour(options: {
   hasTalked: boolean
   completed: boolean
   busy: boolean
+  /** Set when the get-to-know-you questionnaire has just been saved. */
+  awaitingTour?: boolean
 }) {
-  if (options.busy || options.isAdmin || !options.profileKnown) return false
-  if (options.hasName || options.hasTalked || options.completed) return false
+  if (options.busy || options.isAdmin || !options.profileKnown || options.completed) {
+    return false
+  }
+  if (options.awaitingTour && !options.hasTalked) return true
+  if (options.hasName || options.hasTalked) return false
   return true
 }

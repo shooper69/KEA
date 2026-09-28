@@ -205,3 +205,46 @@ export function formatTrendPercent(value = getTalkTrendPercent()) {
   if (value < 0) return `${value}%`
   return '0%'
 }
+
+export interface TalkAveragePoint {
+  date: string
+  label: string
+  /** Mean talk hours across this day and the six days before it. */
+  hours: number
+}
+
+/** Seven-day moving average of talk hours, one point per calendar day. */
+export function getTalkMovingAverageSeries(): TalkAveragePoint[] {
+  const series = getTalkPerformanceSeries()
+  return series.map((day, index) => {
+    const window = series.slice(Math.max(0, index - 6), index + 1)
+    const hours = window.reduce((sum, item) => sum + item.hours, 0) / 7
+    return { date: day.date, label: day.label, hours }
+  })
+}
+
+export interface TalkMonth {
+  id: string
+  label: string
+  points: TalkAveragePoint[]
+}
+
+/** Moving-average points grouped so a phone can slide one month at a time. */
+export function getTalkAverageMonths(): TalkMonth[] {
+  const points = getTalkMovingAverageSeries()
+  const groups = new Map<string, TalkAveragePoint[]>()
+  for (const point of points) {
+    const id = point.date.slice(0, 7)
+    const list = groups.get(id) ?? []
+    list.push(point)
+    groups.set(id, list)
+  }
+  return [...groups.entries()].map(([id, monthPoints]) => {
+    const [year, month] = id.split('-')
+    const date = new Date(Number(year), Number(month) - 1, 1, 12)
+    const label = Number.isNaN(date.getTime())
+      ? id
+      : date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    return { id, label, points: monthPoints }
+  })
+}

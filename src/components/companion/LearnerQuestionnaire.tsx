@@ -12,6 +12,7 @@ import {
   type WeeklyTimeId,
 } from '../../data/keaLearnerProfile'
 import { useSession } from '../../context/SessionContext'
+import { markSpokenTourPending } from '../../data/keaOnboarding'
 import { speakKeaLine, stopKeaSpeech } from '../../services/keaSpeak'
 import type { LanguageCode } from '../../types'
 
@@ -26,7 +27,7 @@ export function LearnerQuestionnaire({
   targetLanguage,
   onDone,
 }: LearnerQuestionnaireProps) {
-  const { firstName, nativeLanguage, languageCode, setProfile, saveLearnerProfile } =
+  const { firstName, email, nativeLanguage, languageCode, setProfile, saveLearnerProfile } =
     useSession()
   const [step, setStep] = useState<Step>('intro')
   const [line, setLine] = useState('')
@@ -111,7 +112,11 @@ export function LearnerQuestionnaire({
       age,
       interests: interests.trim(),
     })
-      .then(() => onDone?.())
+      .then(() => {
+        const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
+        markSpokenTourPending(userKey)
+        onDone?.()
+      })
       .catch((caught) => {
         setError(
           caught instanceof Error

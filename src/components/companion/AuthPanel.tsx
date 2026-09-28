@@ -6,6 +6,7 @@ import { PasswordField } from './PasswordField'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../../config/languages'
 import { isAdminEmail } from '../../architecture/adminAuth'
 import { markAudioRoutePromptPending } from '../../architecture/keaAudioRoute'
+import { markFreshChatScreen } from '../../architecture/keaTalkMemory'
 import { getSupabase } from '../../lib/supabase'
 import {
   authMessage,
@@ -37,6 +38,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     isPasswordRecoveryLocation() ? 'reset' : initialView,
   )
   const [name, setName] = useState(firstName)
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -47,6 +49,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   const [busy, setBusy] = useState(false)
   const registerReady = Boolean(
     name.trim() &&
+      lastName.trim() &&
       isEmail(email) &&
       password.length >= 6 &&
       confirm.length >= 6 &&
@@ -74,6 +77,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     if (!supabase) return
     if (
       !name.trim() ||
+      !lastName.trim() ||
       !isEmail(email) ||
       !password ||
       !confirm ||
@@ -105,6 +109,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
         emailRedirectTo: keaAuthRedirect(),
         data: {
           first_name: name.trim(),
+          last_name: lastName.trim(),
           native_language: spoken,
           target_language: learning,
         },
@@ -118,6 +123,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     identify({ first_name: name.trim(), email: email.trim() })
     setProfile({
       firstName: name.trim(),
+      lastName: lastName.trim(),
       email: email.trim(),
       nativeLanguage: spoken,
       targetLanguage: learning,
@@ -158,6 +164,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
       }
       setMessage('Signing you in…')
       markAudioRoutePromptPending()
+      markFreshChatScreen()
       navigate('/conversation', { replace: true })
     } catch (caught) {
       setMessage(authMessage(caught, 'Could not sign in.'))
@@ -238,6 +245,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setConfirm('')
     setMessage('Password saved. You are signed in.')
     markAudioRoutePromptPending()
+    markFreshChatScreen()
     navigate('/conversation', { replace: true })
   }
 
@@ -261,6 +269,17 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               value={name}
               required
               onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label className="welcome-field">
+            <span className="visually-hidden">Last name</span>
+            <input
+              type="text"
+              autoComplete="family-name"
+              placeholder="Last name"
+              value={lastName}
+              required
+              onChange={(event) => setLastName(event.target.value)}
             />
           </label>
           <label className="welcome-field">

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   applyLearnTurn,
   extractNativeIntrusions,
+  getLearnList,
+  rememberLearnGloss,
   splitKeaReply,
   splitTalkParagraphs,
   touchChatTopic,
@@ -9,9 +11,9 @@ import {
 import {
   TALK_CLEARED_EVENT,
   clearTalkTranscript,
-  loadTalkTranscript,
-  saveTalkTranscript,
-  withHomeGreeting,
+  appendTalkArchive,
+  loadTalkScreen,
+  saveTalkScreen,
 } from '../architecture/keaTalkMemory'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import {
@@ -36,7 +38,7 @@ import {
   pauseSpeech,
   resumeSpeech,
 } from '../lib/speech'
-import { askKea, translateSpanishToEnglish } from '../services/keaChat'
+import { askKea, glossLearnWord, keaNameCue, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END } from '../services/keaSpeak'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
@@ -120,9 +122,7 @@ export function useVoiceConversation({
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
   const [messages, setMessages] = useState<TranscriptMessage[]>(() =>
-    withoutRejoinWelcomes(
-      withHomeGreeting(loadTalkTranscript(), targetLanguage, firstName),
-    ),
+    withoutRejoinWelcomes(loadTalkScreen()),
   )
   const [error, setError] = useState<string | null>(null)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
@@ -154,6 +154,7 @@ export function useVoiceConversation({
   const silenceMsRef = useRef(0)
   const stoppingRecordRef = useRef(false)
   const startListeningRef = useRef<() => void>(() => {})
+  const startTalkRef = useRef<() => void>(() => {})
   const answerSilenceMsRef = useRef(DEFAULT_ANSWER_SILENCE_MS)
   answerSilenceMsRef.current = Math.round(
     Math.min(15, Math.max(1, answerAfterSilenceSeconds)) * 1000,
@@ -169,7 +170,8 @@ export function useVoiceConversation({
 
   useEffect(() => {
     historyRef.current = messages
-    saveTalkTranscript(messages)
+    saveTalkScreen(messages)
+    appendTalkArchive(messages)
   }, [messages])
 
   const clearListenIdleTimer = useCallback(() => {
@@ -216,69 +218,93 @@ export function useVoiceConversation({
     streamRef.current = null
   }, [stopAnalyser])
 
-  const pauseForBackground = useCallback(() => {
-    saveTalkTranscript(historyRef.current)
-    // Speaker-icon replay can make phones briefly hide/freeze the page.
-    // Persist chat, but do not tear down the live session.
+  const backgroundLiveRef = useRef(false)
+
+  const releaseMicOnly = useCallback(() => {
+    stoppingRecordRef.current = true
+    clearRestartTimer()
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      try {
+        recorderRef.current.stop()
+      } catch {
+        // ignore
+      }
+    }
+    recorderRef.current = null
+    chunksRef.current = []
+    stopAnalyser(true)
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearRestartTimer, stopAnalyser])
+
+  const suspendForBackground = useCallback(() => {
+    saveTalkScreen(historyRef.current)
+    appendTalkArchive(historyRef.current)
     if (isKeaReplayActive()) return
     stopKeaSpeech()
-    clearListenIdleTimer()
-    clearRestartTimer()
-    stoppingRecordRef.current = true
-    busyRef.current = false
-    sendingRef.current = false
-    fatalListenRef.current = false
+    backgroundLiveRef.current = handsFreeRef.current
+    releaseMicOnly()
+    if (handsFreeRef.current) setStatus('listening')
+  }, [releaseMicOnly])
+
+  const resumeAfterBackground = useCallback(() => {
+    if (isKeaReplayActive()) return
+    const idleMs =
+      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
+      1000
+    const quietFor = Date.now() - (lastActivityAtRef.current || Date.now())
+    const wasLive = backgroundLiveRef.current || handsFreeRef.current
+    backgroundLiveRef.current = false
+    if (!wasLive) return
+    if (lastActivityAtRef.current && quietFor >= idleMs) {
+      handsFreeRef.current = false
+      setHandsFree(false)
+      setStatus('idle')
+      return
+    }
     handsFreeRef.current = false
     setHandsFree(false)
-    teardownAudio()
-    setStatus('idle')
-    patchVoiceDiagnostics({ recognitionRunning: false })
-  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
+    fatalListenRef.current = false
+    stoppingRecordRef.current = false
+    busyRef.current = false
+    window.setTimeout(() => {
+      if (!fatalListenRef.current) startTalkRef.current()
+    }, 80)
+  }, [listenIdleSeconds])
 
   const restoreTranscript = useCallback(() => {
-    const stored = withHomeGreeting(
-      loadTalkTranscript(),
-      targetLanguage,
-      firstName,
-    )
+    const stored = loadTalkScreen()
     setMessages((current) => {
       if (stored.length === 0) return current
       if (current.length > stored.length) {
-        saveTalkTranscript(current)
+        saveTalkScreen(current)
+        appendTalkArchive(current)
         return current
       }
       historyRef.current = stored
       return stored
     })
-  }, [firstName, targetLanguage])
+  }, [])
 
   useEffect(() => {
-    function onLeave() {
-      pauseForBackground()
-    }
     function onVisibility() {
       if (document.visibilityState !== 'visible') {
-        onLeave()
+        suspendForBackground()
         return
       }
-      if (isKeaReplayActive()) return
       restoreTranscript()
-      // Real background return already cleared hands-free; don't idle a live session
-      // that survived a replay-related visibility blip.
-      if (!handsFreeRef.current) {
-        setStatus('idle')
-        patchVoiceDiagnostics({ recognitionRunning: false })
-      }
+      resumeAfterBackground()
     }
-    window.addEventListener('pagehide', onLeave)
-    document.addEventListener('freeze', onLeave)
+    window.addEventListener('pagehide', suspendForBackground)
+    document.addEventListener('freeze', suspendForBackground)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      window.removeEventListener('pagehide', onLeave)
-      document.removeEventListener('freeze', onLeave)
+      window.removeEventListener('pagehide', suspendForBackground)
+      document.removeEventListener('freeze', suspendForBackground)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [pauseForBackground, restoreTranscript])
+  }, [restoreTranscript, resumeAfterBackground, suspendForBackground])
 
   // Soft-pause the mic while a paragraph is replayed so TTS does not kill tracks.
   useEffect(() => {
@@ -514,7 +540,7 @@ export function useVoiceConversation({
         if (vad.isSpeech(rms)) {
           speechMsRef.current += delta
           silenceMsRef.current = 0
-          lastActivityAtRef.current = now
+          lastActivityAtRef.current = Date.now()
           armListenIdle()
           window.dispatchEvent(new Event('kea-user-activity'))
         } else if (speechMsRef.current > MIN_SPEECH_MS) {
@@ -539,7 +565,7 @@ export function useVoiceConversation({
       })
       setStatus('listening')
       setError(null)
-      lastActivityAtRef.current = performance.now()
+      lastActivityAtRef.current = Date.now()
       armListenIdle()
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
@@ -632,9 +658,23 @@ export function useVoiceConversation({
           history: historyRef.current,
           userText,
           learnerProfile: learnerProfilePrompt(),
+          learnerName: keaNameCue(firstName, historyRef.current),
         })
         const { reply, signals } = splitKeaReply(raw)
         logAi('response', reply)
+        const fromModel = (signals?.add ?? [])
+          .map((item) => item.term)
+          .filter((term) => term && userText.toLowerCase().includes(term.toLowerCase()))
+        const mergedHighlights = [...new Set([...userHighlights, ...fromModel])]
+        if (mergedHighlights.length) {
+          setMessages((current) =>
+            current.map((item) =>
+              item.id === userMessage.id
+                ? { ...item, highlights: mergedHighlights }
+                : item,
+            ),
+          )
+        }
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',
@@ -650,13 +690,22 @@ export function useVoiceConversation({
           keaReply: reply,
           signals,
         })
+        const targetName = getLanguage(targetLanguage).name
+        for (const item of getLearnList()) {
+          if (item.languageCode !== targetLanguage || item.translation.trim()) continue
+          const wordId = item.id
+          const word = item.term
+          void glossLearnWord(word, targetName)
+            .then((translation) => rememberLearnGloss(wordId, translation))
+            .catch(() => {
+              // The word stays on the list until a gloss arrives.
+            })
+        }
         touchChatTopic(userText, reply)
         patchVoiceDiagnostics({ lastAiResponse: reply, lastTranscript: userText })
         if (written) {
-          busyRef.current = false
-          sendingRef.current = false
-          setStatus('idle')
-          return
+          handsFreeRef.current = false
+          setHandsFree(false)
         }
         speakReply(reply)
       } catch (caught) {
@@ -672,6 +721,7 @@ export function useVoiceConversation({
       captionSpanish,
       clearListenIdleTimer,
       level,
+      firstName,
       nativeLanguage,
       speakReply,
       targetLanguage,
@@ -831,6 +881,12 @@ export function useVoiceConversation({
     }
   }, [speakReply, startListening, targetLanguage])
 
+  useEffect(() => {
+    startTalkRef.current = () => {
+      void start()
+    }
+  }, [start])
+
   const stop = useCallback(() => {
     fatalListenRef.current = true
     handsFreeRef.current = false
@@ -846,16 +902,6 @@ export function useVoiceConversation({
     setStatus('idle')
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
-
-  const seedHomeGreeting = useCallback(
-    (current: TranscriptMessage[]) =>
-      withHomeGreeting(current, targetLanguage, firstName),
-    [firstName, targetLanguage],
-  )
-
-  useEffect(() => {
-    setMessages((current) => seedHomeGreeting(current))
-  }, [seedHomeGreeting])
 
   const clearMessages = useCallback(() => {
     stop()

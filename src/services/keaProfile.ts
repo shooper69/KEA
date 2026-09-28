@@ -108,7 +108,13 @@ export async function upsertCloudProfile(
   if (patch.saveTranscripts !== undefined) row.save_transcripts = patch.saveTranscripts
   if (patch.learnerProfile !== undefined) row.learner_profile = patch.learnerProfile
   const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'id' })
-  if (error) throw error
+  if (error) {
+    const detail =
+      typeof error === 'object' && error && 'message' in error
+        ? String((error as { message?: string }).message)
+        : ''
+    throw new Error(detail || 'Kea could not save your answers.')
+  }
 }
 
 export function keaAuthRedirect() {

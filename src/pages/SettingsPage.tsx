@@ -18,6 +18,17 @@ import { getSupabase } from '../lib/supabase'
 import { UsagePanel } from '../components/companion/UsagePanel'
 import { PerformancePanel } from '../components/companion/PerformancePanel'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
+import { ProfileFace } from '../components/companion/ProfileFace'
+import { RussianScriptPopup } from '../components/companion/RussianScriptPopup'
+import {
+  holdTalkForLanguageChange,
+  requestClearTalkAndSoftReset,
+} from '../architecture/keaTalkMemory'
+import {
+  pairIncludesRussian,
+  saveRussianScript,
+  type RussianScript,
+} from '../architecture/russianScript'
 import {
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
@@ -39,7 +50,6 @@ import {
   savePreferredMicId,
 } from '../architecture/keaMicrophone'
 import {
-  isKeaMobileDevice,
   readAudioRoute,
   type KeaAudioRoute,
 } from '../architecture/keaAudioRoute'
@@ -90,6 +100,7 @@ function readPhoto(file: File): Promise<string> {
 export function SettingsPage() {
   const {
     firstName,
+    lastName,
     email,
     photoDataUrl,
     isAdmin,
@@ -97,6 +108,7 @@ export function SettingsPage() {
     nativeLanguage,
     languageCode,
     setProfile,
+    flushCloudProfile,
     notifyMemory,
     notifyTalk,
     saveTranscripts,
@@ -112,18 +124,24 @@ export function SettingsPage() {
   const [draftNative, setDraftNative] = useState(nativeLanguage)
   const [draftTarget, setDraftTarget] = useState(languageCode)
   const [languagesSaved, setLanguagesSaved] = useState('')
+  const [languageScriptOpen, setLanguageScriptOpen] = useState(false)
   const [draftNotifyTalk, setDraftNotifyTalk] = useState(notifyTalk)
   const [draftNotifyMemory, setDraftNotifyMemory] = useState(notifyMemory)
   const [notificationsSaved, setNotificationsSaved] = useState('')
   const [micSheetOpen, setMicSheetOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
   const [currentPassword, setCurrentPassword] = useState('')
   const [nextPassword, setNextPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [passwordMessage, setPasswordMessage] = useState('')
   const [profileSaved, setProfileSaved] = useState('')
   const [draftName, setDraftName] = useState(firstName)
+  const [draftLastName, setDraftLastName] = useState(lastName)
   const [draftEmail, setDraftEmail] = useState(email)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const [tab, setTab] = useState<
     | 'choices'
     | 'languages'
@@ -165,7 +183,17 @@ export function SettingsPage() {
   const [audioRoute, setAudioRoute] = useState<KeaAudioRoute | null>(() =>
     readAudioRoute(),
   )
-  const showMobileAudioRoute = isKeaMobileDevice()
+
+  function chooseAudioRoute(route: KeaAudioRoute) {
+    void applyAudioRouteMic(route).then(() => {
+      setAudioRoute(route)
+      try {
+        setPreferredMicId(localStorage.getItem('kea-preferred-mic-id') || '')
+      } catch {
+        // ignore
+      }
+    })
+  }
 
   useEffect(() => {
     setDraftListenIdle(listenIdleSeconds)
@@ -184,6 +212,25 @@ export function SettingsPage() {
     setDraftNotifyTalk(notifyTalk)
     setDraftNotifyMemory(notifyMemory)
   }, [notifyTalk, notifyMemory])
+
+  useEffect(() => {
+    const storedFirst = firstName.trim()
+    const storedLast = lastName.trim()
+    if (storedLast) {
+      setDraftName(storedFirst)
+      setDraftLastName(storedLast)
+    } else {
+      const space = storedFirst.indexOf(' ')
+      if (space > 0) {
+        setDraftName(storedFirst.slice(0, space))
+        setDraftLastName(storedFirst.slice(space + 1).trim())
+      } else {
+        setDraftName(storedFirst)
+        setDraftLastName('')
+      }
+    }
+    setDraftEmail(email)
+  }, [email, firstName, lastName])
 
   useEffect(() => {
     if (tab !== 'listening') return
@@ -220,10 +267,95 @@ export function SettingsPage() {
     micOptions.find((item) => item.value === preferredMicId)?.label ||
     'Automatic (prefer real mic)'
 
+  function stopCamera() {
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+    cameraStreamRef.current = null
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null
+    setCameraOpen(false)
+  }
+
   async function onPhoto(file: File | undefined) {
     if (!file) return
-    const photoDataUrl = await readPhoto(file)
-    setProfile({ photoDataUrl })
+    try {
+      const nextPhoto = await readPhoto(file)
+      setProfile({ photoDataUrl: nextPhoto })
+      setProfileSaved('Photo saved.')
+    } catch {
+      setProfileSaved('Could not use that photo.')
+    }
+  }
+
+  async function openCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click()
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } },
+      })
+      cameraStreamRef.current = stream
+      setCameraOpen(true)
+    } catch {
+      cameraInputRef.current?.click()
+    }
+  }
+
+  function useCameraPhoto() {
+    const video = cameraVideoRef.current
+    if (!video || video.videoWidth < 2) return
+    const canvas = document.createElement('canvas')
+    const size = 256
+    canvas.width = size
+    canvas.height = size
+    const context = canvas.getContext('2d')
+    if (!context) return
+    const scale = Math.max(size / video.videoWidth, size / video.videoHeight)
+    const width = video.videoWidth * scale
+    const height = video.videoHeight * scale
+    context.drawImage(video, (size - width) / 2, (size - height) / 2, width, height)
+    setProfile({ photoDataUrl: canvas.toDataURL('image/jpeg', 0.82) })
+    setProfileSaved('Photo saved.')
+    stopCamera()
+  }
+
+  useEffect(() => {
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop())
+      cameraStreamRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const video = cameraVideoRef.current
+    const stream = cameraStreamRef.current
+    if (!cameraOpen || !video || !stream) return
+    video.srcObject = stream
+    void video.play().catch(() => {})
+  }, [cameraOpen])
+
+  async function saveProfile() {
+    const nextFirst = draftName.trim()
+    const nextLast = draftLastName.trim()
+    setProfile({
+      firstName: nextFirst,
+      lastName: nextLast,
+      ...(isSignedIn ? {} : { email: draftEmail.trim() }),
+    })
+    if (isSignedIn) {
+      const supabase = getSupabase()
+      const { error } = supabase
+        ? await supabase.auth.updateUser({
+            data: { first_name: nextFirst, last_name: nextLast },
+          })
+        : { error: null }
+      if (error) {
+        setProfileSaved(authMessage(error, 'Could not save your name.'))
+        return
+      }
+    }
+    setProfileSaved('Saved.')
   }
 
   return (
@@ -249,7 +381,7 @@ export function SettingsPage() {
             [
               ['choices', 'Choices'],
               ['languages', 'Languages'],
-              ['listening', 'Listening'],
+              ['listening', 'Sound'],
               ['memory', 'Memory'],
               ['notifications', 'Notifications'],
               ['profile', 'Profile'],
@@ -432,70 +564,61 @@ export function SettingsPage() {
                   setLanguagesSaved('Pick two different languages.')
                   return
                 }
-                setProfile({
-                  nativeLanguage: draftNative,
-                  targetLanguage: draftTarget,
-                })
-                setLanguagesSaved('Saved.')
+                if (
+                  draftNative === nativeLanguage &&
+                  draftTarget === languageCode
+                ) {
+                  setLanguagesSaved('Saved.')
+                  return
+                }
+                if (pairIncludesRussian(draftNative, draftTarget)) {
+                  setLanguageScriptOpen(true)
+                  return
+                }
+                void (async () => {
+                  holdTalkForLanguageChange()
+                  setProfile({
+                    nativeLanguage: draftNative,
+                    targetLanguage: draftTarget,
+                  })
+                  try {
+                    await flushCloudProfile()
+                  } catch {
+                    // Local profile is already saved.
+                  }
+                  requestClearTalkAndSoftReset()
+                })()
               }}
             >
               Save
             </button>
+            {languageScriptOpen ? (
+              <RussianScriptPopup
+                onChoose={(script: RussianScript) => {
+                  saveRussianScript(script)
+                  setLanguageScriptOpen(false)
+                  void (async () => {
+                    holdTalkForLanguageChange()
+                    setProfile({
+                      nativeLanguage: draftNative,
+                      targetLanguage: draftTarget,
+                    })
+                    try {
+                      await flushCloudProfile()
+                    } catch {
+                      // Local profile is already saved.
+                    }
+                    requestClearTalkAndSoftReset()
+                  })()
+                }}
+              />
+            ) : null}
           </section>
         ) : null}
         {tab === 'listening' ? (
         <section className="settings-card settings-card--listening">
-          <h2>Listening</h2>
-          {showMobileAudioRoute ? (
-            <div className="welcome-field">
-              <span>Phone speaker or headphones</span>
-              <div className="audio-route-settings">
-                <button
-                  type="button"
-                  className={`kea-button${
-                    audioRoute === 'speaker' ? '' : ' kea-button--ghost'
-                  }`}
-                  onClick={() => {
-                    void applyAudioRouteMic('speaker').then(() => {
-                      setAudioRoute('speaker')
-                      try {
-                        setPreferredMicId(
-                          localStorage.getItem('kea-preferred-mic-id') || '',
-                        )
-                      } catch {
-                        // ignore
-                      }
-                    })
-                  }}
-                >
-                  Phone speaker
-                </button>
-                <button
-                  type="button"
-                  className={`kea-button${
-                    audioRoute === 'headphones' ? '' : ' kea-button--ghost'
-                  }`}
-                  onClick={() => {
-                    void applyAudioRouteMic('headphones').then(() => {
-                      setAudioRoute('headphones')
-                      try {
-                        setPreferredMicId(
-                          localStorage.getItem('kea-preferred-mic-id') || '',
-                        )
-                      } catch {
-                        // ignore
-                      }
-                    })
-                  }}
-                >
-                  Headphones
-                </button>
-              </div>
-              <p className="settings-note">
-                Shown each time you sign in on a phone. Change it here anytime.
-              </p>
-            </div>
-          ) : null}
+          <h2>Sound</h2>
+          <h3 className="settings-sound__heading">Input</h3>
           <div className="welcome-field">
             <span>Microphone for Kea</span>
             <button
@@ -565,6 +688,33 @@ export function SettingsPage() {
           >
             Save
           </button>
+          <h3 className="settings-sound__heading">Output</h3>
+          <div className="welcome-field">
+            <span>Phone speaker or headphones</span>
+            <div className="audio-route-settings">
+              <button
+                type="button"
+                className={`kea-button${
+                  audioRoute === 'speaker' ? '' : ' kea-button--ghost'
+                }`}
+                onClick={() => chooseAudioRoute('speaker')}
+              >
+                Phone speaker
+              </button>
+              <button
+                type="button"
+                className={`kea-button${
+                  audioRoute === 'headphones' ? '' : ' kea-button--ghost'
+                }`}
+                onClick={() => chooseAudioRoute('headphones')}
+              >
+                Headphones
+              </button>
+            </div>
+            <p className="settings-note">
+              Same choice as the sign-in check. Kea uses the matching microphone.
+            </p>
+          </div>
         </section>
         ) : null}
         {micSheetOpen ? (
@@ -587,24 +737,81 @@ export function SettingsPage() {
           <button
             type="button"
             className="user-menu__avatar user-menu__avatar--large"
-            onClick={() => fileRef.current?.click()}
+            onClick={() => void openCamera()}
+            aria-label="Take a profile photo"
           >
-            {photoDataUrl ? <img src={photoDataUrl} alt="" /> : <span>+</span>}
+            <ProfileFace
+              photoDataUrl={photoDataUrl}
+              firstName={draftName}
+              lastName={draftLastName}
+            />
           </button>
+          <div className="settings-photo-actions">
+            <button type="button" className="kea-button" onClick={() => void openCamera()}>
+              Take photo
+            </button>
+            <button
+              type="button"
+              className="kea-button"
+              onClick={() => fileRef.current?.click()}
+            >
+              Choose photo
+            </button>
+          </div>
+          {cameraOpen ? (
+            <div className="settings-camera">
+              <video ref={cameraVideoRef} autoPlay playsInline muted />
+              <div className="settings-photo-actions">
+                <button type="button" className="kea-button" onClick={useCameraPhoto}>
+                  Use this photo
+                </button>
+                <button type="button" className="kea-button" onClick={stopCamera}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
           <input
             ref={fileRef}
             className="visually-hidden"
             type="file"
             accept="image/*"
-            onChange={(event) => void onPhoto(event.target.files?.[0])}
+            onChange={(event) => {
+              void onPhoto(event.target.files?.[0])
+              event.target.value = ''
+            }}
+          />
+          <input
+            ref={cameraInputRef}
+            className="visually-hidden"
+            type="file"
+            accept="image/*"
+            capture="user"
+            onChange={(event) => {
+              void onPhoto(event.target.files?.[0])
+              event.target.value = ''
+            }}
           />
           <label className="welcome-field">
             <span>First name</span>
             <input
               type="text"
+              autoComplete="given-name"
               value={draftName}
               onChange={(event) => {
                 setDraftName(event.target.value)
+                setProfileSaved('')
+              }}
+            />
+          </label>
+          <label className="welcome-field">
+            <span>Last name</span>
+            <input
+              type="text"
+              autoComplete="family-name"
+              value={draftLastName}
+              onChange={(event) => {
+                setDraftLastName(event.target.value)
                 setProfileSaved('')
               }}
             />
@@ -626,13 +833,7 @@ export function SettingsPage() {
           <button
             type="button"
             className="kea-button settings-save"
-            onClick={() => {
-              setProfile({
-                firstName: draftName.trim(),
-                ...(isSignedIn ? {} : { email: draftEmail.trim() }),
-              })
-              setProfileSaved('Saved.')
-            }}
+            onClick={() => void saveProfile()}
           >
             Save
           </button>

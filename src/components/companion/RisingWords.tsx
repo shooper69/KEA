@@ -6,14 +6,16 @@ import {
   splitTalkParagraphs,
 } from '../../architecture/companionMemory'
 import { isRejoinWelcomeLine } from '../../architecture/keaStartSpeech'
+import { presentRussian } from '../../architecture/russianScript'
 import { looksLikeSystemText } from '../../architecture/whisperText'
+import { useSession } from '../../context/SessionContext'
+import { ProfileFace } from './ProfileFace'
 import { SpeakButton } from './SpeakButton'
 import type { LanguageCode, TranscriptMessage } from '../../types'
 
 interface RisingWordsProps {
   messages: TranscriptMessage[]
   live?: boolean
-  userName?: string
   targetLanguage: LanguageCode
   /** When false, lines stay written and the listen buttons stay hidden. */
   allowListen?: boolean
@@ -32,10 +34,10 @@ function SpokenWithHighlights({
       {parts.map((part, index) =>
         part.highlight ? (
           <span key={`${index}-${part.text}`} className="rising-words__loan">
-            {part.text}
+            {presentRussian(part.text)}
           </span>
         ) : (
-          <span key={`${index}-${part.text.slice(0, 12)}`}>{part.text}</span>
+          <span key={`${index}-${part.text.slice(0, 12)}`}>{presentRussian(part.text)}</span>
         ),
       )}
     </p>
@@ -87,11 +89,10 @@ function TalkMessageCopy({
 
 export function RisingWords({
   messages,
-  userName = '',
   targetLanguage,
   allowListen = true,
 }: RisingWordsProps) {
-  const initial = (userName || 'Y').slice(0, 1).toUpperCase()
+  const { firstName, lastName, photoDataUrl } = useSession()
   const rootRef = useRef<HTMLDivElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const [filling, setFilling] = useState(false)
@@ -149,7 +150,11 @@ export function RisingWords({
             </span>
           ) : (
             <span className="rising-words__who rising-words__who--user" aria-hidden="true">
-              <span>{initial}</span>
+              <ProfileFace
+                photoDataUrl={photoDataUrl}
+                firstName={firstName}
+                lastName={lastName}
+              />
             </span>
           )}
           <TalkMessageCopy

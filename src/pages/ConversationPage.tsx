@@ -11,7 +11,15 @@ import { TextComposer } from '../components/companion/TextComposer'
 import { VoiceMic } from '../components/companion/VoiceMic'
 import { LearnerQuestionnaire } from '../components/companion/LearnerQuestionnaire'
 import { KEA_FLY_SRC } from '../data/keaAbout'
-import { shouldOfferAudioRoutePrompt } from '../architecture/keaAudioRoute'
+import {
+  clearAudioRoutePromptPending,
+  shouldOfferAudioRoutePrompt,
+} from '../architecture/keaAudioRoute'
+import {
+  isTalkHeld,
+  peekRestartListen,
+  releaseRestartListen,
+} from '../architecture/keaTalkMemory'
 import {
   shouldShowLearnerQuiz,
   shouldShowSpokenTour,
@@ -31,6 +39,7 @@ import {
 } from '../data/keaOffers'
 import {
   hasCompletedSpokenOnboarding,
+  isSpokenTourPending,
   ONBOARDING_CHANGED,
 } from '../data/keaOnboarding'
 import { useSession } from '../context/SessionContext'
@@ -75,7 +84,21 @@ export function ConversationPage() {
     learnerAnswers,
   } = useSession()
   const { block, setBlock, guardStart } = useTalkGate(isAdmin)
-  const [audioRouteOpen, setAudioRouteOpen] = useState(shouldOfferAudioRoutePrompt)
+  const [restartListen] = useState(() => {
+    const restarting = peekRestartListen()
+    if (restarting) {
+      clearAudioRoutePromptPending()
+      saveTextMode(false)
+    }
+    return restarting
+  })
+  useEffect(() => {
+    const timer = window.setTimeout(() => releaseRestartListen(), 400)
+    return () => window.clearTimeout(timer)
+  }, [])
+  const [audioRouteOpen, setAudioRouteOpen] = useState(() =>
+    restartListen ? false : shouldOfferAudioRoutePrompt(),
+  )
 
   useEffect(() => {
     if (shouldOfferAudioRoutePrompt()) setAudioRouteOpen(true)
@@ -98,6 +121,7 @@ export function ConversationPage() {
   const [onboardingRevision, setOnboardingRevision] = useState(0)
   const [onboardLine, setOnboardLine] = useState('')
   const [textMode, setTextMode] = useState(loadTextMode)
+  const [composerFocus, setComposerFocus] = useState(false)
   const [keyboardInset, setKeyboardInset] = useState(0)
 
   const target = languageCode ?? 'es'
@@ -116,6 +140,9 @@ export function ConversationPage() {
   liveRef.current = live
   const lastTapAt = useRef(0)
   const sessionGreetedRef = useRef('')
+  // Wake stays off until this visit's welcome has started, so "Hey Kea"
+  // cannot grab the mic and cancel the greeting.
+  const [openingDone, setOpeningDone] = useState(false)
 
   useEffect(() => {
     const bump = () => setOnboardingRevision((n) => n + 1)
@@ -129,7 +156,8 @@ export function ConversationPage() {
     hasName: Boolean(firstName.trim()),
     hasTalked: hasUserTalked(),
     completed: onboardingRevision >= 0 && hasCompletedSpokenOnboarding(userKey),
-    busy: Boolean(block) || audioRouteOpen || textMode || quizOpen,
+    awaitingTour: isSpokenTourPending(userKey),
+    busy: Boolean(block) || audioRouteOpen || quizOpen,
   })
 
   const onboard = useSpokenOnboarding({
@@ -158,6 +186,7 @@ export function ConversationPage() {
     if (audioRouteOpen || spokenTour || quizOpen) return
     if (liveRef.current) return
     if (!guardStart()) return
+    setOpeningDone(true)
     // Already greeted this session — just listen.
     if (sessionGreetedRef.current) {
       void voice.start()
@@ -192,9 +221,10 @@ export function ConversationPage() {
     promise: Promise<string | null>
   } | null>(null)
 
-  // Prefetch the short welcome-back line.
+  // Prefetch the short welcome-back line as soon as the page opens,
+  // including while the mic chooser is on screen.
   useEffect(() => {
-    if (audioRouteOpen || block || spokenTour || quizOpen) return
+    if (block || spokenTour || quizOpen) return
     const line = buildStartSpeechLine({
       languageCode: target,
       firstName,
@@ -210,19 +240,19 @@ export function ConversationPage() {
         greetingPrefetchRef.current.url = url
       }
     })
-  }, [
-    audioRouteOpen,
-    block,
-    spokenTour,
-    quizOpen,
-    target,
-    firstName,
-    voice.messages,
-  ])
+  }, [block, spokenTour, quizOpen, target, firstName, voice.messages])
 
   // On login / Talk ready: one short welcome in the learning language.
+  // A returning name is already on this device, so do not wait for the cloud profile.
   useEffect(() => {
-    if (audioRouteOpen || block || spokenTour || quizOpen || !profileKnown) {
+    const returning = Boolean(firstName.trim()) || hasUserTalked()
+    if (
+      isTalkHeld() ||
+      block ||
+      spokenTour ||
+      quizOpen ||
+      (!profileKnown && !returning)
+    ) {
       return
     }
     const line = buildStartSpeechLine({
@@ -230,26 +260,32 @@ export function ConversationPage() {
       firstName,
       messages: voice.messages,
     })
-    if (sessionGreetedRef.current === line.spoken) return
+    if (sessionGreetedRef.current === line.spoken) {
+      setOpeningDone(true)
+      return
+    }
     sessionGreetedRef.current = line.spoken
     const pref = greetingPrefetchRef.current
+    // Voice mode: say the welcome, then listen. No wake phrase on login.
+    const voiceMode = !textMode
     const speechOpts =
       pref && pref.text === line.spoken
         ? {
-            listenAfter: false as const,
-            silent: textMode,
+            listenAfter: voiceMode,
+            silent: !voiceMode,
             prefetchedUrl: pref.url,
             prefetchPromise: pref.url ? null : pref.promise,
           }
-        : { listenAfter: false as const, silent: textMode }
+        : { listenAfter: voiceMode, silent: !voiceMode }
+    setOpeningDone(true)
     void voice.start(line.spoken, line.english, line.kind, speechOpts)
     // Intentionally omit `voice` — greet once per Talk visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    audioRouteOpen,
     block,
     spokenTour,
     textMode,
+    restartListen,
     quizOpen,
     profileKnown,
     target,
@@ -258,6 +294,7 @@ export function ConversationPage() {
 
   const wake = useKeaWakeWord({
     enabled:
+      openingDone &&
       profileKnown &&
       !live &&
       !block &&
@@ -316,15 +353,21 @@ export function ConversationPage() {
       wake.release()
       voice.stop()
       setOnboardLine('')
+      setComposerFocus(true)
+    } else {
+      setComposerFocus(false)
     }
   }
 
   function sendTyped(text: string) {
     if (!guardStart()) return
+    setComposerFocus(false)
     wake.release()
     voice.stop()
     void voice.sendText(text)
   }
+
+  const keaBusyTyping = voice.status === 'thinking' || voice.status === 'speaking'
 
   const micStatus: VoicePresenceState = spokenTour
     ? onboard.phase === 'listening'
@@ -364,7 +407,7 @@ export function ConversationPage() {
               }
             }}
           />
-        ) : spokenTour && !textMode ? (
+        ) : spokenTour ? (
           <div className="onboarding-caption" role="status" aria-live="polite">
             <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
               <img src={KEA_FLY_SRC} alt="" />
@@ -389,21 +432,24 @@ export function ConversationPage() {
           <RisingWords
             messages={voice.messages}
             live={false}
-            userName={firstName}
             targetLanguage={target}
             allowListen={!textMode}
           />
         )}
       </div>
       {voice.error ? <p className="voice-error">{voice.error}</p> : null}
-      {textMode && !quizOpen ? (
+      {textMode && !quizOpen && !spokenTour && !keaBusyTyping ? (
         <div
           className="text-composer-dock"
           style={keyboardInset > 0 ? { bottom: keyboardInset } : undefined}
         >
-          <TextComposer busy={voice.status === 'thinking'} onSend={sendTyped} />
+          <TextComposer
+            busy={false}
+            autoFocus={composerFocus}
+            onSend={sendTyped}
+          />
         </div>
-      ) : !quizOpen ? (
+      ) : !quizOpen && !textMode ? (
       <VoiceMic
         live={live || spokenTour}
         status={micStatus}

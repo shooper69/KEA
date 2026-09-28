@@ -105,8 +105,32 @@ export function resetOnboardingSteps() {
   window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 
+const PENDING_KEY = 'kea-spoken-tour-pending'
+
 function doneStorageKey(userKey = '') {
   return userKey ? `${DONE_KEY}:${userKey}` : DONE_KEY
+}
+
+function pendingStorageKey(userKey = '') {
+  return userKey ? `${PENDING_KEY}:${userKey}` : PENDING_KEY
+}
+
+/** Stage 2 is due after the get-to-know-you answers are saved. */
+export function markSpokenTourPending(userKey = '') {
+  try {
+    localStorage.setItem(pendingStorageKey(userKey), '1')
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event(ONBOARDING_CHANGED))
+}
+
+export function isSpokenTourPending(userKey = '') {
+  try {
+    return localStorage.getItem(pendingStorageKey(userKey)) === '1'
+  } catch {
+    return false
+  }
 }
 
 export function hasCompletedSpokenOnboarding(userKey = '') {
@@ -120,6 +144,7 @@ export function hasCompletedSpokenOnboarding(userKey = '') {
 export function markSpokenOnboardingComplete(userKey = '') {
   try {
     localStorage.setItem(doneStorageKey(userKey), '1')
+    localStorage.removeItem(pendingStorageKey(userKey))
   } catch {
     // ignore
   }

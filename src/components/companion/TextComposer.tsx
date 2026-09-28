@@ -2,21 +2,25 @@ import { useEffect, useRef, useState } from 'react'
 
 interface TextComposerProps {
   busy: boolean
+  /** Open the keyboard only when the person has just chosen typing. */
+  autoFocus?: boolean
   onSend: (text: string) => void
 }
 
-export function TextComposer({ busy, onSend }: TextComposerProps) {
+export function TextComposer({ busy, autoFocus = false, onSend }: TextComposerProps) {
   const [draft, setDraft] = useState('')
   const fieldRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    if (!autoFocus) return
     fieldRef.current?.focus()
-  }, [])
+  }, [autoFocus])
 
   function submit() {
     const text = draft.trim()
     if (!text || busy) return
     setDraft('')
+    fieldRef.current?.blur()
     onSend(text)
   }
 

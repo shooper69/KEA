@@ -33,6 +33,13 @@ import {
   markPasswordRecovery,
 } from '../services/keaProfile'
 import { markAudioRoutePromptPending } from '../architecture/keaAudioRoute'
+import {
+  getLearnList,
+  mergeCloudLearnItems,
+  setLearnCloudPush,
+} from '../architecture/companionMemory'
+import { pullCloudLearnList, pushCloudLearnList } from '../services/keaLearnCloud'
+import { markFreshChatScreen } from '../architecture/keaTalkMemory'
 import { applyCloudSubscription } from '../architecture/keaBilling'
 import {
   learnerLevelToSession,
@@ -54,6 +61,7 @@ const VOICE_KEY = 'kea-voice-character'
 
 export interface StoredProfile {
   firstName: string
+  lastName: string
   email: string
   photoDataUrl: string
   nativeLanguage: LanguageCode | null
@@ -71,6 +79,7 @@ export interface StoredProfile {
 
 const DEFAULT_PROFILE: StoredProfile = {
   firstName: '',
+  lastName: '',
   email: '',
   photoDataUrl: '',
   nativeLanguage: null,
@@ -155,6 +164,7 @@ function profileComplete(profile: StoredProfile) {
 
 interface SessionContextValue {
   firstName: string
+  lastName: string
   email: string
   photoDataUrl: string
   preferredVoice: VoicePersonalityId
@@ -172,6 +182,7 @@ interface SessionContextValue {
   setNativeLanguage: (code: LanguageCode) => void
   setLanguageCode: (code: LanguageCode) => void
   setProfile: (patch: Partial<StoredProfile>) => void
+  flushCloudProfile: () => Promise<void>
   level: LearnerLevel
   setLevel: (level: LearnerLevel) => void
   vocabulary: VocabularyMemoryItem[]
@@ -211,6 +222,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAdminUnlocked(true)
   }, [profile.email, userId])
 
+  useEffect(() => {
+    if (!userId || !isKeaCloudConfigured()) {
+      setLearnCloudPush(null)
+      return
+    }
+    let cancelled = false
+    let timer = 0
+    void pullCloudLearnList(userId).then((rows) => {
+      if (cancelled) return
+      if (rows.length) mergeCloudLearnItems(rows)
+      void pushCloudLearnList(userId, getLearnList())
+      setLearnCloudPush((items) => {
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => {
+          void pushCloudLearnList(userId, items)
+        }, 500)
+      })
+    })
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      setLearnCloudPush(null)
+    }
+  }, [userId])
+
   const applyCloudUser = useCallback(async (user: {
     id: string
     email?: string
@@ -220,6 +256,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const email = user.email ?? ''
     const meta = user.user_metadata ?? {}
     const metaName = typeof meta.first_name === 'string' ? meta.first_name : ''
+    const metaLast = typeof meta.last_name === 'string' ? meta.last_name : ''
     const metaNative =
       typeof meta.native_language === 'string' && isLanguageCode(meta.native_language)
         ? meta.native_language
@@ -250,6 +287,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ...current,
         email,
         firstName: cloud?.firstName || metaName || current.firstName,
+        lastName: metaLast || current.lastName,
         photoDataUrl: cloud?.avatarUrl || current.photoDataUrl,
         nativeLanguage:
           cloud?.nativeLanguage || metaNative || current.nativeLanguage,
@@ -314,6 +352,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       if (event === 'SIGNED_IN' && session?.user) {
         markAudioRoutePromptPending()
+        markFreshChatScreen()
       }
       if (!session?.user) {
         userIdRef.current = null
@@ -368,6 +407,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return next
     })
   }
+
+  const flushCloudProfile = useCallback(async () => {
+    window.clearTimeout(saveTimer.current)
+    const id = userIdRef.current
+    if (!id || !isKeaCloudConfigured()) return
+    const next = readProfile()
+    await upsertCloudProfile(id, {
+      firstName: next.firstName,
+      nativeLanguage: next.nativeLanguage,
+      targetLanguage: next.targetLanguage,
+      preferredVoice: next.preferredVoice,
+      avatarUrl: next.photoDataUrl,
+      listenIdleSeconds: next.listenIdleSeconds,
+      skyTheme: next.skyTheme,
+      chatKeep: next.chatKeep,
+      notifyMemory: next.notifyMemory,
+      notifyTalk: next.notifyTalk,
+      saveTranscripts: next.saveTranscripts,
+    })
+  }, [])
 
   async function saveLearnerProfile(answers: LearnerAnswers) {
     const id = userIdRef.current
@@ -467,6 +526,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       firstName: profile.firstName,
+      lastName: profile.lastName,
       email: profile.email,
       photoDataUrl: profile.photoDataUrl,
       preferredVoice: profile.preferredVoice,
@@ -484,6 +544,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setNativeLanguage,
       setLanguageCode,
       setProfile,
+      flushCloudProfile,
       level,
       setLevel,
       vocabulary,
@@ -512,6 +573,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       learnerAnswers,
       userId,
       vocabulary,
+      flushCloudProfile,
     ],
   )
 

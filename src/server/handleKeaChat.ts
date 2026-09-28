@@ -23,6 +23,7 @@ interface ChatRequest {
   aboutKea?: string
   memoryBlock?: string
   learnerProfile?: string
+  learnerName?: string
   averageReplyWords?: number
 }
 
@@ -116,6 +117,7 @@ export async function handleKeaChat(
               aboutKea: payload.aboutKea,
               memoryBlock: payload.memoryBlock,
               learnerProfile: payload.learnerProfile,
+              learnerName: payload.learnerName,
               averageReplyWords,
             }),
           },

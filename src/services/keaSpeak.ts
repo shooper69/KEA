@@ -64,26 +64,90 @@ type SpeakOptions = {
   prefetchPromise?: Promise<string | null> | null
 }
 
-/** Fetch OpenAI TTS ahead of time so marketing paragraphs can chain tightly. */
+const TTS_CACHE = 'kea-tts-v1'
+const ttsBlobs = new Map<string, Blob>()
+const ttsInflight = new Map<string, Promise<Blob | null>>()
+
+function ttsCacheKey(voice: ManagedVoice, text: string) {
+  return `${voice.id}:${voice.openaiVoice ?? ''}:${text.trim()}`
+}
+
+function ttsCacheRequest(key: string) {
+  return new Request(`https://kea.local/tts/${encodeURIComponent(key)}`)
+}
+
+async function readCachedTts(key: string): Promise<Blob | null> {
+  const memory = ttsBlobs.get(key)
+  if (memory) return memory
+  if (!('caches' in window)) return null
+  try {
+    const cache = await caches.open(TTS_CACHE)
+    const hit = await cache.match(ttsCacheRequest(key))
+    if (!hit) return null
+    const blob = await hit.blob()
+    if (blob.size < 32) return null
+    ttsBlobs.set(key, blob)
+    return blob
+  } catch {
+    return null
+  }
+}
+
+async function storeCachedTts(key: string, blob: Blob) {
+  ttsBlobs.set(key, blob)
+  if (!('caches' in window)) return
+  try {
+    const cache = await caches.open(TTS_CACHE)
+    await cache.put(
+      ttsCacheRequest(key),
+      new Response(blob, { headers: { 'Content-Type': blob.type || 'audio/mpeg' } }),
+    )
+  } catch {
+    // Private mode or a full disk. The memory copy is enough for this visit.
+  }
+}
+
+async function loadManagedVoiceAudio(
+  voice: ManagedVoice,
+  text: string,
+): Promise<Blob | null> {
+  const spoken = text.trim()
+  if (voice.provider !== 'openai' || !voice.openaiVoice || !spoken) return null
+  const key = ttsCacheKey(voice, spoken)
+  const cached = await readCachedTts(key)
+  if (cached) return cached
+  const pending = ttsInflight.get(key)
+  if (pending) return pending
+  const request = (async () => {
+    try {
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice: voice.openaiVoice, text: spoken }),
+      })
+      if (!response.ok) return null
+      const blob = await response.blob()
+      if (blob.size < 32) return null
+      void storeCachedTts(key, blob)
+      return blob
+    } catch {
+      return null
+    } finally {
+      ttsInflight.delete(key)
+    }
+  })()
+  ttsInflight.set(key, request)
+  return request
+}
+
+/** Fetch OpenAI TTS ahead of time. The same line is reused from cache. */
 export async function prefetchManagedVoiceAudio(
   voice: ManagedVoice,
   text: string,
 ): Promise<string | null> {
-  if (voice.provider !== 'openai' || !voice.openaiVoice || !text.trim()) {
-    return null
-  }
-  try {
-    const response = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ voice: voice.openaiVoice, text }),
-    })
-    if (!response.ok) return null
-    const blob = await response.blob()
-    return URL.createObjectURL(blob)
-  } catch {
-    return null
-  }
+  const blob = await loadManagedVoiceAudio(voice, text)
+  if (!blob) return null
+  return URL.createObjectURL(blob)
 }
 
 function playBlobUrl(
@@ -150,18 +214,9 @@ export async function speakManagedVoice(
         }
         return
       }
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voice: voice.openaiVoice, text }),
-      })
+      const blob = await loadManagedVoiceAudio(voice, text)
       if (gen !== speakGeneration) return
-      if (!response.ok) {
-        const data = (await response.json()) as { error?: string }
-        throw new Error(data.error ?? 'Could not play that OpenAI voice.')
-      }
-      const blob = await response.blob()
-      if (gen !== speakGeneration) return
+      if (!blob) throw new Error('Could not play that OpenAI voice.')
       const url = URL.createObjectURL(blob)
       if (gen !== speakGeneration) {
         URL.revokeObjectURL(url)

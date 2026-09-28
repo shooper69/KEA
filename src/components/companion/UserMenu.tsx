@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession } from '../../context/SessionContext'
 import { useStickyMenu } from '../../hooks/useStickyMenu'
+import { ProfileFace } from './ProfileFace'
 
 export function UserMenu() {
-  const { firstName, email, photoDataUrl, isAdmin, isSignedIn, signOut } =
+  const { firstName, lastName, email, photoDataUrl, isAdmin, isSignedIn, signOut } =
     useSession()
   const navigate = useNavigate()
   const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
@@ -28,11 +29,11 @@ export function UserMenu() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        {photoDataUrl ? (
-          <img src={photoDataUrl} alt="" />
-        ) : (
-          <span>{(firstName || 'K').slice(0, 1).toUpperCase()}</span>
-        )}
+        <ProfileFace
+          photoDataUrl={photoDataUrl}
+          firstName={firstName}
+          lastName={lastName}
+        />
       </button>
       {open ? (
         <div

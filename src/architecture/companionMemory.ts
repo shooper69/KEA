@@ -24,7 +24,7 @@ const LEARN_REQUEST =
   /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say/i
 
 const LEARN_LIST_QUIZ =
-  /\b(test|quiz|practi[sc]e|drill)\s+me\b.*\blearn\s*list\b|\blearn\s*list\b.*\b(test|quiz|practi[sc]e|drill)\s+me\b|\btest me on (my )?(words|vocabulary|vocab)\b|\bexam[ií]name\b.*\blista\b|\bhaz(me)? (un )?examen\b.*\blista\b/i
+  /\b(test|quiz|practi[sc]e|drill|examine)\s+me\b|\b(test|quiz|practi[sc]e)\s+(my\s+)?(words|vocabulary|vocab|list)\b|\blearn\s*list\b.*\b(test|quiz|practi[sc]e|drill|review)\b|\b(test|quiz|practi[sc]e|drill|review)\b.*\blearn\s*list\b|\bgo through (my )?(words|list)\b|\bhelp me (review|practi[sc]e)\b|\bexam[ií]name\b|\bponme a prueba\b|\brepasemos\b/i
 
 const ASK_TERM =
   /(?:how (?:do (?:you|i)|to) say|what does|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать)\s+["«“']?([^?"»”']+)/i
@@ -64,6 +64,15 @@ const ENGLISH_FALLBACK = new Set(
     'message', 'movie', 'music', 'park', 'party', 'phone', 'plan', 'question',
     'rain', 'shop', 'shopping', 'ticket', 'train', 'trip', 'wait', 'walk',
     'water', 'window', 'wrong', 'right', 'need', 'want', 'think', 'know',
+    'the', 'and', 'but', 'with', 'from', 'this', 'that', 'what', 'when',
+    'where', 'your', 'have', 'just', 'like', 'time', 'good', 'very', 'much',
+    'some', 'they', 'was', 'were', 'will', 'would', 'could', 'should', 'said',
+    'say', 'get', 'got', 'make', 'made', 'going', 'come', 'came', 'look',
+    'see', 'saw', 'tell', 'told', 'thing', 'things', 'way', 'day', 'year',
+    'week', 'home', 'back', 'only', 'even', 'still', 'well', 'here', 'there',
+    'then', 'than', 'into', 'over', 'other', 'another', 'first', 'new', 'old',
+    'big', 'little', 'long', 'same', 'different', 'own', 'off', 'out', 'down',
+    'how', 'why', 'who', 'yes', 'football', 'soccer', 'fish',
   ].map((w) => w.toLowerCase()),
 )
 const SAMPLE_TOPICS: ChatTopic[] = [
@@ -224,8 +233,11 @@ function hasSpanishContext(text: string) {
   for (const token of tokens) {
     if (SPANISH_COMMON.has(token)) hits += 1
   }
-  return hits >= 2
+  return hits >= 1
 }
+
+/** Consonant patterns Spanish words almost never use. */
+const ENGLISH_SHAPE = /(?:th|sh|wh|ck|gh|ph|wr|kn|oo|ee|ea|ou|ow|ay|igh)/i
 
 function looksLikeEnglishToken(token: string) {
   const key = token.toLowerCase()
@@ -233,7 +245,8 @@ function looksLikeEnglishToken(token: string) {
   if (SPANISH_COMMON.has(key)) return false
   if (/[áéíóúñü]/i.test(token)) return false
   if (!/^[a-zA-Z']+$/.test(token)) return false
-  return ENGLISH_FALLBACK.has(key)
+  if (ENGLISH_FALLBACK.has(key)) return true
+  return ENGLISH_SHAPE.test(key)
 }
 
 /**
@@ -243,18 +256,22 @@ function looksLikeEnglishToken(token: string) {
 export function extractNativeIntrusions(text: string): string[] {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   if (!cleaned || looksLikeSystemText(cleaned)) return []
-  if (!hasSpanishContext(cleaned) && !looksLikeLearnRequest(cleaned)) {
-    // Still catch explicitly quoted English: "… 'computer' …"
-    const quoted = [
-      ...cleaned.matchAll(/["«“']([A-Za-z']{3,})["»”']/g),
-    ].map((m) => m[1])
-    return [...new Set(quoted.filter(looksLikeEnglishToken).map(normalizeTerm))]
-  }
   const tokens = cleaned.match(/[A-Za-zÀ-ÿ']+/g) ?? []
+  const english = tokens.filter(looksLikeEnglishToken)
+  const quoted = [
+    ...cleaned.matchAll(/["«“']([A-Za-z']{3,})["»”']/g),
+  ].map((m) => m[1]).filter(looksLikeEnglishToken)
+  const candidates = [...english, ...quoted]
+  if (!candidates.length) return []
+  const hasOtherLanguage = tokens.some(
+    (token) => token.length >= 2 && !looksLikeEnglishToken(token),
+  )
+  if (!hasOtherLanguage && !hasSpanishContext(cleaned) && !looksLikeLearnRequest(cleaned)) {
+    return []
+  }
   const found: string[] = []
   const seen = new Set<string>()
-  for (const token of tokens) {
-    if (!looksLikeEnglishToken(token)) continue
+  for (const token of candidates) {
     const key = termKey(token)
     if (seen.has(key)) continue
     seen.add(key)
@@ -408,10 +425,53 @@ function readMastered(): MasteredLearnItem[] {
   return readJson<MasteredLearnItem[]>(MASTERED_KEY, [])
 }
 
+let learnCloudPush: ((items: LearnListItem[]) => void) | null = null
+let applyingCloudLearn = false
+
+/** Session layer pushes the Learn List to Supabase after each local save. */
+export function setLearnCloudPush(push: ((items: LearnListItem[]) => void) | null) {
+  learnCloudPush = push
+}
+
 function persistLearn(items: LearnListItem[], mastered = readMastered()) {
   writeJson(LEARN_KEY, items)
   writeJson(MASTERED_KEY, mastered)
   notifyLearnMemory()
+  if (!applyingCloudLearn) learnCloudPush?.(items)
+}
+
+/** Fold cloud rows into the device list. Cloud practice and glosses win ties. */
+export function mergeCloudLearnItems(incoming: LearnListItem[]) {
+  const local = readLearnList().filter((item) => !item.id.startsWith('sample-'))
+  const byKey = new Map<string, LearnListItem>()
+  for (const item of local) {
+    byKey.set(`${item.languageCode}:${termKey(item.term)}`, item)
+  }
+  for (const item of incoming) {
+    if (!item.term.trim() || item.id.startsWith('sample-')) continue
+    const key = `${item.languageCode}:${termKey(item.term)}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, item)
+      continue
+    }
+    existing.practiceCount = Math.max(existing.practiceCount, item.practiceCount)
+    if (!existing.translation.trim() && item.translation.trim()) {
+      existing.translation = item.translation
+    }
+    if (item.lastReviewedAt > existing.lastReviewedAt) {
+      existing.lastReviewedAt = item.lastReviewedAt
+    }
+    existing.status =
+      existing.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
+  }
+  applyingCloudLearn = true
+  try {
+    const graduated = graduateReady([...byKey.values()], readMastered())
+    persistLearn(graduated.items, graduated.mastered)
+  } finally {
+    applyingCloudLearn = false
+  }
 }
 
 function graduateReady(items: LearnListItem[], mastered: MasteredLearnItem[]) {
@@ -450,9 +510,13 @@ export function getLearnList(): LearnListItem[] {
   return items
 }
 
-export function getMasteredLearnCount(languageCode?: LanguageCode | null): number {
+export function getMasteredLearnItems(): MasteredLearnItem[] {
   getLearnList()
-  const mastered = readMastered()
+  return readMastered()
+}
+
+export function getMasteredLearnCount(languageCode?: LanguageCode | null): number {
+  const mastered = getMasteredLearnItems()
   if (!languageCode) return mastered.length
   return mastered.filter((item) => item.languageCode === languageCode).length
 }
@@ -625,11 +689,8 @@ export function applyLearnTurn(options: {
       if (item.languageCode !== options.languageCode) continue
       if (addedIds.has(item.id)) continue
       // Natural use = saying the target-language word in a real chat turn.
-      if (
-        (item.translation && hasWord(options.userText, item.translation)) ||
-        hasWord(options.userText, item.term)
-      ) {
-        usedTokens.add(termKey(item.translation || item.term))
+      if (item.translation && hasWord(options.userText, item.translation)) {
+        usedTokens.add(termKey(item.translation))
       }
     }
   }
@@ -638,6 +699,17 @@ export function applyLearnTurn(options: {
     markUsed(items, options.languageCode, token, addedIds)
   }
 
+  const graduated = graduateReady(items, readMastered())
+  persistLearn(graduated.items, graduated.mastered)
+}
+
+export function rememberLearnGloss(id: string, translation: string) {
+  const gloss = normalizeTerm(translation)
+  if (!isLearnWordPhrase(gloss)) return
+  const items = readLearnList()
+  const item = items.find((entry) => entry.id === id)
+  if (!item || item.translation.trim()) return
+  item.translation = gloss.slice(0, 80)
   const graduated = graduateReady(items, readMastered())
   persistLearn(graduated.items, graduated.mastered)
 }
@@ -787,12 +859,13 @@ export function memoryPromptBlock(
   })
   const quiz = looksLikeLearnListQuizRequest(userText)
   const quizBlock = quiz
-    ? `LEARN LIST QUIZ (user asked to be tested — do this now):
-- Work through the Learn List words one at a time.
-- For each word, ask one short question that uses the TARGET-language word in a natural sentence (or ask them to say a sentence that must include that word).
-- Wait for their answer before moving to the next word.
-- Stay friendly, not like a school exam. Keep replies short.
-- After each successful natural use, include that target word in the hidden memory "used" array.
+    ? `LEARN LIST QUIZ (user asked to be tested — do this now, and keep going):
+- Work through every word on the Learn List, one at a time, until they say stop.
+- Vary the question. Sometimes ask the meaning of the target word ("What is the meaning of a veces?"). Sometimes ask how to say the native word ("How does one say rain?"). Use the real words from the list.
+- Wait for their answer. If it is right, say so briefly and include that target word in the hidden memory "used" array, then ask the next word.
+- If it is wrong, give the right word in one short line and ask the next word.
+- Do not stop after one word. Only stop when they say stop, or the list is finished.
+- Stay friendly. Keep each reply short.
 - Current words to test:
 ${learn || '(empty — say the list is empty and invite a normal chat)'}
 

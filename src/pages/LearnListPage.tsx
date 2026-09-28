@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   getLearnList,
   getLearnListStats,
+  rememberLearnGloss,
   subscribeLearnMemory,
 } from '../architecture/companionMemory'
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { useSession } from '../context/SessionContext'
+import { getLanguage } from '../config/languages'
+import { glossLearnWord } from '../services/keaChat'
 
 export function LearnListPage() {
   const { languageCode } = useSession()
@@ -29,6 +32,25 @@ export function LearnListPage() {
       window.removeEventListener('kea-learn-memory', refresh)
     }
   }, [languageCode])
+
+  useEffect(() => {
+    if (!languageCode) return
+    const targetName = getLanguage(languageCode).name
+    let cancelled = false
+    for (const item of items) {
+      if (item.languageCode !== languageCode || item.translation.trim()) continue
+      void glossLearnWord(item.term, targetName)
+        .then((translation) => {
+          if (!cancelled) rememberLearnGloss(item.id, translation)
+        })
+        .catch(() => {
+          // Leave the lozenge empty until the next try.
+        })
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [items, languageCode])
 
   const words = useMemo(() => {
     const scoped = languageCode
@@ -98,11 +120,9 @@ export function LearnListPage() {
                 <div className="memory-library__row">
                   <p className="memory-library__pair">
                     <span className="memory-library__native">{item.term}</span>
-                    {item.translation ? (
-                      <span className="memory-library__target">
-                        {item.translation}
-                      </span>
-                    ) : null}
+                    <span className="memory-library__target">
+                      {item.translation || '…'}
+                    </span>
                   </p>
                   <p className="memory-library__count">
                     Used well {item.practiceCount}/{need}

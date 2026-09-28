@@ -36,6 +36,8 @@ export async function handler(event: ChatEvent) {
     masterDefinition?: string
     aboutKea?: string
     memoryBlock?: string
+    learnerProfile?: string
+    learnerName?: string
     averageReplyWords?: number
     messages: Array<{ role: 'user' | 'assistant'; content: string }>
   }
@@ -89,6 +91,8 @@ export async function handler(event: ChatEvent) {
                     DEFAULT_KEA_MASTER_DEFINITION,
                   aboutKea: payload.aboutKea,
                   memoryBlock: payload.memoryBlock,
+                  learnerProfile: payload.learnerProfile,
+                  learnerName: payload.learnerName,
                   averageReplyWords,
                 }),
               },

@@ -15,38 +15,27 @@ const KEA_TOKEN = '(kea|kia|kiah|keya|kee+a|key)'
 const HEY_TOKEN = '(hey|hay|hei|hi|yo|yoh|yah)'
 
 /**
- * Wake match for "Hey Kea" (and close variants).
- * Lone "Kea" is intentionally not enough — too many Whisper false misses/hits.
+ * Wake match for "Hey Kea", including when a request follows
+ * ("Hey Kea, what's on my list"). A one-word "Kea" also counts.
  */
 export function heardKeaWake(text: string) {
   const n = normalizeHeard(text)
   if (!n) return false
 
-  // Wake phrases are short. Long noise transcripts must not match.
   const words = n.split(/\s+/).filter(Boolean)
-  if (words.length > 6) return false
+  const tail = words.slice(-12).join(' ')
+  if (!tail) return false
 
-  // Exact: "Hey Kea", "Hi Kea", "Yo Kea"
-  if (new RegExp(`^${HEY_TOKEN}\\s+${KEA_TOKEN}$`).test(n)) {
+  if (/^(kea|kia|kiah|keya|ke+a)$/.test(tail)) return true
+
+  if (new RegExp(`\\b${HEY_TOKEN}\\s+(there\\s+)?${KEA_TOKEN}\\b`).test(tail)) {
     return true
   }
 
-  // Soft fluff: "um hey kea", "hey there kea", "okay hey kea"
+  const compact = tail.replace(/\s+/g, '')
   if (
-    new RegExp(
-      `^(um+|uh+|oh+|ok|okay|well)?\\s*${HEY_TOKEN}\\s+(there\\s+)?${KEA_TOKEN}$`,
-    ).test(n)
-  ) {
-    return true
-  }
-
-  // Compact glued forms (heykea / heykeya / heykey)
-  const compact = n.replace(/\s+/g, '')
-  if (
-    compact.length <= 14 &&
-    /^(um|uh|ok|okay)?(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a|ey)$/.test(
-      compact,
-    )
+    compact.length <= 28 &&
+    /(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a|ey)/.test(compact)
   ) {
     return true
   }

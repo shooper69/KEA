@@ -14,28 +14,8 @@ function ClearChatIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path
-        fill="none"
-        stroke="#ff7a32"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M5 12a7 7 0 0 1 12-5l1.6 1.5"
-      />
-      <path
-        fill="#ff7a32"
-        d="M16.2 4.2h4.2V8.4l-2.2-1.8a7.8 7.8 0 0 0-1.2-.6L16.2 4.2z"
-      />
-      <path
-        fill="none"
-        stroke="#14b8a6"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19 12a7 7 0 0 1-12 5l-1.6-1.5"
-      />
-      <path
-        fill="#14b8a6"
-        d="M7.8 19.8H3.6V15.6l2.2 1.8c.4.25.8.45 1.2.6l.8 1.8z"
+        fill="#111111"
+        d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 13.65-6.65z"
       />
     </svg>
   )
@@ -69,11 +49,11 @@ function ChatIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path
         fill="#2f6cff"
-        d="M3.2 4.2h10.2a2.2 2.2 0 0 1 2.2 2.2v5.4a2.2 2.2 0 0 1-2.2 2.2H8.4L5.2 16.8V14H3.2A2.2 2.2 0 0 1 1 11.8V6.4a2.2 2.2 0 0 1 2.2-2.2z"
+        d="M1.4 1.6h11.4a2.3 2.3 0 0 1 2.3 2.3v6.4a2.3 2.3 0 0 1-2.3 2.3H8.6L3.4 20.2V12.6H3.7a2.3 2.3 0 0 1-2.3-2.3V3.9a2.3 2.3 0 0 1 2.3-2.3z"
       />
       <path
         fill="#c44bff"
-        d="M9.2 8.2h10.4a2.2 2.2 0 0 1 2.2 2.2v4.6a2.2 2.2 0 0 1-2.2 2.2h-1.1v2.3l-2.8-2.3H9.2a2.2 2.2 0 0 1-2.2-2.2v-4.6a2.2 2.2 0 0 1 2.2-2.2z"
+        d="M8.2 6.2h12.2a2.3 2.3 0 0 1 2.3 2.3v5.6a2.3 2.3 0 0 1-2.3 2.3h-2.4l3.2 6.4-5.4-6.4H10.5a2.3 2.3 0 0 1-2.3-2.3V8.5a2.3 2.3 0 0 1 2.3-2.3z"
       />
     </svg>
   )
@@ -81,20 +61,11 @@ function ChatIcon() {
 
 function BookIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        fill="#2f6cff"
-        d="M3.2 4.2h7.1c.8 1.15 1.7 1.7 2.9 1.7v13.2c-1.2 0-2.1-.5-2.9-1.55H3.2V4.2z"
-      />
-      <path
-        fill="#b14dff"
-        d="M13.2 5.9c1.2 0 2.1-.55 2.9-1.7h4.7v13.35h-4.7c-.8 1.05-1.7 1.55-2.9 1.55V5.9z"
-      />
-      <path
-        fill="#5ce1ff"
-        d="M4.6 6.5h5.1v1.15H4.6zm0 2.25h5.1v1.15H4.6zm0 2.25h3.8v1.15H4.6z"
-      />
-    </svg>
+    <img
+      className="companion-nav__learn"
+      src="/learn-list-books.png?v=2"
+      alt=""
+    />
   )
 }
 
@@ -166,18 +137,9 @@ export function CompanionNav({
         <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
         </Link>
+        <div className="companion-nav__cluster">
         <LanguageSwitcher />
-        {textMode && onToggleTextMode ? (
-          <button
-            type="button"
-            className="companion-nav__icon is-active"
-            aria-label="Back to chat"
-            title="Back to chat"
-            onClick={onToggleTextMode}
-          >
-            <ChatIcon />
-          </button>
-        ) : (
+        {onToggleTextMode ? null : (
           <NavLink
             to="/conversation"
             className={({ isActive }) =>
@@ -213,31 +175,38 @@ export function CompanionNav({
           <span className="companion-nav__perf-value">{trendLabel}</span>
         </NavLink>
         <UserMenu />
+        </div>
       </nav>
       <div className="companion-corner">
-        {onToggleTextMode && !textMode ? (
+        {onToggleTextMode ? (
           <button
             type="button"
             className="companion-nav__icon companion-nav__text"
-            aria-pressed={false}
-            aria-label="Type instead of speaking"
-            title="Type instead of speaking"
+            aria-pressed={textMode}
+            aria-label={textMode ? 'Back to chat' : 'Type instead of speaking'}
             onClick={onToggleTextMode}
           >
-            <KeyboardIcon />
+            {textMode ? <ChatIcon /> : <KeyboardIcon />}
+            <span className="corner-tip" role="tooltip">
+              {textMode
+                ? 'Leave typing and go back to speaking with Kea.'
+                : 'Type your message instead of speaking. Press Enter and Kea answers aloud.'}
+            </span>
           </button>
         ) : null}
         <a
           href={keaRestartUrl()}
           className="companion-nav__icon companion-nav__clear"
           aria-label="Reset Kea"
-          title="Reset Kea"
           onClick={(event) => {
             event.preventDefault()
             setClearOpen(true)
           }}
         >
           <ClearChatIcon />
+          <span className="corner-tip" role="tooltip">
+            Clears the screen, says welcome, and Kea starts listening. You stay signed in.
+          </span>
         </a>
       </div>
       {clearOpen ? (
@@ -256,7 +225,7 @@ export function CompanionNav({
               Clear this chat and reset Kea?
             </p>
             <p className="kea-confirm__note">
-              Stops listening and speech. You stay signed in.
+              Clears the screen, says welcome, and Kea starts listening. You stay signed in.
             </p>
             <div className="kea-confirm__actions">
               <button

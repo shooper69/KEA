@@ -14,6 +14,20 @@ function clipTurn(text: string) {
   return trimmed.slice(-MAX_TURN_CHARS).replace(/^\S*\s+/, '')
 }
 
+/** Tell Kea to use the person's name at the start and often, not on every line. */
+export function keaNameCue(firstName: string, history: TranscriptMessage[]) {
+  const name = firstName.trim().split(/\s+/)[0] ?? ''
+  if (!name) return ''
+  const lastKea = [...history]
+    .reverse()
+    .find((item) => item.speaker === 'kea' && item.text.trim())
+  const used = Boolean(lastKea?.text.toLowerCase().includes(name.toLowerCase()))
+  if (used) {
+    return `The person's name is ${name}. You used it in your last line. Leave it out of this reply, then use it again soon. Speak like a friend, not a form.`
+  }
+  return `The person's name is ${name}. Use ${name} once in this reply, naturally, the way a friend would. Do not begin every sentence with the name.`
+}
+
 export async function askKea(options: {
   nativeLanguage: string
   targetLanguage: string
@@ -21,6 +35,7 @@ export async function askKea(options: {
   history: TranscriptMessage[]
   userText: string
   learnerProfile?: string
+  learnerName?: string
 }): Promise<string> {
   const history = options.history
     .filter((item) => item.text.trim())
@@ -47,6 +62,7 @@ export async function askKea(options: {
       aboutKea: getAboutKea(),
   memoryBlock: memoryPromptBlock(userText, options.history),
   learnerProfile: options.learnerProfile,
+  learnerName: options.learnerName,
   averageReplyWords: getAverageReplyWords(),
       messages,
     }),
@@ -57,6 +73,26 @@ export async function askKea(options: {
     throw new Error(data.error ?? 'Kea could not reply')
   }
   return data.reply
+}
+
+export async function glossLearnWord(
+  term: string,
+  targetLanguageName: string,
+): Promise<string> {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'plain-translate',
+      targetLanguage: targetLanguageName,
+      text: term.trim(),
+    }),
+  })
+  const data = (await response.json()) as { translation?: string; error?: string }
+  if (!response.ok || !data.translation) {
+    throw new Error(data.error ?? 'Translation failed')
+  }
+  return data.translation.trim()
 }
 
 export async function translateSpanishToEnglish(text: string): Promise<string> {

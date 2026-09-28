@@ -82,6 +82,18 @@ test('a returning login shows the welcome line, not the product tour', () => {
     shouldShowSpokenTour({
       isAdmin: false,
       profileKnown: true,
+      hasName: true,
+      hasTalked: false,
+      completed: false,
+      awaitingTour: true,
+      busy: false,
+    }),
+  ).toBe(true)
+
+  expect(
+    shouldShowSpokenTour({
+      isAdmin: false,
+      profileKnown: true,
       hasName: false,
       hasTalked: false,
       completed: false,
