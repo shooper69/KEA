@@ -41,6 +41,10 @@ import { transcribeWithWhisper } from '../services/keaTranscribe'
 import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END } from '../services/keaSpeak'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
 import { learnerProfilePrompt } from '../data/keaLearnerProfile'
+import {
+  DEFAULT_LISTEN_IDLE_SECONDS,
+  MIN_LISTEN_IDLE_SECONDS,
+} from '../data/keaListenIdle'
 import { heardKeaStop } from '../architecture/keaWakeWord'
 import type {
   LanguageCode,
