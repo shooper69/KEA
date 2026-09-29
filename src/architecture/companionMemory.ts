@@ -192,34 +192,8 @@ export function isLearnWordPhrase(value: string) {
   return true
 }
 
-const STOP_WORDS = new Set([
-  'about',
-  'this',
-  'that',
-  'with',
-  'from',
-  'have',
-  'what',
-  'when',
-  'como',
-  'qué',
-  'que',
-])
-
-function isCountableToken(value: string) {
-  const key = termKey(value)
-  if (key.length < 3) return false
-  return !STOP_WORDS.has(key)
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function hasWord(haystack: string, needle: string) {
-  const n = normalizeTerm(needle)
-  if (!isCountableToken(n)) return false
-  return hasExactPhrase(haystack, n)
 }
 
 /** Match a Learn List target form in speech — allows short words like "sé" / "tú". */
