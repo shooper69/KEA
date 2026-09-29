@@ -7723,9 +7723,15 @@ button.method-screen__login {
   color: #fff;
 }
 
-a.method-screen__login,
-button.method-screen__login {
+a.method-screen__page-title.method-screen__login,
+a.method-screen__page-title.method-screen__login:link,
+a.method-screen__page-title.method-screen__login:visited,
+a.method-screen__page-title.method-screen__login:hover,
+a.method-screen__page-title.method-screen__login:active,
+a.method-screen__page-title.method-screen__login:focus-visible,
+button.method-screen__page-title.method-screen__login {
   text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 button.method-screen__login {
