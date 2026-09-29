@@ -289,10 +289,51 @@ export function daysInCurrentMonth() {
 export interface MonthlyCreditUsage {
   minutesUsed: number
   minutesAllowed: number
+  minutesLeft: number
   usedPercent: number
   remainingPercent: number
   unlimited: boolean
   dailyMinutesAllowed: number
+}
+
+const ADMIN_USAGE_ORIGIN_KEY = 'kea-admin-usage-origin-minutes'
+
+/** One admin meter cycle, from 10% to 100%, matches a Companion month. */
+function adminCycleMinutes() {
+  const plan = getPlan('companion')
+  const daily = plan?.dailyMinutes && plan.dailyMinutes > 0 ? plan.dailyMinutes : 45
+  return daily * daysInCurrentMonth()
+}
+
+/**
+ * Admin has no talk cap. The meter still shows usage: it starts at 10%
+ * and returns to 10% whenever it would pass 100%.
+ */
+function adminUsedPercent(minutesUsed: number) {
+  const span = Math.max(1, adminCycleMinutes())
+  let origin = Number(localStorage.getItem(ADMIN_USAGE_ORIGIN_KEY))
+  if (!Number.isFinite(origin)) {
+    origin = minutesUsed
+    localStorage.setItem(ADMIN_USAGE_ORIGIN_KEY, String(origin))
+  }
+  let extra = minutesUsed - origin
+  if (extra < 0) {
+    origin = minutesUsed
+    extra = 0
+    localStorage.setItem(ADMIN_USAGE_ORIGIN_KEY, String(origin))
+  }
+  const cycles = Math.floor(extra / span)
+  if (cycles > 0) {
+    origin += cycles * span
+    extra -= cycles * span
+    localStorage.setItem(ADMIN_USAGE_ORIGIN_KEY, String(origin))
+  }
+  const percent = 10 + (extra / span) * 90
+  if (percent >= 100) {
+    localStorage.setItem(ADMIN_USAGE_ORIGIN_KEY, String(minutesUsed))
+    return 10
+  }
+  return Math.max(10, Math.min(99, Math.round(percent)))
 }
 
 /**
@@ -307,16 +348,22 @@ export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
   const minutesAllowed = unlimited
     ? 0
     : access.dailyMinutesAllowed * daysInCurrentMonth()
-  const usedPercent =
-    unlimited || minutesAllowed <= 0
+  const usedPercent = isAdmin
+    ? adminUsedPercent(minutesUsed)
+    : unlimited || minutesAllowed <= 0
       ? 0
       : Math.min(100, Math.round((minutesUsed / minutesAllowed) * 100))
+  const remainingPercent = Math.max(0, 100 - usedPercent)
+  const minutesLeft = unlimited
+    ? 0
+    : Math.max(0, Math.round((minutesAllowed - minutesUsed) * 10) / 10)
   return {
     minutesUsed,
     minutesAllowed,
+    minutesLeft,
     usedPercent,
-    remainingPercent: unlimited ? 100 : Math.max(0, 100 - usedPercent),
-    unlimited,
+    remainingPercent,
+    unlimited: isAdmin ? false : unlimited,
     dailyMinutesAllowed: access.dailyMinutesAllowed,
   }
 }
@@ -324,9 +371,7 @@ export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
 export function recordTalkSeconds(seconds: number) {
   const add = Math.max(0, seconds)
   if (!add) return
-  // Performance chart tracks everyone; billing caps still skip unlimited accounts.
   recordTalkPerformanceSeconds(add)
-  if (hasUnlimitedTalk()) return
   const used = minutesUsedToday() * 60 + add
   localStorage.setItem(todayKey(), JSON.stringify({ seconds: used }))
 }

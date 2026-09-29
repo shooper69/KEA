@@ -64,12 +64,13 @@ type SpeakOptions = {
   prefetchPromise?: Promise<string | null> | null
 }
 
-const TTS_CACHE = 'kea-tts-v1'
+const TTS_CACHE = 'kea-tts-v2'
+const TTS_STYLE_REV = 'soft-charm-v2'
 const ttsBlobs = new Map<string, Blob>()
 const ttsInflight = new Map<string, Promise<Blob | null>>()
 
 function ttsCacheKey(voice: ManagedVoice, text: string) {
-  return `${voice.id}:${voice.openaiVoice ?? ''}:${text.trim()}`
+  return `${TTS_STYLE_REV}:${voice.id}:${voice.openaiVoice ?? ''}:${text.trim()}`
 }
 
 function ttsCacheRequest(key: string) {

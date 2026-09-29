@@ -3,6 +3,7 @@ import {
   getLearnList,
   getLearnListStats,
   rememberLearnGloss,
+  removeLearnItems,
   subscribeLearnMemory,
 } from '../architecture/companionMemory'
 import { getLearnMasteryUses } from '../data/keaLearnMastery'
@@ -17,12 +18,19 @@ export function LearnListPage() {
   const [query, setQuery] = useState('')
   const [items, setItems] = useState(() => getLearnList())
   const [stats, setStats] = useState(() => getLearnListStats(languageCode))
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
   const need = getLearnMasteryUses()
 
   useEffect(() => {
     const refresh = () => {
-      setItems(getLearnList())
+      const nextItems = getLearnList()
+      setItems(nextItems)
       setStats(getLearnListStats(languageCode))
+      const live = new Set(nextItems.map((item) => item.id))
+      setPicked((current) => {
+        const next = new Set([...current].filter((id) => live.has(id)))
+        return next.size === current.size ? current : next
+      })
     }
     refresh()
     const stop = subscribeLearnMemory(refresh)
@@ -65,6 +73,21 @@ export function LearnListPage() {
     )
   }, [items, languageCode, query])
 
+  function togglePicked(id: string) {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function deletePicked() {
+    if (picked.size === 0) return
+    removeLearnItems([...picked])
+    setPicked(new Set())
+  }
+
   return (
     <main className="companion-screen memory-library">
       <CloudAtmosphere presence="idle" />
@@ -72,7 +95,27 @@ export function LearnListPage() {
         <CompanionNav />
       </header>
       <div className="memory-library__content">
-        <h1>Learn List</h1>
+        <div className="learn-list__title-row">
+          <h1>Learn List</h1>
+          <button
+            type="button"
+            className="learn-list__bin"
+            aria-label={
+              picked.size
+                ? `Delete ${picked.size} ticked word${picked.size === 1 ? '' : 's'}`
+                : 'Delete ticked words'
+            }
+            disabled={picked.size === 0}
+            onClick={deletePicked}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"
+              />
+            </svg>
+          </button>
+        </div>
         <p className="learn-list-stats" aria-live="polite">
           <span>
             <strong>{stats.ever}</strong> have been on this list
@@ -116,16 +159,32 @@ export function LearnListPage() {
         ) : (
           <ul className="memory-library__list">
             {words.map((item) => (
-              <li key={item.id} className="memory-library__card">
+              <li
+                key={item.id}
+                className={`memory-library__card${picked.has(item.id) ? ' is-picked' : ''}`}
+              >
                 <div className="memory-library__row">
+                  <label className="learn-list__tick">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(item.id)}
+                      onChange={() => togglePicked(item.id)}
+                      aria-label={`Tick ${item.term} for deletion`}
+                    />
+                    <span aria-hidden="true" />
+                  </label>
                   <p className="memory-library__pair">
                     <span className="memory-library__native">{item.term}</span>
                     <span className="memory-library__target">
                       {item.translation || '…'}
                     </span>
                   </p>
-                  <p className="memory-library__count">
-                    Used well {item.practiceCount}/{need}
+                  <p
+                    className="memory-library__count"
+                    title="Uses left before this word leaves the list"
+                  >
+                    <strong>{Math.max(0, need - item.practiceCount)}</strong>
+                    <span>left</span>
                   </p>
                 </div>
               </li>

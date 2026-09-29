@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { keaRestartUrl, requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
+import { useHoldKeaListening } from '../../architecture/keaUiHold'
 import {
   formatTrendPercent,
   getTalkTrendPercent,
@@ -110,6 +111,7 @@ export function CompanionNav({
 }: CompanionNavProps) {
   const [clearOpen, setClearOpen] = useState(false)
   const [trend, setTrend] = useState(() => getTalkTrendPercent())
+  useHoldKeaListening(clearOpen)
 
   useEffect(() => {
     const refresh = () => setTrend(getTalkTrendPercent())

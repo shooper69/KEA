@@ -206,21 +206,32 @@ const STOP_WORDS = new Set([
   'que',
 ])
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 function isCountableToken(value: string) {
   const key = termKey(value)
   if (key.length < 3) return false
   return !STOP_WORDS.has(key)
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function hasWord(haystack: string, needle: string) {
   const n = normalizeTerm(needle)
   if (!isCountableToken(n)) return false
+  return hasExactPhrase(haystack, n)
+}
+
+/** Match a Learn List target form in speech — allows short words like "sé" / "tú". */
+function hasLearnTarget(haystack: string, needle: string) {
+  const n = normalizeTerm(needle)
+  if (n.length < 2) return false
+  return hasExactPhrase(haystack, n)
+}
+
+function hasExactPhrase(haystack: string, needle: string) {
   const re = new RegExp(
-    `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(n)}(?:$|[^\\p{L}\\p{N}])`,
+    `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(needle)}(?:$|[^\\p{L}\\p{N}])`,
     'iu',
   )
   return re.test(haystack)
@@ -558,6 +569,14 @@ export function saveLearnList(items: LearnListItem[]) {
   persistLearn(items)
 }
 
+/** Drop chosen rows. Supabase removes the same rows on the next cloud push. */
+export function removeLearnItems(ids: string[]) {
+  const drop = new Set(ids)
+  if (drop.size === 0) return
+  const items = readLearnList().filter((item) => !drop.has(item.id))
+  persistLearn(items)
+}
+
 export function saveChatTopics(items: ChatTopic[]) {
   writeJson(TOPICS_KEY, items)
 }
@@ -606,16 +625,20 @@ function markUsed(
   skipIds: Set<string>,
 ) {
   const key = termKey(token)
-  const item = items.find(
-    (entry) =>
-      entry.languageCode === languageCode &&
-      !skipIds.has(entry.id) &&
-      (termKey(entry.term) === key || termKey(entry.translation) === key),
-  )
+  if (!key) return
+  const item = items.find((entry) => {
+    if (entry.languageCode !== languageCode || skipIds.has(entry.id)) return false
+    const target = termKey(entry.translation)
+    const native = termKey(entry.term)
+    // Prefer the target-language form; also accept the native term if the model
+    // put that in "used" (same row still means one good use of that word).
+    return (target && target === key) || native === key
+  })
   if (!item) return
   item.practiceCount += 1
   item.lastReviewedAt = new Date().toISOString()
-  item.status = item.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
+  item.status =
+    item.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
 }
 
 export function applyLearnTurn(options: {
@@ -689,7 +712,7 @@ export function applyLearnTurn(options: {
       if (item.languageCode !== options.languageCode) continue
       if (addedIds.has(item.id)) continue
       // Natural use = saying the target-language word in a real chat turn.
-      if (item.translation && hasWord(options.userText, item.translation)) {
+      if (item.translation && hasLearnTarget(options.userText, item.translation)) {
         usedTokens.add(termKey(item.translation))
       }
     }
@@ -879,7 +902,7 @@ After your spoken reply, write this hidden block on its own (never speak it, nev
 <<<KEA_MEMORY
 {"add":[{"term":"native-language word","translation":"target-language word"}],"used":["target-language word already on the list"]}
 >>>
-Use add when they drop a native-language word into a target-language sentence, or ask how to say a word. Only single words or very short phrases. Use used when they say a Learn List target word correctly in a real sentence. Use empty arrays if nothing happened.
+Use add when they drop a native-language word into a target-language sentence, or ask how to say a word. Only single words or very short phrases. Use used every time they say a Learn List target word correctly in a real sentence (put the target-language form, or the native form if you are unsure). This is how words leave the list after ${need} good uses — do not skip used when they got it right. Use empty arrays if nothing happened.
 
 CURRENT CHAT TOPICS (conversation continuity only; never mix with Learn List):
 ${topics || '(empty)'}`

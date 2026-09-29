@@ -64,7 +64,7 @@ export type VoicePresenceState =
   | 'listening'
   | 'thinking'
   | 'speaking'
-export type SkyTheme = 'clouds' | 'weather'
+export type SkyTheme = 'clouds' | 'weather' | 'night'
 export type ChatKeep = 'device' | 'cloud'
 
 

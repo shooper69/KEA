@@ -19,7 +19,7 @@ export interface CloudProfile {
   preferredVoice: VoicePersonalityId
   avatarUrl: string
   listenIdleSeconds: number
-  skyTheme: 'clouds' | 'weather'
+  skyTheme: 'clouds' | 'weather' | 'night'
   chatKeep: 'device' | 'cloud'
   notifyMemory: boolean
   notifyTalk: boolean
@@ -45,7 +45,10 @@ function asProfile(row: Record<string, unknown> | null): CloudProfile | null {
     preferredVoice: isVoicePersonalityId(voice) ? voice : DEFAULT_VOICE_CHARACTER,
     avatarUrl: typeof row.avatar_url === 'string' ? row.avatar_url : '',
     listenIdleSeconds: normalizeListenIdleSeconds(listen),
-    skyTheme: row.sky_theme === 'weather' ? 'weather' : 'clouds',
+    skyTheme:
+      row.sky_theme === 'weather' || row.sky_theme === 'night'
+        ? row.sky_theme
+        : 'clouds',
     chatKeep: row.chat_keep === 'cloud' ? 'cloud' : 'device',
     notifyMemory: row.notify_memory !== false,
     notifyTalk: row.notify_talk !== false,

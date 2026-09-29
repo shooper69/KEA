@@ -14,6 +14,7 @@ import {
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import { looksLikeWhisperHallucination } from '../architecture/whisperText'
 import { isKeaReplayActive } from '../services/keaSpeak'
+import { isKeaUiHeld, KEA_UI_HOLD, KEA_UI_RELEASE } from '../architecture/keaUiHold'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
 
 interface UseKeaWakeWordOptions {
@@ -77,8 +78,22 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
   const onWakeRef = useRef(onWake)
   onWakeRef.current = onWake
   const enabledRef = useRef(enabled)
-  enabledRef.current = enabled
   const abortRef = useRef<() => void>(() => {})
+  const [uiHeld, setUiHeld] = useState(() => isKeaUiHeld())
+
+  useEffect(() => {
+    const onHold = () => setUiHeld(true)
+    const onRelease = () => setUiHeld(false)
+    window.addEventListener(KEA_UI_HOLD, onHold)
+    window.addEventListener(KEA_UI_RELEASE, onRelease)
+    return () => {
+      window.removeEventListener(KEA_UI_HOLD, onHold)
+      window.removeEventListener(KEA_UI_RELEASE, onRelease)
+    }
+  }, [])
+
+  const wakeEnabled = enabled && !uiHeld
+  enabledRef.current = wakeEnabled
 
   const release = useCallback(() => {
     abortRef.current()
@@ -93,7 +108,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia)
 
-    if (!enabled) {
+    if (!wakeEnabled) {
       setArmed(false)
       setWakeMic('')
       abortRef.current = () => {}
@@ -420,7 +435,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       setWakeMic('')
       abortRef.current = () => {}
     }
-  }, [enabled])
+  }, [wakeEnabled])
 
   return {
     armed,

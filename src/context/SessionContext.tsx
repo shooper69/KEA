@@ -105,7 +105,10 @@ function readProfile(): StoredProfile {
     const listenIdleSeconds = Number(parsed.listenIdleSeconds)
     const sessionTimeoutMinutes = Number(parsed.sessionTimeoutMinutes)
     const answerAfterSilenceSeconds = Number(parsed.answerAfterSilenceSeconds)
-    const skyTheme = parsed.skyTheme === 'weather' ? 'weather' : 'clouds'
+    const skyTheme =
+      parsed.skyTheme === 'weather' || parsed.skyTheme === 'night'
+        ? parsed.skyTheme
+        : 'clouds'
     const chatKeep = parsed.chatKeep === 'cloud' ? 'cloud' : 'device'
     const preferredVoice = parsed.preferredVoice
     return {

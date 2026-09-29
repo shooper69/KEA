@@ -17,7 +17,10 @@ export function CloudAtmosphere({
   tempo = 'calm',
 }: CloudAtmosphereProps) {
   const { skyTheme, isAdmin } = useSession()
-  const activeTheme = isAdmin && skyTheme === 'weather' ? 'weather' : 'clouds'
+  const activeTheme =
+    isAdmin && (skyTheme === 'weather' || skyTheme === 'night')
+      ? skyTheme
+      : 'clouds'
   const [weather, setWeather] = useState<WeatherKind>('clear')
 
   useEffect(() => {

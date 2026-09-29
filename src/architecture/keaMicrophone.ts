@@ -1,7 +1,9 @@
 import {
   audioRouteMicBoost,
   looksLikeHeadsetMic,
+  probeAudioEnvironment,
   saveAudioRoute,
+  type KeaAudioEnvironment,
   type KeaAudioRoute,
 } from './keaAudioRoute'
 
@@ -225,8 +227,8 @@ export async function openKeaMicrophone(): Promise<{
 }
 
 /**
- * After the user picks speaker or headphones, lock in a matching input
- * when labels are available.
+ * After the phone reports speaker / headphones / Bluetooth, lock in a matching
+ * input when labels are available.
  */
 export async function applyAudioRouteMic(route: KeaAudioRoute) {
   saveAudioRoute(route)
@@ -241,11 +243,20 @@ export async function applyAudioRouteMic(route: KeaAudioRoute) {
       return score(b) - score(a)
     })
 
-    if (route === 'headphones') {
-      const headset = ranked.find((item) =>
-        looksLikeHeadsetMic(item.label, item.deviceId),
-      )
-      savePreferredMicId(headset?.deviceId || '')
+    if (route === 'headphones' || route === 'bluetooth') {
+      const preferBluetooth = route === 'bluetooth'
+      const match = ranked.find((item) => {
+        if (preferBluetooth) {
+          return (
+            looksLikeHeadsetMic(item.label, item.deviceId) ||
+            /bluetooth|\bbt\b|hands.?free|car.?kit/i.test(
+              `${item.label} ${item.deviceId}`,
+            )
+          )
+        }
+        return looksLikeHeadsetMic(item.label, item.deviceId)
+      })
+      savePreferredMicId(match?.deviceId || '')
       return
     }
 
@@ -258,4 +269,11 @@ export async function applyAudioRouteMic(route: KeaAudioRoute) {
   } catch {
     // Route preference still saved; mic picker falls back later.
   }
+}
+
+/** Probe the phone’s current audio devices and apply the matching mic. */
+export async function syncAudioRouteFromPhone(): Promise<KeaAudioEnvironment> {
+  const environment = await probeAudioEnvironment()
+  await applyAudioRouteMic(environment.route)
+  return environment
 }

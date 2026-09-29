@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { useHoldKeaListening } from '../../architecture/keaUiHold'
 import { useSession } from '../../context/SessionContext'
 import { useStickyMenu } from '../../hooks/useStickyMenu'
 import { ProfileFace } from './ProfileFace'
@@ -8,6 +9,7 @@ export function UserMenu() {
     useSession()
   const navigate = useNavigate()
   const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
+  useHoldKeaListening(open)
 
   function goSettings() {
     setOpen(false)
@@ -45,6 +47,13 @@ export function UserMenu() {
           <button type="button" role="menuitem" onClick={goSettings}>
             Settings
           </button>
+          <Link
+            role="menuitem"
+            to="/performance"
+            onClick={() => setOpen(false)}
+          >
+            Performance
+          </Link>
           <Link
             role="menuitem"
             to="/subscription"

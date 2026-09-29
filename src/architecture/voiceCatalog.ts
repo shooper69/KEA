@@ -39,7 +39,7 @@ const OPENAI_SEED: Array<{
     openaiVoice: 'nova',
     actualName: 'Nova',
     userName: 'Soft Charm',
-    userDescription: 'Warm, close, and a little alluring.',
+    userDescription: 'Softer, warmer, and a little more charming.',
     enabled: true,
   },
   {
@@ -202,7 +202,7 @@ function migrateCharmDefault(catalog: VoiceCatalog): VoiceCatalog {
           ...item,
           enabled: true,
           userName: 'Soft Charm',
-          userDescription: 'Warm, close, and a little alluring.',
+          userDescription: 'Softer, warmer, and a little more charming.',
         }
       }
       if (item.openaiVoice === 'shimmer') {

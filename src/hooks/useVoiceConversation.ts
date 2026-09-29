@@ -48,6 +48,11 @@ import {
   MIN_LISTEN_IDLE_SECONDS,
 } from '../data/keaListenIdle'
 import { heardKeaStop } from '../architecture/keaWakeWord'
+import {
+  isKeaUiHeld,
+  KEA_UI_HOLD,
+  KEA_UI_RELEASE,
+} from '../architecture/keaUiHold'
 import type {
   LanguageCode,
   LearnerLevel,
@@ -306,6 +311,24 @@ export function useVoiceConversation({
     }
   }, [restoreTranscript, resumeAfterBackground, suspendForBackground])
 
+  const softPauseMic = useCallback(() => {
+    clearListenIdleTimer()
+    clearRestartTimer()
+    stoppingRecordRef.current = true
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      try {
+        recorderRef.current.stop()
+      } catch {
+        // ignore
+      }
+    }
+    recorderRef.current = null
+    chunksRef.current = []
+    stopAnalyser(false)
+    setStatus('idle')
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearListenIdleTimer, clearRestartTimer, stopAnalyser])
+
   // Soft-pause the mic while a paragraph is replayed so TTS does not kill tracks.
   useEffect(() => {
     let wasListening = false
@@ -314,27 +337,19 @@ export function useVoiceConversation({
         handsFreeRef.current &&
         (statusRef.current === 'listening' || Boolean(streamRef.current))
       if (!wasListening) return
-      clearListenIdleTimer()
-      clearRestartTimer()
-      stoppingRecordRef.current = true
-      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
-        try {
-          recorderRef.current.stop()
-        } catch {
-          // ignore
-        }
-      }
-      recorderRef.current = null
-      chunksRef.current = []
-      stopAnalyser(false)
-      setStatus('idle')
-      patchVoiceDiagnostics({ recognitionRunning: false })
+      softPauseMic()
     }
     function onReplayEnd() {
       if (!wasListening || !handsFreeRef.current || fatalListenRef.current) return
       wasListening = false
+      if (isKeaUiHeld()) return
       window.setTimeout(() => {
-        if (handsFreeRef.current && !busyRef.current && !fatalListenRef.current) {
+        if (
+          handsFreeRef.current &&
+          !busyRef.current &&
+          !fatalListenRef.current &&
+          !isKeaUiHeld()
+        ) {
           startListeningRef.current()
         }
       }, 180)
@@ -345,7 +360,43 @@ export function useVoiceConversation({
       window.removeEventListener(KEA_REPLAY_START, onReplayStart)
       window.removeEventListener(KEA_REPLAY_END, onReplayEnd)
     }
-  }, [clearListenIdleTimer, clearRestartTimer, stopAnalyser])
+  }, [softPauseMic])
+
+  // Soft-pause while chat chrome is open; resume when the user is back on talk.
+  useEffect(() => {
+    function onUiHold() {
+      if (
+        handsFreeRef.current &&
+        statusRef.current === 'listening'
+      ) {
+        softPauseMic()
+      }
+    }
+    function onUiRelease() {
+      if (!handsFreeRef.current || fatalListenRef.current || busyRef.current) return
+      if (isKeaReplayActive()) return
+      if (statusRef.current === 'listening') return
+      window.setTimeout(() => {
+        if (
+          handsFreeRef.current &&
+          !busyRef.current &&
+          !fatalListenRef.current &&
+          !isKeaUiHeld() &&
+          !isKeaReplayActive() &&
+          streamRef.current
+        ) {
+          startListeningRef.current()
+        }
+      }, 120)
+    }
+    if (isKeaUiHeld()) onUiHold()
+    window.addEventListener(KEA_UI_HOLD, onUiHold)
+    window.addEventListener(KEA_UI_RELEASE, onUiRelease)
+    return () => {
+      window.removeEventListener(KEA_UI_HOLD, onUiHold)
+      window.removeEventListener(KEA_UI_RELEASE, onUiRelease)
+    }
+  }, [softPauseMic])
   useEffect(() => {
     const refresh = () => setVoices(listVoices())
     refresh()
@@ -469,7 +520,7 @@ export function useVoiceConversation({
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   const startListening = useCallback(() => {
-    if (busyRef.current || fatalListenRef.current) return
+    if (busyRef.current || fatalListenRef.current || isKeaUiHeld()) return
     const stream = streamRef.current
     if (!stream) return
     try {
@@ -609,7 +660,7 @@ export function useVoiceConversation({
           return
         }
         // Speaker-icon replay interrupted this line — stay live, don't grab the mic yet.
-        if (isKeaReplayActive()) {
+        if (isKeaReplayActive() || isKeaUiHeld()) {
           setStatus('idle')
           return
         }
@@ -835,6 +886,10 @@ export function useVoiceConversation({
             setStatus('idle')
             return
           }
+          if (isKeaUiHeld() || isKeaReplayActive()) {
+            setStatus('idle')
+            return
+          }
           if (streamRef.current) {
             logSpeech('listening again')
             window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
@@ -863,7 +918,7 @@ export function useVoiceConversation({
       }
       if (!hasGreeting || listenWhenMicReadyRef.current) {
         listenWhenMicReadyRef.current = false
-        startListening()
+        if (!isKeaUiHeld()) startListening()
       }
     } catch {
       listenWhenMicReadyRef.current = false

@@ -48,6 +48,7 @@ import { useKeaWakeWord } from '../hooks/useKeaWakeWord'
 import { useSpokenOnboarding } from '../hooks/useSpokenOnboarding'
 import { getAnswerSilenceSeconds } from '../data/keaAnswerSilence'
 import { setScreenWakeLock } from '../architecture/keaScreenWakeLock'
+import { useHoldKeaListening } from '../architecture/keaUiHold'
 import { getSpeakVoice } from '../architecture/voiceCatalog'
 import { prefetchManagedVoiceAudio } from '../services/keaSpeak'
 import type { VoicePresenceState } from '../types'
@@ -159,6 +160,14 @@ export function ConversationPage() {
     awaitingTour: isSpokenTourPending(userKey),
     busy: Boolean(block) || audioRouteOpen || quizOpen,
   })
+
+  useHoldKeaListening(
+    Boolean(block) ||
+      audioRouteOpen ||
+      quizOpen ||
+      popup1Open ||
+      subLeaveOpen,
+  )
 
   const onboard = useSpokenOnboarding({
     active: spokenTour,

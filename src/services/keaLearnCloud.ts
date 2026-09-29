@@ -42,7 +42,10 @@ export async function pushCloudLearnList(userId: string, items: LearnListItem[])
     .from('learn_list')
     .select('id, term, language_code')
     .eq('user_id', userId)
-  if (error) return
+  if (error) {
+    console.warn('[Kea learn] cloud pull for sync failed', error.message)
+    return
+  }
   const rows = (data ?? []) as Array<{ id: string; term: string; language_code: string }>
   const kept = new Set<string>()
   for (const item of local) {
@@ -53,7 +56,7 @@ export async function pushCloudLearnList(userId: string, items: LearnListItem[])
     )
     if (match) {
       kept.add(match.id)
-      await supabase
+      const { error: updateError } = await supabase
         .from('learn_list')
         .update({
           translation: item.translation,
@@ -63,8 +66,11 @@ export async function pushCloudLearnList(userId: string, items: LearnListItem[])
         })
         .eq('id', match.id)
         .eq('user_id', userId)
+      if (updateError) {
+        console.warn('[Kea learn] cloud update failed', item.term, updateError.message)
+      }
     } else {
-      const { data: inserted } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('learn_list')
         .insert({
           user_id: userId,
@@ -78,11 +84,22 @@ export async function pushCloudLearnList(userId: string, items: LearnListItem[])
         })
         .select('id')
         .maybeSingle()
+      if (insertError) {
+        console.warn('[Kea learn] cloud insert failed', item.term, insertError.message)
+        continue
+      }
       if (inserted && typeof inserted.id === 'string') kept.add(inserted.id)
     }
   }
   for (const row of rows) {
     if (kept.has(row.id)) continue
-    await supabase.from('learn_list').delete().eq('id', row.id).eq('user_id', userId)
+    const { error: deleteError } = await supabase
+      .from('learn_list')
+      .delete()
+      .eq('id', row.id)
+      .eq('user_id', userId)
+    if (deleteError) {
+      console.warn('[Kea learn] cloud delete failed', row.term, deleteError.message)
+    }
   }
 }

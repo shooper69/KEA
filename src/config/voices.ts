@@ -39,9 +39,9 @@ export const VOICE_PERSONALITIES: VoicePersonality[] = [
   {
     id: 'mira',
     name: 'Playful mood',
-    style: 'warm, lightly teasing, charming',
+    style: 'soft, warm, lightly teasing, charming',
     gender: 'female',
-    rate: 0.96,
+    rate: 0.9,
     samples: {
       en: 'Go on then. I want the whole story.',
       es: 'Anda, cuéntame todo.',
@@ -55,7 +55,7 @@ export const VOICE_PERSONALITIES: VoicePersonality[] = [
     name: 'Gentle mood',
     style: 'calm, gently guiding',
     gender: 'female',
-    rate: 0.9,
+    rate: 0.88,
     samples: {
       en: 'Take your time. I’m listening.',
       es: 'Sin prisa. Te escucho.',

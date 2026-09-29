@@ -18,11 +18,11 @@ export function UsagePanel({ isAdmin }: { isAdmin: boolean }) {
   return (
     <section className="settings-card">
       <h2>Usage</h2>
-      <p className="settings-note">
-        Talk time stored on this device for the current calendar month, compared
-        with this month’s allowance (daily cap × days in the month). This is not
-        a Stripe invoice.
-      </p>
+      {isAdmin ? null : (
+        <p className="settings-note">
+          Time left to talk this month on your plan.
+        </p>
+      )}
       <div
         className="usage-meter"
         role="meter"
@@ -42,22 +42,17 @@ export function UsagePanel({ isAdmin }: { isAdmin: boolean }) {
           <span>Remaining {usage.remainingPercent}%</span>
         </p>
       </div>
-      {usage.unlimited ? (
+      {!isAdmin && usage.unlimited ? (
+        <p className="settings-note">This plan has no monthly time limit.</p>
+      ) : null}
+      {!isAdmin && !usage.unlimited ? (
         <p className="settings-note">
-          {isAdmin
-            ? 'Admin accounts have no talk cap. '
-            : 'This plan has no monthly talk cap. '}
-          You have used {minutesLabel(usage.minutesUsed)} this month.
-        </p>
-      ) : (
-        <p className="settings-note">
-          {minutesLabel(usage.minutesUsed)} used of {minutesLabel(usage.minutesAllowed)}{' '}
-          this month
+          {minutesLabel(usage.minutesLeft)} left this month
           {usage.dailyMinutesAllowed
             ? ` · ${formatDailyMinutes(usage.dailyMinutesAllowed)}.`
             : '.'}
         </p>
-      )}
+      ) : null}
     </section>
   )
 }

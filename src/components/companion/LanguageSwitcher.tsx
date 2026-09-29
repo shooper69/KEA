@@ -8,6 +8,7 @@ import {
   holdTalkForLanguageChange,
   requestClearTalkAndSoftReset,
 } from '../../architecture/keaTalkMemory'
+import { useHoldKeaListening } from '../../architecture/keaUiHold'
 import {
   pairIncludesRussian,
   saveRussianScript,
@@ -31,6 +32,8 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
     native: LanguageCode
     target: LanguageCode
   } | null>(null)
+
+  useHoldKeaListening(open || scriptOpen)
 
   function pickOther(excluding: LanguageCode): LanguageCode {
     return (

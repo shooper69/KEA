@@ -14,10 +14,14 @@ const OPENAI_VOICES = new Set([
   'verse',
 ])
 
-async function requestSpeech(apiKey: string, voice: string, text: string) {
-  const warmInstructions =
-    'Speak warmly and closely, like a charming companion. Soft, inviting, and lightly playful — never hard, clipped, or cold. Keep a natural, alluring ease.'
+/** Shared gpt-4o-mini-tts delivery — keep local + Netlify in sync. */
+export const KEA_TTS_STYLE =
+  'Speak softly and charmingly, like a warm close friend leaning in. Gentle, intimate, and lightly playful — never sharp, clipped, stern, or instructor-like. Soft smile in the voice, easy unhurried pacing, cozy and a little alluring. Keep intensity low and inviting.'
 
+/** Slightly slower than default so the tone stays soft. */
+export const KEA_TTS_SPEED = 0.92
+
+async function requestSpeech(apiKey: string, voice: string, text: string) {
   const first = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -28,7 +32,8 @@ async function requestSpeech(apiKey: string, voice: string, text: string) {
       model: 'gpt-4o-mini-tts',
       voice,
       input: text,
-      instructions: warmInstructions,
+      instructions: KEA_TTS_STYLE,
+      speed: KEA_TTS_SPEED,
     }),
   })
   if (first.ok) return first
@@ -42,6 +47,7 @@ async function requestSpeech(apiKey: string, voice: string, text: string) {
       model: 'tts-1-hd',
       voice,
       input: text,
+      speed: KEA_TTS_SPEED,
     }),
   })
 }

@@ -1,31 +1,51 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   clearAudioRoutePromptPending,
-  readAudioRoute,
-  type KeaAudioRoute,
+  type KeaAudioEnvironment,
 } from '../../architecture/keaAudioRoute'
-import { applyAudioRouteMic } from '../../architecture/keaMicrophone'
+import { syncAudioRouteFromPhone } from '../../architecture/keaMicrophone'
 
 interface MobileAudioRoutePopupProps {
   onDone: () => void
 }
 
-/** Mobile login check: phone speaker vs headphones for the right mic. */
+/**
+ * After login on mobile: show what the phone already reports for talk audio
+ * (Bluetooth / car, headphones, or phone speaker) and lock the mic to match.
+ */
 export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
-  const [saving, setSaving] = useState(false)
-  const current = readAudioRoute()
+  const [environment, setEnvironment] = useState<KeaAudioEnvironment | null>(
+    null,
+  )
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(true)
 
-  async function choose(route: KeaAudioRoute) {
-    if (saving) return
-    setSaving(true)
-    try {
-      await applyAudioRouteMic(route)
-    } finally {
-      clearAudioRoutePromptPending()
-      setSaving(false)
-      onDone()
+  useEffect(() => {
+    let cancelled = false
+    void syncAudioRouteFromPhone()
+      .then((next) => {
+        if (cancelled) return
+        setEnvironment(next)
+        setBusy(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setError('Could not read audio devices on this phone.')
+        setBusy(false)
+      })
+    return () => {
+      cancelled = true
     }
+  }, [])
+
+  function finish() {
+    clearAudioRoutePromptPending()
+    onDone()
   }
+
+  const named = (environment?.devices ?? [])
+    .filter((item) => item.label.trim())
+    .slice(0, 4)
 
   return (
     <div
@@ -36,33 +56,38 @@ export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
     >
       <div className="audio-route__card">
         <h2 id="audio-route-title" className="audio-route__title">
-          Check your audio
+          Your phone’s audio
         </h2>
-        <p className="audio-route__body">
-          Are you using the phone speaker, or headphones? Pick the one you have
-          on now so Kea uses the right microphone.
-        </p>
-        {current ? (
-          <p className="audio-route__note">
-            Last time: {current === 'headphones' ? 'Headphones' : 'Phone speaker'}
-          </p>
+        {busy ? (
+          <p className="audio-route__body">Reading what this phone is set up for…</p>
+        ) : error ? (
+          <p className="audio-route__body">{error}</p>
+        ) : environment ? (
+          <>
+            <p className="audio-route__body">{environment.summary}</p>
+            <p className="audio-route__note">{environment.detail}</p>
+            {named.length > 0 ? (
+              <ul className="audio-route__devices">
+                {named.map((item) => (
+                  <li key={`${item.kind}-${item.deviceId}`}>
+                    <span className="audio-route__device-kind">
+                      {item.kind === 'output' ? 'Out' : 'In'}
+                    </span>
+                    <span>{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
         ) : null}
         <div className="audio-route__actions">
           <button
             type="button"
             className="kea-button"
-            disabled={saving}
-            onClick={() => void choose('speaker')}
+            disabled={busy}
+            onClick={finish}
           >
-            Phone speaker
-          </button>
-          <button
-            type="button"
-            className="kea-button"
-            disabled={saving}
-            onClick={() => void choose('headphones')}
-          >
-            Headphones
+            Continue
           </button>
         </div>
       </div>
