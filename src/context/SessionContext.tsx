@@ -32,7 +32,7 @@ import {
   upsertCloudProfile,
   markPasswordRecovery,
 } from '../services/keaProfile'
-import { markAudioRoutePromptPending } from '../architecture/keaAudioRoute'
+import { markFreshChatScreen } from '../architecture/keaTalkMemory'
 import {
   getLearnList,
   mergeCloudLearnItems,
@@ -50,7 +50,6 @@ import {
   mergeCloudDayStats,
   setDailyStatsCloudPush,
 } from '../architecture/keaTalkPerformance'
-import { markFreshChatScreen } from '../architecture/keaTalkMemory'
 import { applyCloudSubscription } from '../architecture/keaBilling'
 import {
   learnerLevelToSession,
@@ -390,8 +389,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         markPasswordRecovery()
         window.dispatchEvent(new Event('kea-password-recovery'))
       }
+      // Do not mark the audio check here — SIGNED_IN also fires on session
+      // restore / refresh. AuthPanel marks it only on explicit login.
       if (event === 'SIGNED_IN' && session?.user) {
-        markAudioRoutePromptPending()
         markFreshChatScreen()
       }
       if (!session?.user) {

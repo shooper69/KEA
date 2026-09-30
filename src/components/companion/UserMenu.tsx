@@ -11,11 +11,13 @@ export function UserMenu() {
     useSession()
   const navigate = useNavigate()
   const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
-  useHoldKeaListening(open)
   const { installed, busy, promptInstall, manualInstallHint } = usePwaInstall()
   const [comingSoon, setComingSoon] = useState<string | null>(null)
   const [installAsk, setInstallAsk] = useState(false)
   const [installNote, setInstallNote] = useState('')
+  useHoldKeaListening(
+    open || Boolean(comingSoon) || installAsk || Boolean(installNote),
+  )
 
   function goSettings() {
     setOpen(false)

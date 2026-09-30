@@ -646,7 +646,6 @@ export function useVoiceConversation({
           speechMsRef.current += delta
           silenceMsRef.current = 0
           lastActivityAtRef.current = Date.now()
-          armListenIdle()
           window.dispatchEvent(new Event('kea-user-activity'))
         } else if (speechMsRef.current > MIN_SPEECH_MS) {
           silenceMsRef.current += delta
@@ -968,6 +967,7 @@ export function useVoiceConversation({
     // Drop the wake-word recognizer before opening Whisper's mic.
     handsFreeRef.current = true
     setHandsFree(true)
+    activateLiveWindow()
 
     if (hasGreeting) {
       const text = greeting!.trim()
@@ -1050,7 +1050,7 @@ export function useVoiceConversation({
     } finally {
       startingRef.current = false
     }
-  }, [speakReply, startListening, targetLanguage])
+  }, [activateLiveWindow, speakReply, startListening, targetLanguage])
 
   useEffect(() => {
     startTalkRef.current = () => {
@@ -1066,6 +1066,7 @@ export function useVoiceConversation({
     busyRef.current = false
     sendingRef.current = false
     stoppingRecordRef.current = true
+    pageLiveUntilRef.current = 0
     clearListenIdleTimer()
     clearRestartTimer()
     stopKeaSpeech()
@@ -1119,6 +1120,8 @@ export function useVoiceConversation({
     toggle,
     start,
     stop,
+    /** Reset the 10-minute live window from chat-page entry (not from speech). */
+    activateLiveWindow,
     sendText: (text: string) => sendToKea(text, { written: true }),
     clearMessages,
     pauseSpeech,

@@ -50,7 +50,7 @@ export function saveAudioRoute(route: KeaAudioRoute) {
   window.dispatchEvent(new Event('kea-audio-route-changed'))
 }
 
-/** Mark that the next conversation open should show the audio check (mobile login). */
+/** Mark that the next conversation open should show the audio check (after login only). */
 export function markAudioRoutePromptPending() {
   try {
     sessionStorage.setItem(PROMPT_KEY, '1')
@@ -59,6 +59,7 @@ export function markAudioRoutePromptPending() {
   }
 }
 
+/** True once after login — removes the flag so mid-session chat visits skip it. */
 export function consumeAudioRoutePromptPending(): boolean {
   try {
     if (sessionStorage.getItem(PROMPT_KEY) !== '1') return false

@@ -13,7 +13,7 @@ import { LearnerQuestionnaire } from '../components/companion/LearnerQuestionnai
 import { KEA_FLY_SRC } from '../data/keaAbout'
 import {
   clearAudioRoutePromptPending,
-  shouldOfferAudioRoutePrompt,
+  consumeAudioRoutePromptPending,
 } from '../architecture/keaAudioRoute'
 import {
   isTalkHeld,
@@ -98,13 +98,11 @@ export function ConversationPage() {
     const timer = window.setTimeout(() => releaseRestartListen(), 400)
     return () => window.clearTimeout(timer)
   }, [])
-  const [audioRouteOpen, setAudioRouteOpen] = useState(() =>
-    restartListen ? false : shouldOfferAudioRoutePrompt(),
-  )
-
-  useEffect(() => {
-    if (shouldOfferAudioRoutePrompt()) setAudioRouteOpen(true)
-  }, [])
+  const [audioRouteOpen, setAudioRouteOpen] = useState(() => {
+    if (restartListen) return false
+    // Consume so returning to chat mid-session never reopens the check.
+    return consumeAudioRoutePromptPending()
+  })
   const [popup1Open, setPopup1Open] = useState(() => shouldShowPopup1('home'))
   const [subLeaveOpen, setSubLeaveOpen] = useState(() => {
     if (!consumeSubLeaveOfferPending()) return false
@@ -175,6 +173,7 @@ export function ConversationPage() {
     Boolean(block) ||
       audioRouteOpen ||
       quizOpen ||
+      spokenTour ||
       popup1Open ||
       subLeaveOpen,
   )
@@ -323,6 +322,37 @@ export function ConversationPage() {
     setOpeningDone(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioRouteOpen])
+
+  // Chat page is live: as soon as chrome clears, open the mic and start the
+  // listen window from this visit (not from the last spoken word).
+  useEffect(() => {
+    if (
+      textMode ||
+      block ||
+      spokenTour ||
+      quizOpen ||
+      audioRouteOpen ||
+      !profileKnown
+    ) {
+      return
+    }
+    if (voice.handsFree || voice.status !== 'idle') return
+    if (sessionGreetedRef.current) {
+      void voice.start()
+    }
+    // Greeting effect handles first open; this covers return to chat when a
+    // welcome was already spoken this visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    textMode,
+    block,
+    spokenTour,
+    quizOpen,
+    audioRouteOpen,
+    profileKnown,
+    voice.handsFree,
+    voice.status,
+  ])
 
   const wake = useKeaWakeWord({
     enabled:

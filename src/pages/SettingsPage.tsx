@@ -675,7 +675,7 @@ export function SettingsPage() {
             </button>
           </div>
           <label className="welcome-field">
-            <span>Stay listening for</span>
+            <span>Stay live on chat for</span>
             <select
               value={normalizeListenIdleSeconds(draftListenIdle)}
               onChange={(event) => {
@@ -694,6 +694,11 @@ export function SettingsPage() {
               })}
             </select>
           </label>
+          <p className="settings-note">
+            Starts when you open the chat page (for example after Settings), not
+            from the last time you spoke. Menus pause the mic until you close
+            them.
+          </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
