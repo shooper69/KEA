@@ -12,6 +12,10 @@ import {
   clientIpFromHeaders,
 } from '../../src/server/keaPublicRateLimit'
 import { requireKeaUser } from '../../src/server/keaUserAuth'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from '../../src/server/keaTalkAccessGate'
 import { buildKeaSystemPrompt } from '../../src/server/keaPrompt'
 
 type ChatEvent = {
@@ -71,6 +75,13 @@ export async function handler(event: ChatEvent) {
     const auth = await requireKeaUser(event.headers)
     if (!auth.ok) {
       return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+    }
+    const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+    if (!access.ok) {
+      return {
+        statusCode: access.status,
+        body: JSON.stringify({ error: access.error }),
+      }
     }
     if (!allowAuthenticatedChat(auth.userId, ip)) {
       return {

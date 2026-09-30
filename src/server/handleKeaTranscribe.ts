@@ -5,6 +5,10 @@ import {
   clientIpFromHeaders,
 } from './keaPublicRateLimit.ts'
 import { requireKeaUser } from './keaUserAuth.ts'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from './keaTalkAccessGate.ts'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 
@@ -68,6 +72,12 @@ export async function handleKeaTranscribe(
   if (!auth.ok) {
     res.statusCode = auth.status
     res.end(JSON.stringify({ error: auth.error }))
+    return
+  }
+  const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+  if (!access.ok) {
+    res.statusCode = access.status
+    res.end(JSON.stringify({ error: access.error }))
     return
   }
   const ip = clientIpFromHeaders(headers)

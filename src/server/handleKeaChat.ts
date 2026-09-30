@@ -13,6 +13,10 @@ import {
   clientIpFromHeaders,
 } from './keaPublicRateLimit.ts'
 import { requireKeaUser } from './keaUserAuth.ts'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from './keaTalkAccessGate.ts'
 import { buildKeaSystemPrompt } from './keaPrompt.ts'
 
 interface ChatTurn {
@@ -99,6 +103,12 @@ export async function handleKeaChat(
     if (!auth.ok) {
       res.statusCode = auth.status
       res.end(JSON.stringify({ error: auth.error }))
+      return
+    }
+    const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+    if (!access.ok) {
+      res.statusCode = access.status
+      res.end(JSON.stringify({ error: access.error }))
       return
     }
     if (!allowAuthenticatedChat(auth.userId, ip)) {

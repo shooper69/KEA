@@ -7,6 +7,10 @@ import {
   MAX_AUTH_TTS_CHARS,
 } from './keaPublicRateLimit.ts'
 import { requireKeaUser } from './keaUserAuth.ts'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from './keaTalkAccessGate.ts'
 
 const OPENAI_VOICES = new Set([
   'alloy',
@@ -141,6 +145,13 @@ export async function handleKeaTts(
       res.statusCode = auth.status
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: auth.error }))
+      return
+    }
+    const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+    if (!access.ok) {
+      res.statusCode = access.status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: access.error }))
       return
     }
     if (!allowAuthenticatedTts(auth.userId, ip)) {

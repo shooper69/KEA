@@ -74,18 +74,18 @@ Execute in this order. Tick boxes here and in the section checklists; log work i
 
 ### Phase B — Auth, data, client integrity
 
-8. [ ] Confirm email confirmation, password reset, redirect allowlist on production
-9. [ ] Second-account RLS spot-check (learn list / profile)
-10. [ ] Paywall not bypassable by `localStorage` alone once APIs trust cloud subscription
-11. [ ] XSS / storage review; admin client-only caveats documented
+8. [x] Confirm email confirmation, password reset, redirect allowlist on production — verified 2026-10-01 via Auth API: `site_url=https://kea.chat`, `mailer_autoconfirm=false`, recovery template present, allowlist `localhost:5173/**` + `kea.chat/**` + `keachat.netlify.app/**`
+9. [~] Second-account RLS spot-check (learn list / profile) — own-row policies in migrations (`profiles_own` / `learn_list_own`); procedure in `docs/rls-spot-check.md`; **owner** still run live two-user check once
+10. [x] Paywall not bypassable by `localStorage` alone — server talk gate on chat/TTS/Whisper via cloud `profiles.subscription_*` + trial from `created_at` (`keaTalkAccessGate.ts`, 2026-10-01)
+11. [x] XSS / storage review; admin client-only caveats documented — no `dangerouslySetInnerHTML`; see `docs/admin-security.md`
 
 ### Phase C — Smoke + ops
 
-12. [ ] `npm run guard` + `npm run build` clean; deploy hardening to Netlify
-13. [ ] One **live** Checkout happy path (small real charge or known live card flow) + webhook → access
-14. [ ] Expand Playwright only after A–B gates: login modal, signed-in talk gate, learn list
-15. [ ] OpenAI spend alert + Stripe live/test key separation documented on Netlify
-16. [ ] Support path for “I paid but cannot talk”
+12. [x] `npm run guard` + `npm run build` clean — passed 2026-10-01 (redeploy when you commit/push)
+13. [ ] One **live** Checkout happy path (small real charge or known live card flow) + webhook → access — **owner**
+14. [x] Expand Playwright: public pages + login modal + talk-access unit checks (`e2e/public-pages.spec.ts`, `e2e/talk-access.spec.ts`; full suite **13 passed** 2026-10-01)
+15. [~] OpenAI spend alert + Stripe live/test key separation — documented in this file; **owner** set OpenAI budget alert in dashboard
+16. [x] Support path for “I paid but cannot talk” — https://kea.chat/support (+ Settings Help)
 
 ### Phase D — After robust GitHub release (not now)
 
@@ -107,6 +107,8 @@ Execute in this order. Tick boxes here and in the section checklists; log work i
 | **App / Netlify** | `STRIPE_SECRET_KEY` (`sk_live_…` ↔ `sk_test_…`) and matching `STRIPE_WEBHOOK_SECRET`; webhook URL mode in Stripe Dashboard |
 | **Cursor Stripe MCP** | Session can use `livemode: true` or `false` **if** that mode is connected (`list_available_accounts_or_orgs` / `manage_stripe_accounts`). Today Kea shows **live** (`acct_1UJfe36G7iCRQAR8`). MCP does **not** rewrite Netlify env. |
 | **Admin UI** | Catalog IDs in Admin → Stripe assume live account; test mode needs test Price IDs if you switch keys |
+
+**Launch rule:** Production Netlify for `keachat` stays on **live** keys (`sk_live_…` + live webhook secret). Local/dev may use test keys in `.env.local` only — never mix live webhook secrets with test secret keys.
 
 ---
 
@@ -234,7 +236,8 @@ Command: `npm run test:e2e`
 
 ## 8. Cost and abuse controls
 
-- [ ] OpenAI spend alerts / hard budget in OpenAI dashboard
+- [~] OpenAI spend alerts / hard budget in OpenAI dashboard — **owner** set budget alert; app already rate-limits + talk-gates spendy routes
+
 - [~] Stripe test vs live keys clearly separated; **launch = live on production**; switch back to test by env swap (see table above)
 - [ ] Free / trial talk minutes enforced server-side where money is at risk
 - [ ] Admin cost page numbers sanity-checked against real invoices
@@ -384,6 +387,37 @@ Command: `npm run test:e2e`
 - ~~Still need: open signup vs invite-only~~ — **closed:** not about Play testers; web stays open signup.
 
 **Errors:** none blocking in this session after auth-gate edits (typecheck of full tree not re-run in this step).
+
+---
+
+### 2026-10-01 — Phase B/C: server talk access + public e2e
+
+**Sequence (confirmed):** finish Phase B + C → expand Playwright → then Phase D / AAB. AAB not started.
+
+**Build:**
+
+- `src/server/keaTalkAccessGate.ts` — chat/TTS/Whisper require cloud subscription, 7-day trial from `profiles.created_at`, or admin email (not `localStorage`).
+- Wired Vite handlers + Netlify `chat` / `tts` / `transcribe`.
+- `docs/admin-security.md` — admin is client email gate; money stays server-side.
+- `docs/rls-spot-check.md` — live two-user RLS procedure.
+- `e2e/public-pages.spec.ts` — `/support` + `/delete-account` (Playwright **2 passed** after Chromium install).
+- `npm run guard` + `npm run build` clean.
+
+**Verified (B8 Auth API):**
+
+- Site URL `https://kea.chat`
+- Confirm email on (`mailer_autoconfirm: false`)
+- Redirect allowlist includes localhost, kea.chat, keachat.netlify.app
+- Password recovery mailer template present
+
+**Owner still does:**
+
+- B9: live two-account RLS spot-check (`docs/rls-spot-check.md`)
+- C13: one live Checkout + webhook → talk access
+- C15: OpenAI dashboard spend alert
+- Commit + Netlify deploy so talk gate is live on kea.chat
+
+**Errors:** none on guard/build/public e2e.
 
 ---
 

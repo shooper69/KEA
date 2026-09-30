@@ -99,6 +99,19 @@ test('How to use Kea only after stage 1, never on a normal login', () => {
       awaitingTour: true,
       busy: false,
     }),
+  ).toBe(false)
+
+  expect(
+    shouldShowSpokenTour({
+      isAdmin: false,
+      profileKnown: true,
+      hasName: true,
+      hasTalked: false,
+      completed: false,
+      awaitingTour: true,
+      tourArmed: true,
+      busy: false,
+    }),
   ).toBe(true)
 
   expect(
@@ -109,6 +122,7 @@ test('How to use Kea only after stage 1, never on a normal login', () => {
       hasTalked: true,
       completed: true,
       awaitingTour: true,
+      tourArmed: true,
       busy: false,
     }),
   ).toBe(true)

@@ -6,6 +6,10 @@ import {
   MAX_AUTH_TTS_CHARS,
 } from '../../src/server/keaPublicRateLimit'
 import { requireKeaUser } from '../../src/server/keaUserAuth'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from '../../src/server/keaTalkAccessGate'
 
 const OPENAI_VOICES = new Set([
   'alloy',
@@ -117,6 +121,13 @@ export async function handler(event: TtsEvent) {
     const auth = await requireKeaUser(event.headers)
     if (!auth.ok) {
       return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+    }
+    const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+    if (!access.ok) {
+      return {
+        statusCode: access.status,
+        body: JSON.stringify({ error: access.error }),
+      }
     }
     if (!allowAuthenticatedTts(auth.userId, ip)) {
       return {

@@ -4,6 +4,10 @@ import {
   clientIpFromHeaders,
 } from '../../src/server/keaPublicRateLimit'
 import { requireKeaUser } from '../../src/server/keaUserAuth'
+import {
+  requireKeaTalkAccess,
+  talkAccessEnvFromProcess,
+} from '../../src/server/keaTalkAccessGate'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -44,6 +48,13 @@ export async function handler(event: TranscribeEvent) {
   const auth = await requireKeaUser(event.headers)
   if (!auth.ok) {
     return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+  }
+  const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
+  if (!access.ok) {
+    return {
+      statusCode: access.status,
+      body: JSON.stringify({ error: access.error }),
+    }
   }
   const ip = clientIpFromHeaders(event.headers)
   if (!allowAuthenticatedTranscribe(auth.userId, ip)) {
