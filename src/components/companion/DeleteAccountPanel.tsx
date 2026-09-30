@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { purgeKeaDeviceData } from '../architecture/keaDevicePurge'
-import { useSession } from '../context/SessionContext'
-import { deleteKeaCloudAccount } from '../services/keaAccountDelete'
+import { purgeKeaDeviceData } from '../../architecture/keaDevicePurge'
+import { useSession } from '../../context/SessionContext'
+import { deleteKeaCloudAccount } from '../../services/keaAccountDelete'
 
 const CONFIRM_WORD = 'DELETE'
 

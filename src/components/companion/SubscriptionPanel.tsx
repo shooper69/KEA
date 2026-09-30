@@ -33,7 +33,6 @@ import {
 
 export function SubscriptionPanel({
   email,
-  userId,
   isAdmin,
 }: {
   email: string

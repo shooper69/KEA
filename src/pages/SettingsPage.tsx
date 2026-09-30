@@ -57,7 +57,7 @@ import {
   type KeaAudioRoute,
 } from '../architecture/keaAudioRoute'
 import { DeleteAccountPanel } from '../components/companion/DeleteAccountPanel'
-import type { ChatKeep, LanguageCode, SkyTheme } from '../types'
+import type { ChatKeep, SkyTheme } from '../types'
 
 function PlayIcon() {
   return (
