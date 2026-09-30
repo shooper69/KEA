@@ -1453,6 +1453,8 @@ body:has(.welcome-screen),
 .settings-card .kea-language-field {
   margin: 0.55rem 0;
 }
+
+.settings-card h2 {
   font-size: 1rem;
   margin-bottom: 0.55rem;
 }
