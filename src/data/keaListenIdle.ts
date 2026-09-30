@@ -1,4 +1,5 @@
-/** How long Kea stays live after the chat page is activated (not after last speech). */
+/** How long Kea stays live on the chat page after the latest activity
+ * (opening chat, speaking, or a reply turn). Default 10 minutes. */
 
 export const DEFAULT_LISTEN_IDLE_SECONDS = 600 // 10 minutes
 export const MIN_LISTEN_IDLE_SECONDS = 60 // 1 minute

@@ -28,6 +28,7 @@ import {
   type RussianScript,
 } from '../architecture/russianScript'
 import {
+  DEFAULT_ANSWER_SILENCE_SECONDS,
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
@@ -38,8 +39,8 @@ import {
   normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
 import {
-  DEFAULT_SESSION_TIMEOUT_MINUTES,
   SESSION_TIMEOUT_MINUTE_OPTIONS,
+  defaultSessionTimeoutMinutes,
   sessionTimeoutLabel,
 } from '../data/keaSessionTimeout'
 import {
@@ -532,8 +533,7 @@ export function SettingsPage() {
             </div>
           ) : (
             <p className="settings-note">
-              No voices are enabled yet. An admin can turn some on in Voice
-              Management.
+              No voices are enabled yet. An admin can turn some on in Manage Kea.
             </p>
           )}
         </section>
@@ -695,9 +695,8 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Starts when you open the chat page (for example after Settings), not
-            from the last time you spoke. Menus pause the mic until you close
-            them.
+            Starts when you open the chat page and refreshes whenever you talk
+            (or Kea answers). Menus pause the mic until you close them.
           </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
@@ -711,6 +710,7 @@ export function SettingsPage() {
               {[1, 2, 3, 4, 5, 6, 8, 10].map((seconds) => (
                 <option key={seconds} value={seconds}>
                   {seconds} seconds of silence
+                  {seconds === DEFAULT_ANSWER_SILENCE_SECONDS ? ' (default)' : ''}
                 </option>
               ))}
             </select>
@@ -992,14 +992,18 @@ export function SettingsPage() {
               {SESSION_TIMEOUT_MINUTE_OPTIONS.map((minutes) => (
                 <option key={minutes} value={minutes}>
                   {sessionTimeoutLabel(minutes)}
-                  {minutes === DEFAULT_SESSION_TIMEOUT_MINUTES ? ' (default)' : ''}
+                  {minutes === defaultSessionTimeoutMinutes(isAdmin)
+                    ? ' (default)'
+                    : ''}
                 </option>
               ))}
             </select>
           </label>
           <p className="settings-note">
             After this long with no taps, speech, or scrolling, Kea signs out.
-            A live conversation keeps you signed in. Default is 10 minutes.
+            Choose Never to stay signed in until you sign out yourself. A live
+            conversation keeps you signed in. Default is{' '}
+            {sessionTimeoutLabel(defaultSessionTimeoutMinutes(isAdmin))}.
           </p>
           <label className="settings-choice">
             <input

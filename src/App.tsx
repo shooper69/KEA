@@ -1,7 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { SessionProvider, useSession } from './context/SessionContext'
 import { AdminOverview, AdminPage } from './pages/AdminPage'
-import { AdminAboutPage } from './pages/AdminAboutPage'
 import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminLeaveFunnelPage } from './pages/AdminLeaveFunnelPage'
 import { AdminOffersPage } from './pages/AdminOffersPage'
@@ -9,8 +8,7 @@ import { AdminHomePage } from './pages/AdminHomePage'
 import { AdminOnboardingPage } from './pages/AdminOnboardingPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminStripePage } from './pages/AdminStripePage'
-import { AdminVoiceManagementPage } from './pages/AdminVoiceManagementPage'
-import { AdminVoiceTesterPage } from './pages/AdminVoiceTesterPage'
+import { AdminManageKeaPage } from './pages/AdminManageKeaPage'
 import { AdminWebsiteTrackerPage } from './pages/AdminWebsiteTrackerPage'
 import { AboutKeaPage } from './pages/AboutKeaPage'
 import { MethodPage } from './pages/MethodPage'
@@ -167,15 +165,16 @@ export default function App() {
             }
           >
             <Route index element={<AdminOverview />} />
-            <Route path="about" element={<AdminAboutPage />} />
+            <Route path="manage-kea" element={<AdminManageKeaPage />} />
+            <Route path="about" element={<Navigate to="/admin/manage-kea" replace />} />
             <Route path="home" element={<AdminHomePage />} />
             <Route path="offers" element={<AdminOffersPage />} />
             <Route path="onboarding" element={<AdminOnboardingPage />} />
             <Route path="leave-funnel" element={<AdminLeaveFunnelPage />} />
-            <Route path="voices" element={<AdminVoiceTesterPage />} />
+            <Route path="voices" element={<Navigate to="/admin/manage-kea" replace />} />
             <Route
               path="voice-management"
-              element={<AdminVoiceManagementPage />}
+              element={<Navigate to="/admin/manage-kea" replace />}
             />
             <Route path="tiers" element={<AdminPlansPage />} />
             <Route path="stripe" element={<AdminStripePage />} />

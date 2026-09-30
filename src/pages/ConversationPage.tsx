@@ -80,6 +80,7 @@ export function ConversationPage() {
     nativeLanguage,
     level,
     listenIdleSeconds,
+    answerAfterSilenceSeconds,
     firstName,
     email,
     isAdmin,
@@ -132,7 +133,8 @@ export function ConversationPage() {
     level,
     firstName,
     listenIdleSeconds,
-    answerAfterSilenceSeconds: getAnswerSilenceSeconds(),
+    answerAfterSilenceSeconds:
+      answerAfterSilenceSeconds || getAnswerSilenceSeconds(),
   })
 
   const live = voice.handsFree || voice.status !== 'idle'

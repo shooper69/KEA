@@ -7,9 +7,20 @@ import { withoutRejoinWelcomes } from './keaStartSpeech'
 import { looksLikeSystemText } from './whisperText'
 
 const TALK_KEY = 'kea-talk-transcript-v1'
-/** What is on screen for this visit. The archive above is kept for Kea's memory. */
+/**
+ * What is on screen for this browser session (sessionStorage).
+ * Kea's long-term memory stays in localStorage under TALK_KEY.
+ * Never restore the screen from localStorage — that brought old chats back on login.
+ */
 const SCREEN_KEY = 'kea-talk-screen-v1'
+/** Latch: next chat open (or a mounted hook) must show a blank screen + welcome only. */
+const FRESH_SCREEN_KEY = 'kea-fresh-chat-screen'
+/** Set after the first screen read this browser session. */
+const SESSION_PRIMED_KEY = 'kea-chat-session-primed'
 const MAX_SAVED = 400
+
+/** In-memory latch so a late markFresh still wins over state that already loaded. */
+let forceFreshScreen = false
 
 function isMessage(value: unknown): value is TranscriptMessage {
   if (!value || typeof value !== 'object') return false
@@ -44,10 +55,9 @@ export function withHomeGreeting(
   return [greeting, ...messages]
 }
 
-function readStoredMessages(key: string): TranscriptMessage[] {
+function parseStoredMessages(raw: string | null): TranscriptMessage[] {
+  if (!raw) return []
   try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
     return withoutRejoinWelcomes(
@@ -71,13 +81,86 @@ function readStoredMessages(key: string): TranscriptMessage[] {
   }
 }
 
-export function loadTalkTranscript(): TranscriptMessage[] {
-  return readStoredMessages(TALK_KEY)
+function readLocalMessages(key: string): TranscriptMessage[] {
+  try {
+    return parseStoredMessages(localStorage.getItem(key))
+  } catch {
+    return []
+  }
 }
 
-/** Lines shown in the chat. A missing screen starts blank, not from the archive. */
+function readSessionMessages(key: string): TranscriptMessage[] {
+  try {
+    return parseStoredMessages(sessionStorage.getItem(key))
+  } catch {
+    return []
+  }
+}
+
+function clearScreenStorage() {
+  try {
+    sessionStorage.removeItem(SCREEN_KEY)
+  } catch {
+    // ignore
+  }
+  try {
+    // Drop the old cross-session screen copy so it cannot come back.
+    localStorage.removeItem(SCREEN_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+export function loadTalkTranscript(): TranscriptMessage[] {
+  return readLocalMessages(TALK_KEY)
+}
+
+/** Lines shown in the chat. Visit-scoped; never seeded from the archive. */
 export function loadTalkScreen(): TranscriptMessage[] {
-  return readStoredMessages(SCREEN_KEY)
+  try {
+    // First chat read this browser session → blank screen + welcome only.
+    if (sessionStorage.getItem(SESSION_PRIMED_KEY) !== '1') {
+      sessionStorage.setItem(SESSION_PRIMED_KEY, '1')
+      forceFreshScreen = false
+      sessionStorage.removeItem(FRESH_SCREEN_KEY)
+      clearScreenStorage()
+      return []
+    }
+    if (
+      forceFreshScreen ||
+      sessionStorage.getItem(FRESH_SCREEN_KEY) === '1'
+    ) {
+      forceFreshScreen = false
+      sessionStorage.removeItem(FRESH_SCREEN_KEY)
+      clearScreenStorage()
+      return []
+    }
+  } catch {
+    // ignore
+  }
+  // Purge legacy localStorage screen without reading it.
+  try {
+    localStorage.removeItem(SCREEN_KEY)
+  } catch {
+    // ignore
+  }
+  return readSessionMessages(SCREEN_KEY)
+}
+
+/** True once when login (or reset) asked for a blank welcome screen. */
+export function takeFreshChatScreen(): boolean {
+  let flagged = forceFreshScreen
+  forceFreshScreen = false
+  try {
+    if (sessionStorage.getItem(FRESH_SCREEN_KEY) === '1') {
+      sessionStorage.removeItem(FRESH_SCREEN_KEY)
+      flagged = true
+    }
+  } catch {
+    // ignore
+  }
+  if (flagged) clearScreenStorage()
+  return flagged
 }
 
 function keepHomeGreeting(messages: TranscriptMessage[]): TranscriptMessage[] {
@@ -101,7 +184,7 @@ function compactMessages(messages: TranscriptMessage[]) {
   }))
 }
 
-function writeStoredMessages(key: string, messages: TranscriptMessage[]) {
+function writeLocalMessages(key: string, messages: TranscriptMessage[]) {
   try {
     const compact = compactMessages(messages)
     if (compact.length === 0) {
@@ -114,12 +197,31 @@ function writeStoredMessages(key: string, messages: TranscriptMessage[]) {
   }
 }
 
+function writeSessionMessages(key: string, messages: TranscriptMessage[]) {
+  try {
+    const compact = compactMessages(messages)
+    if (compact.length === 0) {
+      sessionStorage.removeItem(key)
+      return
+    }
+    sessionStorage.setItem(key, JSON.stringify(compact))
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
 export function saveTalkTranscript(messages: TranscriptMessage[]) {
-  writeStoredMessages(TALK_KEY, messages)
+  writeLocalMessages(TALK_KEY, messages)
 }
 
 export function saveTalkScreen(messages: TranscriptMessage[]) {
-  writeStoredMessages(SCREEN_KEY, messages)
+  writeSessionMessages(SCREEN_KEY, messages)
+  // Never re-seed the legacy localStorage screen key.
+  try {
+    localStorage.removeItem(SCREEN_KEY)
+  } catch {
+    // ignore
+  }
 }
 
 /** Add new on-screen lines to Kea's memory without putting old lines back on screen. */
@@ -132,6 +234,8 @@ export function appendTalkArchive(messages: TranscriptMessage[]) {
 }
 
 export const TALK_CLEARED_EVENT = 'kea-talk-cleared'
+/** Screen only — archive stays so Kea can still recall prior chats. */
+export const TALK_SCREEN_CLEARED_EVENT = 'kea-talk-screen-cleared'
 const HOLD_GREETING_KEY = 'kea-hold-greeting'
 
 /** Block a new welcome while a language change is being saved, then the page reloads. */
@@ -155,18 +259,32 @@ export function isTalkHeld() {
 export function clearTalkTranscript() {
   try {
     localStorage.removeItem(TALK_KEY)
-    localStorage.removeItem(SCREEN_KEY)
   } catch {
     // ignore
   }
-}
-
-/** Next time the chat opens, show a blank screen and the welcome only. */
-export function markFreshChatScreen() {
+  clearScreenStorage()
   try {
-    localStorage.removeItem(SCREEN_KEY)
+    sessionStorage.removeItem(FRESH_SCREEN_KEY)
   } catch {
     // ignore
+  }
+  forceFreshScreen = false
+}
+
+/**
+ * Next chat open (and any mounted conversation) must be blank except the welcome.
+ * Keeps the archive for memory. Safe to call before navigate or on login.
+ */
+export function markFreshChatScreen() {
+  forceFreshScreen = true
+  try {
+    sessionStorage.setItem(FRESH_SCREEN_KEY, '1')
+  } catch {
+    // ignore
+  }
+  clearScreenStorage()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(TALK_SCREEN_CLEARED_EVENT))
   }
 }
 

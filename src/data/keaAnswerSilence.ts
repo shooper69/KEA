@@ -1,10 +1,10 @@
 const STORAGE_KEY = 'kea-answer-silence-seconds'
 
-export const DEFAULT_ANSWER_SILENCE_SECONDS = 2
+export const DEFAULT_ANSWER_SILENCE_SECONDS = 3
 export const MIN_ANSWER_SILENCE_SECONDS = 1
 export const MAX_ANSWER_SILENCE_SECONDS = 10
 
-/** Was 5 seconds, then 3; 2 keeps turns snappy without cutting people off. */
+/** After the learner stops talking, wait this long, then start answering. */
 
 export function clampAnswerSilenceSeconds(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value)

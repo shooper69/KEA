@@ -39,6 +39,10 @@ const LEARN_LIST_QUIZ_STOP =
 const LEARN_LIST_QUIZ_ABANDON =
   /\b(let('|’)s talk|talk about|change (the )?subject|something else|different topic)\b/i
 
+/** Keep quiz mode when they pass / admit they do not know — reveal, then continue. */
+const LEARN_LIST_QUIZ_DONT_KNOW =
+  /\b(i\s+don('|’)t\s+know|don('|’)t\s+know|no\s+lo\s+s[eé]|no\s+s[eé]|no\s+idea|pass|skip(?:\s+it)?|not\s+sure)\b/i
+
 const LEARN_QUIZ_ACTIVE_KEY = 'kea-learn-quiz-active-v1'
 
 const ASK_TERM =
@@ -341,6 +345,8 @@ export function syncLearnListQuizSession(userText: string, listLength: number) {
     endLearnListQuiz()
     return false
   }
+  // "I don't know" is a valid quiz answer — stay in quiz and let Kea reveal, then continue.
+  if (LEARN_LIST_QUIZ_DONT_KNOW.test(userText)) return true
   const words = userText.trim().split(/\s+/).filter(Boolean)
   if (LEARN_LIST_QUIZ_ABANDON.test(userText) || words.length >= 18) {
     endLearnListQuiz()
@@ -427,6 +433,25 @@ export function spaceFinalQuestion(text: string): string {
   return `${body}\n${last}`
 }
 
+/**
+ * Safety net: if quiz mode is on and Kea asks a word then gives that word's
+ * answer in the same reply, drop everything after the last question.
+ * Corrections for a previous word (text before that question) stay intact.
+ */
+export function sanitizeLearnListQuizReply(
+  reply: string,
+  list: Array<{ term: string; translation: string }> = getLearnList(),
+): string {
+  if (!isLearnListQuizActive() || !reply.trim() || list.length === 0) return reply
+  const questionMatches = [...reply.matchAll(/[¿¡]?[^.!?\n]*[?？]/g)]
+  if (questionMatches.length === 0) return reply
+  const lastQ = questionMatches[questionMatches.length - 1]
+  const lastQEnd = (lastQ.index ?? 0) + lastQ[0].length
+  const afterQ = reply.slice(lastQEnd)
+  if (!afterQ.trim()) return reply
+  return reply.slice(0, lastQEnd).trim()
+}
+
 export function alignCaptionParagraphs(spoken: string, caption: string): string[] {
   const spokenParts = splitTalkParagraphs(spoken)
   const raw = splitTalkParagraphs(caption)
@@ -449,8 +474,10 @@ export function splitKeaReply(raw: string): {
 } {
   const match = raw.match(MEMORY_BLOCK)
   const empty: LearnMemorySignals = { add: [], used: [] }
-  if (!match) return { reply: spaceFinalQuestion(raw.trim()), signals: empty }
-  const reply = spaceFinalQuestion(raw.replace(MEMORY_BLOCK, '').trim())
+  const finish = (text: string) =>
+    spaceFinalQuestion(sanitizeLearnListQuizReply(text.trim()))
+  if (!match) return { reply: finish(raw), signals: empty }
+  const reply = finish(raw.replace(MEMORY_BLOCK, ''))
   try {
     const parsed = JSON.parse(match[1] || '{}') as {
       add?: Array<{ term?: string; translation?: string }>
@@ -939,19 +966,29 @@ export function memoryPromptBlock(
   })
   const quiz = syncLearnListQuizSession(userText, list.length)
   const quizBlock = quiz
-    ? `LEARN LIST QUIZ (active session — continue until they stop or the list is done):
-- You are mid-quiz. Do NOT greet, change subject, or drop back into casual chat.
-- Ask exactly ONE word this turn (meaning of the target form, or how to say the native form). Use real words from the list below.
-- After their answer: briefly right/wrong, then immediately ask the next word in the same reply.
-- If they say stop / enough / no more, acknowledge briefly and end the quiz (normal chat).
-- If the list below is empty or you have finished every word, say the quiz is done and end.
-- Stay friendly. Keep each reply short (about two sentences).
-- Current words still to test:
+    ? `LEARN LIST QUIZ — HIGHEST PRIORITY (ignore casual chat / open topics until the quiz ends):
+You are running a vocabulary test. Stay in quiz mode until they say stop, or every word below has been asked.
+
+Rules for EVERY quiz reply:
+1. Ask at most ONE new question per reply.
+2. NEVER reveal the answer to a question in the same reply that asks it. No translations, no "it is…", no hints that give the word away, until they have tried.
+3. If this turn is only starting the quiz or asking the next word: speak ONLY the question (plus a tiny warm lead-in if needed). Then stop and wait.
+4. If they just answered:
+   - Correct: brief praise, then ask the NEXT question (question only — do not give that next answer).
+   - Wrong: briefly give the correct word for the one they missed, then ask the NEXT question (question only).
+   - They say they do not know / no sé / no idea / pass: tell them the correct word briefly, then ask the NEXT question (question only).
+5. Do not end after one question. Continue through the list below.
+6. End only if they say stop / enough / no more, or the list is finished.
+7. Keep replies short. Friendly, not teacherly.
+
+Words to test (native → target):
 ${learn || '(empty — say the list is empty, end the quiz, invite a normal chat)'}
 
 `
     : ''
-  return `${openBlock}${recallBlock}${quizBlock}LEARN LIST (single words / short phrases only; never sentences; never mix with topics).
+  // During quiz, do not inject open-topic / recall — they pull Kea off the test.
+  const contextPrefix = quiz ? '' : `${openBlock}${recallBlock}`
+  return `${contextPrefix}${quizBlock}LEARN LIST (single words / short phrases only; never sentences; never mix with topics).
 Native language first, target language second. A word leaves after ${need} correct natural uses in the target language:
 ${learn || '(empty)'}
 
@@ -960,7 +997,13 @@ After your spoken reply, write this hidden block on its own (never speak it, nev
 {"add":[{"term":"native-language word","translation":"target-language word"}],"used":["target-language word already on the list"]}
 >>>
 Use add when they drop a native-language word into a target-language sentence, or ask how to say a word. Only single words or very short phrases. Use used every time they say a Learn List target word correctly in a real sentence (put the target-language form, or the native form if you are unsure). This is how words leave the list after ${need} good uses — do not skip used when they got it right. Use empty arrays if nothing happened.
-
+${
+  quiz
+    ? `
+During LEARN LIST QUIZ: put the target-language form in "used" only when they answered that quiz item correctly. Do not add new words during the quiz unless they clearly ask to save one.
+`
+    : ''
+}
 CURRENT CHAT TOPICS (conversation continuity only; never mix with Learn List):
-${topics || '(empty)'}`
+${quiz ? '(paused — quiz in progress)' : topics || '(empty)'}`
 }

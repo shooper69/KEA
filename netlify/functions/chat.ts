@@ -35,6 +35,7 @@ export async function handler(event: ChatEvent) {
     text?: string
     masterDefinition?: string
     aboutKea?: string
+    bannedTopicsBlock?: string
     memoryBlock?: string
     learnerProfile?: string
     learnerName?: string
@@ -90,6 +91,7 @@ export async function handler(event: ChatEvent) {
                     payload.masterDefinition?.trim() ||
                     DEFAULT_KEA_MASTER_DEFINITION,
                   aboutKea: payload.aboutKea,
+                  bannedTopicsBlock: payload.bannedTopicsBlock,
                   memoryBlock: payload.memoryBlock,
                   learnerProfile: payload.learnerProfile,
                   learnerName: payload.learnerName,

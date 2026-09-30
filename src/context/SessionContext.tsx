@@ -23,8 +23,12 @@ import {
   normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
 import {
+  DEFAULT_ADMIN_SESSION_TIMEOUT_MINUTES,
   DEFAULT_SESSION_TIMEOUT_MINUTES,
+  defaultSessionTimeoutMinutes,
+  isSessionTimeoutNever,
   normalizeSessionTimeoutMinutes,
+  SESSION_TIMEOUT_NEVER,
 } from '../data/keaSessionTimeout'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
@@ -32,7 +36,6 @@ import {
   upsertCloudProfile,
   markPasswordRecovery,
 } from '../services/keaProfile'
-import { markFreshChatScreen } from '../architecture/keaTalkMemory'
 import {
   getLearnList,
   mergeCloudLearnItems,
@@ -137,7 +140,10 @@ function readProfile(): StoredProfile {
           ? preferredVoice
           : DEFAULT_VOICE_CHARACTER,
       listenIdleSeconds: normalizeListenIdleSeconds(listenIdleSeconds),
-      sessionTimeoutMinutes: normalizeSessionTimeoutMinutes(sessionTimeoutMinutes),
+      sessionTimeoutMinutes: normalizeSessionTimeoutMinutes(
+        sessionTimeoutMinutes,
+        defaultSessionTimeoutMinutes(isAdminEmail(String(parsed.email ?? ''))),
+      ),
       answerAfterSilenceSeconds:
         Number.isFinite(answerAfterSilenceSeconds) &&
         answerAfterSilenceSeconds >= 1
@@ -233,6 +239,27 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!userId || !isAdminEmail(profile.email)) return
     openAdminSession()
     setAdminUnlocked(true)
+  }, [profile.email, userId])
+
+  useEffect(() => {
+    if (!userId || !isAdminEmail(profile.email)) return
+    // One-time: admin idle logout default is Never (was 30 minutes).
+    try {
+      const flag = 'kea-admin-logout-never-default-v1'
+      if (localStorage.getItem(flag) === '1') return
+      localStorage.setItem(flag, '1')
+      setProfileState((current) => {
+        if (current.sessionTimeoutMinutes === SESSION_TIMEOUT_NEVER) return current
+        const next = {
+          ...current,
+          sessionTimeoutMinutes: DEFAULT_ADMIN_SESSION_TIMEOUT_MINUTES,
+        }
+        persistProfile(next)
+        return next
+      })
+    } catch {
+      // ignore
+    }
   }, [profile.email, userId])
 
   useEffect(() => {
@@ -389,11 +416,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         markPasswordRecovery()
         window.dispatchEvent(new Event('kea-password-recovery'))
       }
-      // Do not mark the audio check here — SIGNED_IN also fires on session
-      // restore / refresh. AuthPanel marks it only on explicit login.
-      if (event === 'SIGNED_IN' && session?.user) {
-        markFreshChatScreen()
-      }
+      // Do not clear chat or audio check here — SIGNED_IN also fires on session
+      // restore / token refresh. AuthPanel marks a fresh screen on explicit login
+      // (a new browser visit already starts blank via sessionStorage).
       if (!session?.user) {
         userIdRef.current = null
         setUserId(null)
@@ -416,9 +441,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (patch.listenIdleSeconds !== undefined) {
         next.listenIdleSeconds = normalizeListenIdleSeconds(patch.listenIdleSeconds)
       }
+      if (patch.answerAfterSilenceSeconds !== undefined) {
+        const n = Number(patch.answerAfterSilenceSeconds)
+        next.answerAfterSilenceSeconds =
+          Number.isFinite(n) && n >= 1 ? Math.min(15, Math.round(n)) : 3
+      }
       if (patch.sessionTimeoutMinutes !== undefined) {
         next.sessionTimeoutMinutes = normalizeSessionTimeoutMinutes(
           patch.sessionTimeoutMinutes,
+          defaultSessionTimeoutMinutes(isAdminEmail(next.email)),
         )
       }
       persistProfile(next)
@@ -508,7 +539,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!userId) return
-    const idleMs = normalizeSessionTimeoutMinutes(profile.sessionTimeoutMinutes) * 60 * 1000
+    const minutes = normalizeSessionTimeoutMinutes(profile.sessionTimeoutMinutes)
+    if (isSessionTimeoutNever(minutes)) return
+
+    const idleMs = minutes * 60 * 1000
     let timer = window.setTimeout(() => {
       void signOut()
     }, idleMs)

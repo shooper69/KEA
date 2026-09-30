@@ -1,12 +1,13 @@
 import { memoryPromptBlock } from '../architecture/companionMemory'
 import { getAboutKea } from '../data/keaAbout'
+import { bannedTopicsPromptBlock } from '../data/keaBannedTopics'
 import { getMasterDefinition } from '../data/keaMasterDefinition'
 import { getAverageReplyWords } from '../data/keaSpeech'
 import type { LearnerLevel } from '../types'
 import type { TranscriptMessage } from '../types'
 
-const MAX_HISTORY_TURNS = 24
-const MAX_TURN_CHARS = 560
+const MAX_HISTORY_TURNS = 16
+const MAX_TURN_CHARS = 480
 
 function clipTurn(text: string) {
   const trimmed = text.trim()
@@ -60,10 +61,11 @@ export async function askKea(options: {
       level: options.level,
       masterDefinition: getMasterDefinition(),
       aboutKea: getAboutKea(),
-  memoryBlock: memoryPromptBlock(userText, options.history),
-  learnerProfile: options.learnerProfile,
-  learnerName: options.learnerName,
-  averageReplyWords: getAverageReplyWords(),
+      bannedTopicsBlock: bannedTopicsPromptBlock(),
+      memoryBlock: memoryPromptBlock(userText, options.history),
+      learnerProfile: options.learnerProfile,
+      learnerName: options.learnerName,
+      averageReplyWords: getAverageReplyWords(),
       messages,
     }),
   })

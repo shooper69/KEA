@@ -9,10 +9,12 @@ import {
 } from '../architecture/companionMemory'
 import {
   TALK_CLEARED_EVENT,
+  TALK_SCREEN_CLEARED_EVENT,
   clearTalkTranscript,
   appendTalkArchive,
   loadTalkScreen,
   saveTalkScreen,
+  takeFreshChatScreen,
 } from '../architecture/keaTalkMemory'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import {
@@ -30,7 +32,6 @@ import {
 import {
   getLanguage,
   HOME_GREETING_ID,
-  isHomeGreetingMessage,
 } from '../config/languages'
 import {
   listVoices,
@@ -67,7 +68,7 @@ const RESTART_LISTEN_MS = 80
 const MIN_SPEECH_MS = 420
 const MAX_RECORD_MS = 22000
 const AMBIENT_CALIBRATE_MS = 450
-const DEFAULT_ANSWER_SILENCE_MS = 2000
+const DEFAULT_ANSWER_SILENCE_MS = 3000
 /** If TTS never fires onend (common on mobile), unlock the turn anyway. */
 const SPEAK_SAFETY_MS = 28_000
 
@@ -145,9 +146,10 @@ export function useVoiceConversation({
   const statusRef = useRef<VoicePresenceState>('idle')
   const sendToKeaRef = useRef<(text: string) => Promise<void>>(async () => {})
   const listenIdleTimerRef = useRef<number | null>(null)
-  /** Hands-free live window ends at this time — set when chat page / talk activates. */
+  /** Hands-free live window ends at this time — refreshed on chat activity. */
   const pageLiveUntilRef = useRef(0)
   const lastActivityAtRef = useRef(0)
+  const lastIdleArmAtRef = useRef(0)
   const fatalListenRef = useRef(false)
   const sendingRef = useRef(false)
   const restartTimerRef = useRef<number | null>(null)
@@ -444,21 +446,39 @@ export function useVoiceConversation({
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   /**
-   * Schedule idle stop from the chat-page live window.
-   * Does not extend the window — speaking must not reset the 10 minutes.
+   * Keep Kea live for listenIdleSeconds from the latest chat activity.
+   * Opening chat / start() arms it; each real turn refreshes it so an active
+   * conversation does not die mid-session.
    */
-  const armListenIdle = useCallback(() => {
+  const armListenIdle = useCallback((force = false) => {
+    const now = Date.now()
+    // Speech VAD arms this every frame — throttle refreshes.
+    if (!force && now - lastIdleArmAtRef.current < 1000) {
+      pageLiveUntilRef.current = Math.max(
+        pageLiveUntilRef.current,
+        now +
+          Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
+            1000,
+      )
+      return
+    }
+    lastIdleArmAtRef.current = now
     clearListenIdleTimer()
-    if (!pageLiveUntilRef.current) return
-    const remaining = pageLiveUntilRef.current - Date.now()
+    const idleMs =
+      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
+      1000
+    pageLiveUntilRef.current = now + idleMs
+    lastActivityAtRef.current = now
+    window.dispatchEvent(new Event('kea-user-activity'))
+
     const finishIfDue = () => {
       listenIdleTimerRef.current = null
-      if (busyRef.current) {
+      if (busyRef.current || isKeaUiHeld() || isKeaReplayActive()) {
         listenIdleTimerRef.current = window.setTimeout(finishIfDue, 500)
         return
       }
       if (statusRef.current !== 'listening' && !handsFreeRef.current) return
-      // Still mid-utterance — wait for silence, then stop (window already expired).
+      // Still mid-utterance — wait for silence, then stop.
       if (
         statusRef.current === 'listening' &&
         speechMsRef.current > MIN_SPEECH_MS &&
@@ -467,25 +487,20 @@ export function useVoiceConversation({
         listenIdleTimerRef.current = window.setTimeout(finishIfDue, 400)
         return
       }
+      if (Date.now() < pageLiveUntilRef.current) {
+        const left = pageLiveUntilRef.current - Date.now()
+        listenIdleTimerRef.current = window.setTimeout(finishIfDue, Math.max(250, left))
+        return
+      }
       pauseListening()
     }
-    if (remaining <= 0) {
-      finishIfDue()
-      return
-    }
-    listenIdleTimerRef.current = window.setTimeout(finishIfDue, remaining)
-  }, [clearListenIdleTimer, pauseListening])
+    listenIdleTimerRef.current = window.setTimeout(finishIfDue, idleMs)
+  }, [clearListenIdleTimer, listenIdleSeconds, pauseListening])
 
-  /** Start / refresh the live window from chat-page activation (not from speech). */
+  /** Fresh live window when the chat page / talk session activates. */
   const activateLiveWindow = useCallback(() => {
-    const idleMs =
-      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
-      1000
-    pageLiveUntilRef.current = Date.now() + idleMs
-    lastActivityAtRef.current = Date.now()
-    window.dispatchEvent(new Event('kea-user-activity'))
-    armListenIdle()
-  }, [armListenIdle, listenIdleSeconds])
+    armListenIdle(true)
+  }, [armListenIdle])
 
   const captionSpanish = useCallback(
     (id: string, text: string) => {
@@ -645,8 +660,7 @@ export function useVoiceConversation({
         if (vad.isSpeech(rms)) {
           speechMsRef.current += delta
           silenceMsRef.current = 0
-          lastActivityAtRef.current = Date.now()
-          window.dispatchEvent(new Event('kea-user-activity'))
+          armListenIdle()
         } else if (speechMsRef.current > MIN_SPEECH_MS) {
           silenceMsRef.current += delta
           if (silenceMsRef.current >= answerSilenceMsRef.current) {
@@ -670,7 +684,7 @@ export function useVoiceConversation({
       setStatus('listening')
       setError(null)
       lastActivityAtRef.current = Date.now()
-      armListenIdle()
+      armListenIdle(true)
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught)
       logSpeech('error', message)
@@ -775,7 +789,7 @@ export function useVoiceConversation({
       const written = Boolean(options?.written)
       sendingRef.current = true
       busyRef.current = true
-      clearListenIdleTimer()
+      armListenIdle(true)
       setStatus('thinking')
       const userHighlights = extractNativeIntrusions(userText)
       const userMessage: TranscriptMessage = {
@@ -884,8 +898,8 @@ export function useVoiceConversation({
       }
     },
     [
+      armListenIdle,
       captionSpanish,
-      clearListenIdleTimer,
       level,
       firstName,
       nativeLanguage,
@@ -927,6 +941,7 @@ export function useVoiceConversation({
         const text = greeting!.trim()
         const english = englishCaption?.trim() || undefined
         const isWelcome = kind === 'welcome'
+        const freshScreen = takeFreshChatScreen()
         const keaMessage: TranscriptMessage = {
           id: isWelcome ? HOME_GREETING_ID : crypto.randomUUID(),
           speaker: 'kea',
@@ -941,10 +956,15 @@ export function useVoiceConversation({
         }
         setMessages((current) => {
           const base =
-            kind === 'welcome-back' ? withoutRejoinWelcomes(current) : current
-          const next = isWelcome
-            ? [keaMessage, ...base.filter((item) => !isHomeGreetingMessage(item))]
-            : [...base, keaMessage]
+            freshScreen || isWelcome
+              ? []
+              : kind === 'welcome-back'
+                ? withoutRejoinWelcomes(current)
+                : current
+          const next =
+            freshScreen || isWelcome
+              ? [keaMessage]
+              : [...base, keaMessage]
           historyRef.current = next
           return next
         })
@@ -973,6 +993,7 @@ export function useVoiceConversation({
       const text = greeting!.trim()
       const english = englishCaption?.trim() || undefined
       const isWelcome = kind === 'welcome'
+      const freshScreen = takeFreshChatScreen()
       const keaMessage: TranscriptMessage = {
         id: isWelcome ? HOME_GREETING_ID : crypto.randomUUID(),
         speaker: 'kea',
@@ -987,10 +1008,15 @@ export function useVoiceConversation({
       }
       setMessages((current) => {
         const base =
-          kind === 'welcome-back' ? withoutRejoinWelcomes(current) : current
-        const next = isWelcome
-          ? [keaMessage, ...base.filter((item) => !isHomeGreetingMessage(item))]
-          : [...base, keaMessage]
+          freshScreen || isWelcome
+            ? []
+            : kind === 'welcome-back'
+              ? withoutRejoinWelcomes(current)
+              : current
+        const next =
+          freshScreen || isWelcome
+            ? [keaMessage]
+            : [...base, keaMessage]
         historyRef.current = next
         return next
       })
@@ -1088,8 +1114,16 @@ export function useVoiceConversation({
       historyRef.current = []
       setMessages([])
     }
+    function onScreenCleared() {
+      historyRef.current = []
+      setMessages([])
+    }
     window.addEventListener(TALK_CLEARED_EVENT, onTalkCleared)
-    return () => window.removeEventListener(TALK_CLEARED_EVENT, onTalkCleared)
+    window.addEventListener(TALK_SCREEN_CLEARED_EVENT, onScreenCleared)
+    return () => {
+      window.removeEventListener(TALK_CLEARED_EVENT, onTalkCleared)
+      window.removeEventListener(TALK_SCREEN_CLEARED_EVENT, onScreenCleared)
+    }
   }, [stop])
 
   const toggle = useCallback(() => {

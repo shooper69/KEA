@@ -8,12 +8,6 @@ import {
   type VoiceDiagnostics,
 } from '../architecture/voiceDiagnostics'
 import { useSession } from '../context/SessionContext'
-import {
-  DEFAULT_KEA_MASTER_DEFINITION,
-  getMasterDefinition,
-  resetMasterDefinition,
-  saveMasterDefinition,
-} from '../data/keaMasterDefinition'
 import { PLACEHOLDER_USERS } from '../data/placeholders'
 
 export function AdminPage() {
@@ -37,10 +31,10 @@ export function AdminPage() {
           </Link>
         </div>
         <nav className="admin-tabs" aria-label="Admin sections">
-          <NavLink to="/admin/about">About Kea</NavLink>
           <NavLink to="/admin/costs">Cost analysis</NavLink>
           <NavLink to="/admin/home">Home page</NavLink>
           <NavLink to="/admin/leave-funnel">Leave funnel</NavLink>
+          <NavLink to="/admin/manage-kea">Manage Kea</NavLink>
           <NavLink to="/admin/offers">Offers</NavLink>
           <NavLink to="/admin/onboarding">Onboarding</NavLink>
           <NavLink to="/admin" end>
@@ -48,8 +42,6 @@ export function AdminPage() {
           </NavLink>
           <NavLink to="/admin/stripe">Stripe</NavLink>
           <NavLink to="/admin/tiers">Subscription</NavLink>
-          <NavLink to="/admin/voice-management">Voice Management</NavLink>
-          <NavLink to="/admin/voices">Voice Tester</NavLink>
           <NavLink to="/admin/website-tracker">Website Tracker</NavLink>
         </nav>
         <Outlet />
@@ -59,8 +51,6 @@ export function AdminPage() {
 }
 
 export function AdminOverview() {
-  const [definition, setDefinition] = useState(getMasterDefinition)
-  const [saved, setSaved] = useState(false)
   const [voice, setVoice] = useState<VoiceDiagnostics>(getVoiceDiagnostics)
 
   useEffect(() => subscribeVoiceDiagnostics(setVoice), [])
@@ -71,7 +61,8 @@ export function AdminOverview() {
         <h2>Models and methods</h2>
         <p className="settings-note">
           What Kea actually uses today. Live recognition on this device is
-          listed under Voice diagnostics.
+          listed under Voice diagnostics. Character, style, and voices are
+          edited in Manage Kea.
         </p>
         <dl className="voice-diag">
           <div>
@@ -85,8 +76,8 @@ export function AdminOverview() {
           <div>
             <dt>Text to speech</dt>
             <dd>
-              OpenAI TTS (/api/tts) and browser speechSynthesis, chosen in Voice
-              Management
+              OpenAI TTS (/api/tts) and browser speechSynthesis, chosen in Manage
+              Kea
             </dd>
           </div>
           <div>
@@ -153,45 +144,6 @@ export function AdminOverview() {
           <p>{PLACEHOLDER_USERS.length}</p>
         </article>
       </div>
-      <section className="settings-card">
-        <h2>Kea Master Definition</h2>
-        <p className="settings-note">
-          Source of truth for how Kea talks. Saved edits are used in live
-          conversation.
-        </p>
-        <textarea
-          className="master-definition"
-          value={definition}
-          onChange={(event) => {
-            setDefinition(event.target.value)
-            setSaved(false)
-          }}
-          spellCheck={false}
-        />
-        <div className="welcome-screen__actions">
-          <button
-            type="button"
-            className="kea-button"
-            onClick={() => {
-              saveMasterDefinition(definition)
-              setSaved(true)
-            }}
-          >
-            {saved ? 'Saved' : 'Save definition'}
-          </button>
-          <button
-            type="button"
-            className="kea-button kea-button--ghost"
-            onClick={() => {
-              resetMasterDefinition()
-              setDefinition(DEFAULT_KEA_MASTER_DEFINITION)
-              setSaved(true)
-            }}
-          >
-            Restore original
-          </button>
-        </div>
-      </section>
     </>
   )
 }
