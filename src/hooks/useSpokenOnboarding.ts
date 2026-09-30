@@ -66,7 +66,6 @@ export function useSpokenOnboarding({
   }, [userKey])
 
   const advance = useCallback(() => {
-    if (advanceNowRef.current) return
     advanceNowRef.current = true
     try {
       stopKeaSpeech()

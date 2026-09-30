@@ -84,6 +84,15 @@ const pages: Array<[string, KeaPageSeo]> = [
     },
   ],
   [
+    '/usage',
+    {
+      title: 'Usage · Kea',
+      description: 'See how much talk time you have used this month.',
+      path: '/usage',
+      index: false,
+    },
+  ],
+  [
     '/settings',
     {
       title: 'Settings · Kea',

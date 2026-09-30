@@ -6,6 +6,11 @@ import {
 } from './keaChatRecall'
 import { loadTalkTranscript } from './keaTalkMemory'
 import { looksLikeSystemText } from './whisperText'
+import {
+  localDayKey,
+  recordWordsAdded,
+  recordWordsRemoved,
+} from './keaTalkPerformance'
 import type {
   ChatTopic,
   LanguageCode,
@@ -25,6 +30,16 @@ const LEARN_REQUEST =
 
 const LEARN_LIST_QUIZ =
   /\b(test|quiz|practi[sc]e|drill|examine)\s+me\b|\b(test|quiz|practi[sc]e)\s+(my\s+)?(words|vocabulary|vocab|list)\b|\blearn\s*list\b.*\b(test|quiz|practi[sc]e|drill|review)\b|\b(test|quiz|practi[sc]e|drill|review)\b.*\blearn\s*list\b|\bgo through (my )?(words|list)\b|\bhelp me (review|practi[sc]e)\b|\bexam[ií]name\b|\bponme a prueba\b|\brepasemos\b/i
+
+/** End an active Learn List quiz without killing the whole talk session. */
+const LEARN_LIST_QUIZ_STOP =
+  /\b(stop|end|cancel|quit)\s+(the\s+)?(test|quiz|practi[sc]e|drill|exam)\b|\b(stop|enough|basta)\b.*\b(test|quiz|practi[sc]e|testing|quizzing)\b|\b(that('|’)s|thats)\s+enough\b|\bno\s+more\s+(words|questions|testing|quiz)\b|\blet('|’)s\s+stop\b|\bfinish(ed)?\s+(the\s+)?(test|quiz|list)\b/i
+
+/** Leave quiz mode when the learner clearly pivots back to normal chat. */
+const LEARN_LIST_QUIZ_ABANDON =
+  /\b(let('|’)s talk|talk about|change (the )?subject|something else|different topic)\b/i
+
+const LEARN_QUIZ_ACTIVE_KEY = 'kea-learn-quiz-active-v1'
 
 const ASK_TERM =
   /(?:how (?:do (?:you|i)|to) say|what does|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать)\s+["«“']?([^?"»”']+)/i
@@ -275,6 +290,65 @@ export function looksLikeLearnListQuizRequest(text: string) {
   return LEARN_LIST_QUIZ.test(text)
 }
 
+export function looksLikeLearnListQuizStop(text: string) {
+  if (looksLikeSystemText(text)) return false
+  return LEARN_LIST_QUIZ_STOP.test(text)
+}
+
+export function isLearnListQuizActive() {
+  try {
+    return sessionStorage.getItem(LEARN_QUIZ_ACTIVE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function startLearnListQuiz() {
+  try {
+    sessionStorage.setItem(LEARN_QUIZ_ACTIVE_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+export function endLearnListQuiz() {
+  try {
+    sessionStorage.removeItem(LEARN_QUIZ_ACTIVE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Keep quiz mode on for every answer turn after “test me”, until stop / empty list.
+ * Without this, only the first request turn got the quiz prompt and Kea dropped out.
+ */
+export function syncLearnListQuizSession(userText: string, listLength: number) {
+  if (looksLikeLearnListQuizStop(userText)) {
+    endLearnListQuiz()
+    return false
+  }
+  if (looksLikeLearnListQuizRequest(userText)) {
+    if (listLength <= 0) {
+      endLearnListQuiz()
+      return false
+    }
+    startLearnListQuiz()
+    return true
+  }
+  if (!isLearnListQuizActive()) return false
+  if (listLength <= 0) {
+    endLearnListQuiz()
+    return false
+  }
+  const words = userText.trim().split(/\s+/).filter(Boolean)
+  if (LEARN_LIST_QUIZ_ABANDON.test(userText) || words.length >= 18) {
+    endLearnListQuiz()
+    return false
+  }
+  return true
+}
+
 function askedTerm(userText: string) {
   const hit = userText.match(ASK_TERM)
   if (hit?.[1]) {
@@ -464,9 +538,11 @@ function graduateReady(items: LearnListItem[], mastered: MasteredLearnItem[]) {
   const keep: LearnListItem[] = []
   let changed = false
   const now = new Date().toISOString()
+  let removed = 0
   for (const item of items) {
     if (item.practiceCount >= need) {
       changed = true
+      removed += 1
       mastered.push({
         id: item.id,
         term: item.term,
@@ -477,6 +553,9 @@ function graduateReady(items: LearnListItem[], mastered: MasteredLearnItem[]) {
     } else {
       keep.push(item)
     }
+  }
+  if (removed > 0 && !applyingCloudLearn) {
+    recordWordsRemoved(removed, localDayKey(new Date(now)))
   }
   return { items: keep, mastered, changed }
 }
@@ -589,6 +668,9 @@ function upsertLearnItem(
     status: 'learning',
   }
   items.unshift(created)
+  if (!applyingCloudLearn) {
+    recordWordsAdded(1, localDayKey(new Date(now)))
+  }
   return created
 }
 
@@ -680,7 +762,8 @@ export function applyLearnTurn(options: {
   )
   if (
     !looksLikeLearnRequest(options.userText) &&
-    !looksLikeLearnListQuizRequest(options.userText)
+    !looksLikeLearnListQuizRequest(options.userText) &&
+    !isLearnListQuizActive()
   ) {
     for (const item of items) {
       if (item.languageCode !== options.languageCode) continue
@@ -854,17 +937,17 @@ export function memoryPromptBlock(
     openTopic: open,
     recentTopics: topicSource,
   })
-  const quiz = looksLikeLearnListQuizRequest(userText)
+  const quiz = syncLearnListQuizSession(userText, list.length)
   const quizBlock = quiz
-    ? `LEARN LIST QUIZ (user asked to be tested — do this now, and keep going):
-- Work through every word on the Learn List, one at a time, until they say stop.
-- Vary the question. Sometimes ask the meaning of the target word ("What is the meaning of a veces?"). Sometimes ask how to say the native word ("How does one say rain?"). Use the real words from the list.
-- Wait for their answer. If it is right, say so briefly and include that target word in the hidden memory "used" array, then ask the next word.
-- If it is wrong, give the right word in one short line and ask the next word.
-- Do not stop after one word. Only stop when they say stop, or the list is finished.
-- Stay friendly. Keep each reply short.
-- Current words to test:
-${learn || '(empty — say the list is empty and invite a normal chat)'}
+    ? `LEARN LIST QUIZ (active session — continue until they stop or the list is done):
+- You are mid-quiz. Do NOT greet, change subject, or drop back into casual chat.
+- Ask exactly ONE word this turn (meaning of the target form, or how to say the native form). Use real words from the list below.
+- After their answer: briefly right/wrong, then immediately ask the next word in the same reply.
+- If they say stop / enough / no more, acknowledge briefly and end the quiz (normal chat).
+- If the list below is empty or you have finished every word, say the quiz is done and end.
+- Stay friendly. Keep each reply short (about two sentences).
+- Current words still to test:
+${learn || '(empty — say the list is empty, end the quiz, invite a normal chat)'}
 
 `
     : ''

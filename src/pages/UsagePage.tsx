@@ -1,27 +1,30 @@
 import { Link } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { CompanionNav } from '../components/companion/CompanionNav'
-import { PerformancePanel } from '../components/companion/PerformancePanel'
+import { UsagePanel } from '../components/companion/UsagePanel'
+import { useSession } from '../context/SessionContext'
 
-export function PerformancePage() {
+export function UsagePage() {
+  const { isAdmin } = useSession()
+
   return (
-    <main className="companion-screen settings-screen performance-page">
+    <main className="companion-screen settings-screen">
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
         <CompanionNav />
       </header>
       <div className="settings-screen__content">
         <div className="settings-title-row">
-          <h1>Performance</h1>
+          <h1>Usage</h1>
           <Link
             to="/conversation"
             className="settings-close"
-            aria-label="Close performance"
+            aria-label="Close usage"
           >
             ×
           </Link>
         </div>
-        <PerformancePanel />
+        <UsagePanel isAdmin={isAdmin} />
       </div>
     </main>
   )

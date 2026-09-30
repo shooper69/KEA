@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   activatePlan,
   getTalkAccess,
@@ -35,12 +36,10 @@ export function SubscriptionPanel({
   email,
   userId,
   isAdmin,
-  onViewUsage,
 }: {
   email: string
   userId?: string | null
   isAdmin: boolean
-  onViewUsage: () => void
 }) {
   const [catalog, setCatalog] = useState<KeaPlanCatalog>(() => loadPlanCatalog())
   const [access, setAccess] = useState(() => getTalkAccess(isAdmin))
@@ -180,9 +179,9 @@ export function SubscriptionPanel({
       <p className="settings-note settings-note--lead">{catalog.trialBlurb}</p>
       <p className="settings-note settings-note--status">
         {statusCopy}{' '}
-        <button type="button" className="settings-usage-link" onClick={onViewUsage}>
+        <Link to="/usage" className="settings-usage-link">
           Click here to view Usage
-        </button>
+        </Link>
         {showPortal ? (
           <>
             {' · '}

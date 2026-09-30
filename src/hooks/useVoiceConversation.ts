@@ -5,7 +5,6 @@ import {
   getLearnList,
   rememberLearnGloss,
   splitKeaReply,
-  splitTalkParagraphs,
   touchChatTopic,
 } from '../architecture/companionMemory'
 import {
@@ -40,7 +39,8 @@ import {
 } from '../lib/speech'
 import { askKea, glossLearnWord, keaNameCue, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
-import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END } from '../services/keaSpeak'
+import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END, prefetchManagedVoiceAudio } from '../services/keaSpeak'
+import { getSpeakVoice } from '../architecture/voiceCatalog'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
 import { learnerProfilePrompt } from '../data/keaLearnerProfile'
 import {
@@ -66,8 +66,10 @@ const CHARACTER_KEY = 'kea-voice-character'
 const RESTART_LISTEN_MS = 80
 const MIN_SPEECH_MS = 420
 const MAX_RECORD_MS = 22000
-const AMBIENT_CALIBRATE_MS = 750
-const DEFAULT_ANSWER_SILENCE_MS = 3000
+const AMBIENT_CALIBRATE_MS = 450
+const DEFAULT_ANSWER_SILENCE_MS = 2000
+/** If TTS never fires onend (common on mobile), unlock the turn anyway. */
+const SPEAK_SAFETY_MS = 28_000
 
 function readCharacter(): VoicePersonalityId {
   migrateCharmMoodDefault()
@@ -143,6 +145,8 @@ export function useVoiceConversation({
   const statusRef = useRef<VoicePresenceState>('idle')
   const sendToKeaRef = useRef<(text: string) => Promise<void>>(async () => {})
   const listenIdleTimerRef = useRef<number | null>(null)
+  /** Hands-free live window ends at this time — set when chat page / talk activates. */
+  const pageLiveUntilRef = useRef(0)
   const lastActivityAtRef = useRef(0)
   const fatalListenRef = useRef(false)
   const sendingRef = useRef(false)
@@ -255,14 +259,10 @@ export function useVoiceConversation({
 
   const resumeAfterBackground = useCallback(() => {
     if (isKeaReplayActive()) return
-    const idleMs =
-      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
-      1000
-    const quietFor = Date.now() - (lastActivityAtRef.current || Date.now())
     const wasLive = backgroundLiveRef.current || handsFreeRef.current
     backgroundLiveRef.current = false
     if (!wasLive) return
-    if (lastActivityAtRef.current && quietFor >= idleMs) {
+    if (pageLiveUntilRef.current && Date.now() >= pageLiveUntilRef.current) {
       handsFreeRef.current = false
       setHandsFree(false)
       setStatus('idle')
@@ -276,7 +276,7 @@ export function useVoiceConversation({
     window.setTimeout(() => {
       if (!fatalListenRef.current) startTalkRef.current()
     }, 80)
-  }, [listenIdleSeconds])
+  }, [])
 
   const restoreTranscript = useCallback(() => {
     const stored = loadTalkScreen()
@@ -375,18 +375,29 @@ export function useVoiceConversation({
     function onUiRelease() {
       if (!handsFreeRef.current || fatalListenRef.current || busyRef.current) return
       if (isKeaReplayActive()) return
+      if (pageLiveUntilRef.current && Date.now() >= pageLiveUntilRef.current) {
+        handsFreeRef.current = false
+        setHandsFree(false)
+        setStatus('idle')
+        return
+      }
       if (statusRef.current === 'listening') return
       window.setTimeout(() => {
         if (
-          handsFreeRef.current &&
-          !busyRef.current &&
-          !fatalListenRef.current &&
-          !isKeaUiHeld() &&
-          !isKeaReplayActive() &&
-          streamRef.current
+          !handsFreeRef.current ||
+          busyRef.current ||
+          fatalListenRef.current ||
+          isKeaUiHeld() ||
+          isKeaReplayActive()
         ) {
-          startListeningRef.current()
+          return
         }
+        if (streamRef.current) {
+          startListeningRef.current()
+          return
+        }
+        // Mic stream was dropped while the menu was open — reopen it.
+        startTalkRef.current()
       }, 120)
     }
     if (isKeaUiHeld()) onUiHold()
@@ -423,6 +434,7 @@ export function useVoiceConversation({
     clearRestartTimer()
     handsFreeRef.current = false
     setHandsFree(false)
+    pageLiveUntilRef.current = 0
     stoppingRecordRef.current = true
     busyRef.current = false
     fatalListenRef.current = false
@@ -431,26 +443,57 @@ export function useVoiceConversation({
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
+  /**
+   * Schedule idle stop from the chat-page live window.
+   * Does not extend the window — speaking must not reset the 10 minutes.
+   */
   const armListenIdle = useCallback(() => {
     clearListenIdleTimer()
+    if (!pageLiveUntilRef.current) return
+    const remaining = pageLiveUntilRef.current - Date.now()
+    const finishIfDue = () => {
+      listenIdleTimerRef.current = null
+      if (busyRef.current) {
+        listenIdleTimerRef.current = window.setTimeout(finishIfDue, 500)
+        return
+      }
+      if (statusRef.current !== 'listening' && !handsFreeRef.current) return
+      // Still mid-utterance — wait for silence, then stop (window already expired).
+      if (
+        statusRef.current === 'listening' &&
+        speechMsRef.current > MIN_SPEECH_MS &&
+        silenceMsRef.current < answerSilenceMsRef.current
+      ) {
+        listenIdleTimerRef.current = window.setTimeout(finishIfDue, 400)
+        return
+      }
+      pauseListening()
+    }
+    if (remaining <= 0) {
+      finishIfDue()
+      return
+    }
+    listenIdleTimerRef.current = window.setTimeout(finishIfDue, remaining)
+  }, [clearListenIdleTimer, pauseListening])
+
+  /** Start / refresh the live window from chat-page activation (not from speech). */
+  const activateLiveWindow = useCallback(() => {
     const idleMs =
       Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
       1000
-    listenIdleTimerRef.current = window.setTimeout(() => {
-      listenIdleTimerRef.current = null
-      if (busyRef.current || statusRef.current !== 'listening') return
-      if (speechMsRef.current > MIN_SPEECH_MS) return
-      pauseListening()
-    }, idleMs)
-  }, [clearListenIdleTimer, listenIdleSeconds, pauseListening])
+    pageLiveUntilRef.current = Date.now() + idleMs
+    lastActivityAtRef.current = Date.now()
+    window.dispatchEvent(new Event('kea-user-activity'))
+    armListenIdle()
+  }, [armListenIdle, listenIdleSeconds])
 
   const captionSpanish = useCallback(
     (id: string, text: string) => {
       if (targetLanguage !== 'es' || !text.trim()) return
-      const parts = splitTalkParagraphs(text)
-      void Promise.all(parts.map((part) => translateSpanishToEnglish(part)))
-        .then((englishParts) => {
-          const english = englishParts.join('\n')
+      // One translate call for the whole turn — faster and captions stay aligned.
+      void translateSpanishToEnglish(text)
+        .then((english) => {
+          if (!english.trim()) return
           setMessages((current) =>
             current.map((item) => (item.id === id ? { ...item, english } : item)),
           )
@@ -524,6 +567,17 @@ export function useVoiceConversation({
     const stream = streamRef.current
     if (!stream) return
     try {
+      // Rapid quiz turns can restart listen while a prior recorder is still live.
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        stoppingRecordRef.current = true
+        try {
+          recorderRef.current.stop()
+        } catch {
+          // ignore
+        }
+        recorderRef.current = null
+      }
+      stopAnalyser(false)
       chunksRef.current = []
       speechMsRef.current = 0
       silenceMsRef.current = 0
@@ -623,6 +677,11 @@ export function useVoiceConversation({
       logSpeech('error', message)
       patchVoiceDiagnostics({ recognitionRunning: false, lastRecognitionError: message })
       setError('Microphone recording could not start.')
+      busyRef.current = false
+      // Keep the quiz / hands-free loop alive after a transient recorder failure.
+      if (handsFreeRef.current && !fatalListenRef.current) {
+        window.setTimeout(() => startListeningRef.current(), 400)
+      }
     }
   }, [armListenIdle, processRecording, stopAnalyser])
 
@@ -639,6 +698,17 @@ export function useVoiceConversation({
         prefetchPromise?: Promise<string | null> | null
       },
     ) => {
+      const spoken = text.trim()
+      if (!spoken) {
+        busyRef.current = false
+        sendingRef.current = false
+        if (handsFreeRef.current) {
+          window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+        } else {
+          setStatus('idle')
+        }
+        return
+      }
       busyRef.current = true
       setStatus('speaking')
       setMessages((current) =>
@@ -647,9 +717,14 @@ export function useVoiceConversation({
           active: index === current.length - 1 && item.speaker === 'kea',
         })),
       )
-      patchVoiceDiagnostics({ lastSpeechOutput: text, recognitionRunning: false })
+      patchVoiceDiagnostics({ lastSpeechOutput: spoken, recognitionRunning: false })
       logSpeech('speaking')
+      let settled = false
+      let safety = 0
       const finish = () => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(safety)
         busyRef.current = false
         sendingRef.current = false
         setMessages((current) =>
@@ -671,7 +746,20 @@ export function useVoiceConversation({
           setStatus('idle')
         }
       }
-      void speakKeaLine(text, {
+      safety = window.setTimeout(
+        () => {
+          logSpeech('speak safety unlock')
+          // Cut any leftover TTS so the mic does not hear Kea as the next answer.
+          try {
+            stopKeaSpeech()
+          } catch {
+            // ignore
+          }
+          finish()
+        },
+        Math.min(SPEAK_SAFETY_MS, Math.max(5_500, 3_200 + spoken.length * 90)),
+      )
+      void speakKeaLine(spoken, {
         lang: getLanguage(targetLanguage).speechLocale,
         onend: finish,
         onerror: finish,
@@ -713,6 +801,14 @@ export function useVoiceConversation({
         })
         const { reply, signals } = splitKeaReply(raw)
         logAi('response', reply)
+        const spoken = reply.trim()
+        if (!spoken) {
+          busyRef.current = false
+          sendingRef.current = false
+          if (handsFreeRef.current) startListeningRef.current()
+          else setStatus('idle')
+          return
+        }
         const fromModel = (signals?.add ?? [])
           .map((item) => item.term)
           .filter((term) => term && userText.toLowerCase().includes(term.toLowerCase()))
@@ -729,43 +825,63 @@ export function useVoiceConversation({
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',
-          text: reply,
+          text: spoken,
           active: true,
-          highlights: extractNativeIntrusions(reply),
+          highlights: extractNativeIntrusions(spoken),
         }
+        // Show + speak first so the turn feels instant; memory work trails behind.
+        historyRef.current = [...historyRef.current, keaMessage]
         setMessages((current) => [...current, keaMessage])
-        captionSpanish(keaMessage.id, reply)
-        applyLearnTurn({
-          languageCode: targetLanguage,
-          userText,
-          keaReply: reply,
-          signals,
-        })
-        const targetName = getLanguage(targetLanguage).name
-        for (const item of getLearnList()) {
-          if (item.languageCode !== targetLanguage || item.translation.trim()) continue
-          const wordId = item.id
-          const word = item.term
-          void glossLearnWord(word, targetName)
-            .then((translation) => rememberLearnGloss(wordId, translation))
-            .catch(() => {
-              // The word stays on the list until a gloss arrives.
-            })
-        }
-        touchChatTopic(userText, reply)
-        patchVoiceDiagnostics({ lastAiResponse: reply, lastTranscript: userText })
+        captionSpanish(keaMessage.id, spoken)
+        const managed = getSpeakVoice()
+        const prefetchPromise =
+          managed && managed.provider === 'openai'
+            ? prefetchManagedVoiceAudio(managed, spoken)
+            : null
         if (written) {
           handsFreeRef.current = false
           setHandsFree(false)
         }
-        speakReply(reply)
+        speakReply(spoken, undefined, { prefetchPromise })
+        patchVoiceDiagnostics({ lastAiResponse: spoken, lastTranscript: userText })
+
+        window.setTimeout(() => {
+          try {
+            applyLearnTurn({
+              languageCode: targetLanguage,
+              userText,
+              keaReply: spoken,
+              signals,
+            })
+            touchChatTopic(userText, spoken)
+            const targetName = getLanguage(targetLanguage).name
+            const needsGloss = getLearnList()
+              .filter(
+                (item) =>
+                  item.languageCode === targetLanguage && !item.translation.trim(),
+              )
+              .slice(0, 2)
+            for (const item of needsGloss) {
+              void glossLearnWord(item.term, targetName)
+                .then((translation) => rememberLearnGloss(item.id, translation))
+                .catch(() => {
+                  // The word stays on the list until a gloss arrives.
+                })
+            }
+          } catch {
+            // Learn-list work must never freeze the spoken turn.
+          }
+        }, 0)
       } catch (caught) {
         busyRef.current = false
         sendingRef.current = false
-        handsFreeRef.current = false
-        setStatus('idle')
-        setHandsFree(false)
+        // Stay hands-free after a failed reply so Kea keeps listening.
         setError(caught instanceof Error ? caught.message : 'Kea could not reply')
+        if (handsFreeRef.current) {
+          window.setTimeout(() => startListeningRef.current(), RESTART_LISTEN_MS)
+        } else {
+          setStatus('idle')
+        }
       }
     },
     [

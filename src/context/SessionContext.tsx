@@ -39,6 +39,17 @@ import {
   setLearnCloudPush,
 } from '../architecture/companionMemory'
 import { pullCloudLearnList, pushCloudLearnList } from '../services/keaLearnCloud'
+import {
+  pullCloudDailyStats,
+  pushCloudDailyStats,
+  upsertCloudDailyStat,
+} from '../services/keaPerformanceCloud'
+import {
+  ensureAdminDemoPerformance,
+  exportAllDayStats,
+  mergeCloudDayStats,
+  setDailyStatsCloudPush,
+} from '../architecture/keaTalkPerformance'
 import { markFreshChatScreen } from '../architecture/keaTalkMemory'
 import { applyCloudSubscription } from '../architecture/keaBilling'
 import {
@@ -228,10 +239,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!userId || !isKeaCloudConfigured()) {
       setLearnCloudPush(null)
+      setDailyStatsCloudPush(null)
       return
     }
     let cancelled = false
     let timer = 0
+    let statsTimer = 0
     void pullCloudLearnList(userId).then((rows) => {
       if (cancelled) return
       if (rows.length) mergeCloudLearnItems(rows)
@@ -243,12 +256,36 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }, 500)
       })
     })
+    void pullCloudDailyStats(userId).then((rows) => {
+      if (cancelled) return
+      if (rows.length) mergeCloudDayStats(rows)
+      if (isAdminEmail(profile.email)) ensureAdminDemoPerformance()
+      void pushCloudDailyStats(userId, exportAllDayStats())
+      setDailyStatsCloudPush((row) => {
+        window.clearTimeout(statsTimer)
+        statsTimer = window.setTimeout(() => {
+          void upsertCloudDailyStat(userId, {
+            day: row.day,
+            talkSeconds: row.talkSeconds,
+            wordsAdded: row.wordsAdded,
+            wordsRemoved: row.wordsRemoved,
+          })
+        }, 400)
+      })
+    })
     return () => {
       cancelled = true
       window.clearTimeout(timer)
+      window.clearTimeout(statsTimer)
       setLearnCloudPush(null)
+      setDailyStatsCloudPush(null)
     }
-  }, [userId])
+  }, [userId, profile.email])
+
+  useEffect(() => {
+    if (!isAdminEmail(profile.email)) return
+    ensureAdminDemoPerformance()
+  }, [profile.email])
 
   const applyCloudUser = useCallback(async (user: {
     id: string

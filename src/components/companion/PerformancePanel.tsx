@@ -1,99 +1,346 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { getMasteredLearnItems } from '../../architecture/companionMemory'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getLearnMasteryUses } from '../../data/keaLearnMastery'
 import {
-  formatTrendPercent,
-  getTalkAverageMonths,
-  getTalkTrendPercent,
-  localDayKey,
+  getPerformanceMonthWindows,
+  getTalkMovingAverageSeries,
+  getTalkPerformanceSeries,
+  getWordPerformanceSeries,
   TALK_PERFORMANCE_EVENT,
-  type TalkMonth,
+  type PerformanceMonthWindow,
 } from '../../architecture/keaTalkPerformance'
 
-function hoursLabel(hours: number) {
-  if (hours <= 0) return '0 h'
-  if (hours < 0.1) return `${Math.round(hours * 60)} min`
-  if (hours < 10) return `${hours.toFixed(1)} h`
-  return `${Math.round(hours)} h`
+function minutesLabel(hours: number) {
+  const mins = hours * 60
+  if (mins <= 0) return '0 min'
+  if (mins < 100) return `${mins.toFixed(0)} min`
+  return `${Math.round(mins)} min`
 }
 
-function dayKeyFromIso(iso: string) {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  return localDayKey(date)
+function median(values: number[]) {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-function eachDay(from: string, to: string) {
-  const start = new Date(`${from}T12:00:00`)
-  const end = new Date(`${to}T12:00:00`)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-    return []
-  }
-  const days: string[] = []
-  const cursor = new Date(start)
-  while (cursor <= end) {
-    days.push(localDayKey(cursor))
-    cursor.setDate(cursor.getDate() + 1)
-  }
-  return days
+function dayNumber(day: string) {
+  const part = day.slice(8, 10)
+  const n = Number(part)
+  return Number.isFinite(n) ? n : 1
 }
 
-/** Cumulative words that left the Learn List after enough proper uses. */
-function wordsLearnedCurve() {
-  const items = getMasteredLearnItems()
-  const counts = new Map<string, number>()
-  for (const item of items) {
-    const day = dayKeyFromIso(item.masteredAt)
-    if (!day) continue
-    counts.set(day, (counts.get(day) ?? 0) + 1)
-  }
-  const today = localDayKey()
-  const first = [...counts.keys()].sort()[0]
-  if (!first) return [{ date: today, total: 0 }]
-  let total = 0
-  return eachDay(first, today).map((date) => {
-    total += counts.get(date) ?? 0
-    return { date, total }
-  })
+function InfoButton({
+  label,
+  open,
+  onToggle,
+}: {
+  label: string
+  open: boolean
+  onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="perf-info"
+      aria-label={label}
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      i
+    </button>
+  )
 }
 
-function LineChart({
-  values,
+/** Month picker: drag right → later months, drag left → earlier months. */
+function MonthSlider({
+  months,
+  index,
+  onChange,
   label,
 }: {
-  values: number[]
+  months: PerformanceMonthWindow[]
+  index: number
+  onChange: (next: number) => void
   label: string
 }) {
-  const width = 320
-  const height = 148
-  const peak = Math.max(0.01, ...values)
-  const points = values.map((value, index) => {
-    const x = values.length <= 1 ? width / 2 : (index / (values.length - 1)) * width
-    const y = height - 10 - (value / peak) * (height - 22)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  const last = points[points.length - 1] ?? `0,${height}`
-  const area = `0,${height} ${points.join(' ')} ${width},${height}`
+  if (months.length <= 1) return null
+  const max = months.length - 1
   return (
-    <svg className="perf-line" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label}>
-      <polygon className="perf-line__fill" points={area} />
-      <polyline className="perf-line__stroke" points={points.join(' ')} />
-      <circle className="perf-line__dot" cx={last.split(',')[0]} cy={last.split(',')[1]} r="3.5" />
+    <label className="perf-slider">
+      <span className="visually-hidden">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={1}
+        value={index}
+        aria-valuetext={months[index]?.label ?? ''}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  )
+}
+
+function AxisChart({
+  days,
+  monthLabel,
+  yLabel,
+  peak,
+  ariaLabel,
+  renderSeries,
+}: {
+  days: string[]
+  monthLabel: string
+  yLabel: string
+  peak: number
+  ariaLabel: string
+  renderSeries: (opts: {
+    padL: number
+    padR: number
+    padT: number
+    padB: number
+    innerW: number
+    innerH: number
+    peak: number
+    n: number
+  }) => ReactNode
+}) {
+  const width = 360
+  const height = 178
+  const padL = 36
+  const padR = 10
+  const padT = 14
+  const padB = 34
+  const innerW = width - padL - padR
+  const innerH = height - padT - padB
+  const n = Math.max(1, days.length)
+  const firstDay = days.length ? dayNumber(days[0]) : 1
+  const lastDay = days.length ? dayNumber(days[days.length - 1]) : 31
+  const safePeak = Math.max(peak, 0.01)
+
+  return (
+    <svg
+      className="perf-combo"
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      {[0, 0.25, 0.5, 0.75, 1].map((frac) => {
+        const y = padT + innerH * (1 - frac)
+        return (
+          <line
+            key={frac}
+            className="perf-combo__grid"
+            x1={padL}
+            x2={width - padR}
+            y1={y}
+            y2={y}
+          />
+        )
+      })}
+      {renderSeries({ padL, padR, padT, padB, innerW, innerH, peak: safePeak, n })}
+      <text
+        className="perf-combo__ylabel"
+        x={12}
+        y={padT + innerH / 2}
+        transform={`rotate(-90 12 ${padT + innerH / 2})`}
+      >
+        {yLabel}
+      </text>
+      <text className="perf-combo__axis" x={padL - 4} y={padT + 8} textAnchor="end">
+        {Number.isInteger(safePeak) ? safePeak : safePeak.toFixed(0)}
+      </text>
+      <text
+        className="perf-combo__axis"
+        x={padL - 4}
+        y={padT + innerH}
+        textAnchor="end"
+      >
+        0
+      </text>
+      <text
+        className="perf-combo__xaxis"
+        x={padL}
+        y={height - 8}
+        textAnchor="start"
+      >
+        {firstDay}
+      </text>
+      <text
+        className="perf-combo__xaxis perf-combo__xaxis--month"
+        x={padL + innerW / 2}
+        y={height - 8}
+        textAnchor="middle"
+      >
+        {monthLabel}
+      </text>
+      <text
+        className="perf-combo__xaxis"
+        x={width - padR}
+        y={height - 8}
+        textAnchor="end"
+      >
+        {lastDay}
+      </text>
     </svg>
   )
 }
 
+function WordsChart({
+  days,
+  added,
+  removed,
+  monthLabel,
+}: {
+  days: string[]
+  added: number[]
+  removed: number[]
+  monthLabel: string
+}) {
+  const peak = Math.max(1, ...added, ...removed)
+  return (
+    <AxisChart
+      days={days}
+      monthLabel={monthLabel}
+      yLabel="Mins"
+      peak={peak}
+      ariaLabel="Words added and removed each day"
+      renderSeries={({ padL, padT, innerW, innerH, peak: p, n }) => {
+        const barW = Math.min(10, (innerW / n) * 0.35)
+        const points = removed.map((value, index) => {
+          const x = padL + (n <= 1 ? innerW / 2 : (index / (n - 1)) * innerW)
+          const y = padT + innerH - (value / p) * innerH
+          return `${x.toFixed(1)},${y.toFixed(1)}`
+        })
+        return (
+          <>
+            {added.map((value, index) => {
+              const x =
+                padL +
+                (n <= 1 ? innerW / 2 : (index / (n - 1)) * innerW) -
+                barW / 2
+              const h = (value / p) * innerH
+              const y = padT + innerH - h
+              return (
+                <rect
+                  key={`a-${days[index]}`}
+                  className="perf-combo__bar perf-combo__bar--added"
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={Math.max(0, h)}
+                  rx="1.5"
+                />
+              )
+            })}
+            {removed.map((value, index) => {
+              const x =
+                padL +
+                (n <= 1 ? innerW / 2 : (index / (n - 1)) * innerW) +
+                barW * 0.15
+              const h = (value / p) * innerH
+              const y = padT + innerH - h
+              return (
+                <rect
+                  key={`r-${days[index]}`}
+                  className="perf-combo__bar perf-combo__bar--removed"
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={Math.max(0, h)}
+                  rx="1.5"
+                />
+              )
+            })}
+            {points.length > 1 ? (
+              <polyline className="perf-combo__line" points={points.join(' ')} />
+            ) : null}
+          </>
+        )
+      }}
+    />
+  )
+}
+
+function ChatTimeChart({
+  days,
+  minutes,
+  averageMinutes,
+  monthLabel,
+}: {
+  days: string[]
+  minutes: number[]
+  averageMinutes: number[]
+  monthLabel: string
+}) {
+  const peak = Math.max(30, ...minutes, ...averageMinutes)
+  return (
+    <AxisChart
+      days={days}
+      monthLabel={monthLabel}
+      yLabel="Mins"
+      peak={peak}
+      ariaLabel="Daily chat time with seven-day moving average"
+      renderSeries={({ padL, padT, innerW, innerH, peak: p, n }) => {
+        const barW = Math.min(12, (innerW / n) * 0.55)
+        const line = averageMinutes.map((value, index) => {
+          const x = padL + (n <= 1 ? innerW / 2 : (index / (n - 1)) * innerW)
+          const y = padT + innerH - (value / p) * innerH
+          return `${x.toFixed(1)},${y.toFixed(1)}`
+        })
+        return (
+          <>
+            {minutes.map((value, index) => {
+              const x =
+                padL +
+                (n <= 1 ? innerW / 2 : (index / (n - 1)) * innerW) -
+                barW / 2
+              const h = (value / p) * innerH
+              const y = padT + innerH - h
+              return (
+                <rect
+                  key={days[index]}
+                  className="perf-combo__bar perf-combo__bar--chat"
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={Math.max(0, h)}
+                  rx="1.5"
+                />
+              )
+            })}
+            {line.length > 1 ? (
+              <polyline className="perf-combo__line" points={line.join(' ')} />
+            ) : null}
+          </>
+        )
+      }}
+    />
+  )
+}
+
 export function PerformancePanel({ embedded = false }: { embedded?: boolean }) {
-  const [words, setWords] = useState(() => wordsLearnedCurve())
-  const [months, setMonths] = useState<TalkMonth[]>(() => getTalkAverageMonths())
-  const [trend, setTrend] = useState(() => getTalkTrendPercent())
-  const monthsRef = useRef<HTMLDivElement>(null)
+  const [months, setMonths] = useState(() => getPerformanceMonthWindows())
+  const [talkSeries, setTalkSeries] = useState(() => getTalkPerformanceSeries())
+  const [wordSeries, setWordSeries] = useState(() => getWordPerformanceSeries())
+  const [avgSeries, setAvgSeries] = useState(() => getTalkMovingAverageSeries())
+  const [info, setInfo] = useState<'words' | 'chat' | null>(null)
+  const [wordsMonth, setWordsMonth] = useState(0)
+  const [chatMonth, setChatMonth] = useState(0)
+  const mastery = getLearnMasteryUses()
 
   useEffect(() => {
     const refresh = () => {
-      setWords(wordsLearnedCurve())
-      setMonths(getTalkAverageMonths())
-      setTrend(getTalkTrendPercent())
+      const nextMonths = getPerformanceMonthWindows()
+      setMonths(nextMonths)
+      setTalkSeries(getTalkPerformanceSeries())
+      setWordSeries(getWordPerformanceSeries())
+      setAvgSeries(getTalkMovingAverageSeries())
+      const last = Math.max(0, nextMonths.length - 1)
+      setWordsMonth(last)
+      setChatMonth(last)
     }
     refresh()
     window.addEventListener(TALK_PERFORMANCE_EVENT, refresh)
@@ -107,49 +354,189 @@ export function PerformancePanel({ embedded = false }: { embedded?: boolean }) {
   }, [])
 
   useEffect(() => {
-    const node = monthsRef.current
-    if (!node) return
-    node.scrollLeft = node.scrollWidth
+    const last = Math.max(0, months.length - 1)
+    setWordsMonth((current) => Math.min(current, last))
+    setChatMonth((current) => Math.min(current, last))
   }, [months])
 
-  const learned = words[words.length - 1]?.total ?? 0
-  const wordValues = useMemo(() => words.map((point) => point.total), [words])
+  const talkByDay = useMemo(() => {
+    const map = new Map(talkSeries.map((item) => [item.date, item.hours * 60]))
+    return map
+  }, [talkSeries])
+  const avgByDay = useMemo(() => {
+    const map = new Map(avgSeries.map((item) => [item.date, item.hours * 60]))
+    return map
+  }, [avgSeries])
+  const wordsByDay = useMemo(() => {
+    const map = new Map(
+      wordSeries.map((item) => [
+        item.date,
+        { added: item.added, removed: item.removed },
+      ]),
+    )
+    return map
+  }, [wordSeries])
+
+  const chatStats = useMemo(() => {
+    const hours = talkSeries.map((item) => item.hours)
+    const total = hours.reduce((sum, value) => sum + value, 0)
+    return {
+      days: talkSeries.length,
+      total,
+      average: talkSeries.length ? total / talkSeries.length : 0,
+      median: median(hours),
+      highest: hours.length ? Math.max(...hours) : 0,
+      lowest: hours.length ? Math.min(...hours) : 0,
+    }
+  }, [talkSeries])
+
+  const wordStats = useMemo(() => {
+    const added = wordSeries.reduce((sum, item) => sum + item.added, 0)
+    const removed = wordSeries.reduce((sum, item) => sum + item.removed, 0)
+    return {
+      days: wordSeries.length,
+      added,
+      removed,
+    }
+  }, [wordSeries])
+
+  const wordsWindow = months[wordsMonth] ?? months[months.length - 1]
+  const chatWindow = months[chatMonth] ?? months[months.length - 1]
 
   const body = (
     <>
-      <section className="perf-block" aria-labelledby="perf-words-title">
-        <h2 id="perf-words-title">Words learned</h2>
-        <p className="perf-block__number">{learned}</p>
-        <p className="perf-block__note">
-          Words that entered the Learn List and then left it after {getLearnMasteryUses()} proper uses.
-        </p>
-        <LineChart values={wordValues} label={`${learned} words learned, climbing over time`} />
+      <section className="perf-card" aria-labelledby="perf-words-title">
+        <div className="perf-card__head">
+          <div>
+            <h2 id="perf-words-title">Words learned</h2>
+            <p className="perf-card__sub">
+              English words added and removed each day
+            </p>
+          </div>
+          <InfoButton
+            label="About words learned"
+            open={info === 'words'}
+            onToggle={() => setInfo((value) => (value === 'words' ? null : 'words'))}
+          />
+        </div>
+        {info === 'words' ? (
+          <p className="perf-card__explain" role="note">
+            Bars show how many English words were added to your Learn List each
+            day, and how many left the list after {mastery} correct uses in
+            conversation. Drag the slider right for later months, left for
+            earlier ones, back to your first day with Kea.
+          </p>
+        ) : null}
+        <div className="perf-card__legend" aria-hidden="true">
+          <span>
+            <i className="perf-swatch perf-swatch--added" /> Added
+          </span>
+          <span>
+            <i className="perf-swatch perf-swatch--removed" /> Removed
+          </span>
+        </div>
+        {wordsWindow ? (
+          <>
+            <WordsChart
+              days={wordsWindow.days}
+              monthLabel={wordsWindow.label}
+              added={wordsWindow.days.map(
+                (day) => wordsByDay.get(day)?.added ?? 0,
+              )}
+              removed={wordsWindow.days.map(
+                (day) => wordsByDay.get(day)?.removed ?? 0,
+              )}
+            />
+            <MonthSlider
+              months={months}
+              index={wordsMonth}
+              onChange={setWordsMonth}
+              label="Slide words learned by month"
+            />
+          </>
+        ) : (
+          <p className="perf-card__empty">No data yet.</p>
+        )}
+        <div className="perf-stats">
+          <p>
+            Total days: {wordStats.days}
+            <br />
+            Words added: {wordStats.added}
+          </p>
+          <p>
+            Words removed: {wordStats.removed}
+            <br />
+            Mastered total: {wordStats.removed}
+          </p>
+        </div>
       </section>
 
-      <section className="perf-block" aria-labelledby="perf-average-title">
-        <h2 id="perf-average-title">Seven-day average</h2>
-        <p className="perf-block__number">{formatTrendPercent(trend)}</p>
-        <p className="perf-block__note">
-          Talk time with Kea, averaged over seven days. Slide from month to month.
-        </p>
-        {months.length === 0 ? (
-          <p className="perf-block__note">No talk time recorded yet.</p>
-        ) : (
-          <div className="perf-months" ref={monthsRef} aria-label="Seven-day average by month">
-            {months.map((month) => (
-              <article className="perf-month" key={month.id}>
-                <h3>{month.label}</h3>
-                <LineChart
-                  values={month.points.map((point) => point.hours)}
-                  label={`${month.label} seven-day average`}
-                />
-                <p className="perf-month__end">
-                  {hoursLabel(month.points[month.points.length - 1]?.hours ?? 0)} a day
-                </p>
-              </article>
-            ))}
+      <section className="perf-card" aria-labelledby="perf-chat-title">
+        <div className="perf-card__head">
+          <div>
+            <h2 id="perf-chat-title">Chat time</h2>
+            <p className="perf-card__sub">
+              Daily usage (minutes) with 7-day moving average
+            </p>
           </div>
+          <InfoButton
+            label="About chat time"
+            open={info === 'chat'}
+            onToggle={() => setInfo((value) => (value === 'chat' ? null : 'chat'))}
+          />
+        </div>
+        {info === 'chat' ? (
+          <p className="perf-card__explain" role="note">
+            Light bars are how long you talked with Kea each day in minutes. The
+            dark line is the seven-day moving average. Drag the slider right for
+            later months, left for earlier ones.
+          </p>
+        ) : null}
+        <div className="perf-card__legend" aria-hidden="true">
+          <span>
+            <i className="perf-swatch perf-swatch--chat" /> Daily usage
+          </span>
+          <span>
+            <i className="perf-swatch perf-swatch--avg" /> 7-day average
+          </span>
+        </div>
+        {chatWindow ? (
+          <>
+            <ChatTimeChart
+              days={chatWindow.days}
+              monthLabel={chatWindow.label}
+              minutes={chatWindow.days.map((day) => talkByDay.get(day) ?? 0)}
+              averageMinutes={chatWindow.days.map(
+                (day) => avgByDay.get(day) ?? 0,
+              )}
+            />
+            <MonthSlider
+              months={months}
+              index={chatMonth}
+              onChange={setChatMonth}
+              label="Slide chat time by month"
+            />
+          </>
+        ) : (
+          <p className="perf-card__empty">No data yet.</p>
         )}
+        <div className="perf-stats">
+          <p>
+            Total days: {chatStats.days}
+            <br />
+            Total usage: {minutesLabel(chatStats.total)}
+          </p>
+          <p>
+            Average per day: {minutesLabel(chatStats.average)}
+            <br />
+            Median per day: {minutesLabel(chatStats.median)}
+          </p>
+          <p>
+            Highest day: {minutesLabel(chatStats.highest)}
+            <br />
+            Lowest day: {minutesLabel(chatStats.lowest)}
+          </p>
+        </div>
       </section>
     </>
   )

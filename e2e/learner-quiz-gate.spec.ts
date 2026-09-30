@@ -55,12 +55,12 @@ test('a new member sees the questionnaire once', () => {
   ).toBe(false)
 })
 
-test('a returning login shows the welcome line, not the product tour', () => {
+test('How to use Kea only after stage 1, never on a normal login', () => {
   expect(
     shouldShowSpokenTour({
-      isAdmin: true,
+      isAdmin: false,
       profileKnown: true,
-      hasName: false,
+      hasName: true,
       hasTalked: true,
       completed: false,
       busy: false,
@@ -70,6 +70,17 @@ test('a returning login shows the welcome line, not the product tour', () => {
   expect(
     shouldShowSpokenTour({
       isAdmin: false,
+      profileKnown: true,
+      hasName: false,
+      hasTalked: false,
+      completed: false,
+      busy: false,
+    }),
+  ).toBe(false)
+
+  expect(
+    shouldShowSpokenTour({
+      isAdmin: true,
       profileKnown: true,
       hasName: true,
       hasTalked: false,
@@ -92,11 +103,12 @@ test('a returning login shows the welcome line, not the product tour', () => {
 
   expect(
     shouldShowSpokenTour({
-      isAdmin: false,
+      isAdmin: true,
       profileKnown: true,
-      hasName: false,
-      hasTalked: false,
-      completed: false,
+      hasName: true,
+      hasTalked: true,
+      completed: true,
+      awaitingTour: true,
       busy: false,
     }),
   ).toBe(true)

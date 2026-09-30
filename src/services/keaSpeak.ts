@@ -175,7 +175,12 @@ function playBlobUrl(
     if (currentAudio === audio) currentAudio = null
     if (gen === speakGeneration) options.onerror?.()
   }
-  return audio.play()
+  return audio.play().catch(() => {
+    clearAudioProgress()
+    if (revoke) URL.revokeObjectURL(url)
+    if (currentAudio === audio) currentAudio = null
+    if (gen === speakGeneration) options.onerror?.()
+  })
 }
 
 function trackAudioProgress(
@@ -206,29 +211,29 @@ export async function speakManagedVoice(
 ) {
   stopKeaSpeech()
   const gen = speakGeneration
+  const bail = () => {
+    if (gen === speakGeneration) options.onerror?.()
+  }
   if (voice.provider === 'openai' && voice.openaiVoice) {
     try {
       if (options.prefetchedUrl) {
         await playBlobUrl(options.prefetchedUrl, text, gen, options, true)
-        if (gen !== speakGeneration) {
-          // stopKeaSpeech already cleared currentAudio
-        }
         return
       }
       const blob = await loadManagedVoiceAudio(voice, text)
       if (gen !== speakGeneration) return
-      if (!blob) throw new Error('Could not play that OpenAI voice.')
+      if (!blob) {
+        bail()
+        return
+      }
       const url = URL.createObjectURL(blob)
       if (gen !== speakGeneration) {
         URL.revokeObjectURL(url)
         return
       }
       await playBlobUrl(url, text, gen, options, true)
-      if (gen !== speakGeneration) {
-        // interrupted
-      }
     } catch {
-      if (gen === speakGeneration) options.onerror?.()
+      bail()
     }
     return
   }

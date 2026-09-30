@@ -21,6 +21,7 @@ import { PerformancePage } from './pages/PerformancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SubscriptionPage } from './pages/SubscriptionPage'
 import { SupportPage } from './pages/SupportPage'
+import { UsagePage } from './pages/UsagePage'
 import {
   CookiePolicyPage,
   PrivacyPolicyPage,
@@ -136,6 +137,14 @@ export default function App() {
             element={
               <RequireOnboard>
                 <SubscriptionPage />
+              </RequireOnboard>
+            }
+          />
+          <Route
+            path="/usage"
+            element={
+              <RequireOnboard>
+                <UsagePage />
               </RequireOnboard>
             }
           />

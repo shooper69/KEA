@@ -17,8 +17,9 @@ export function shouldShowLearnerQuiz(options: {
 }
 
 /**
- * Spoken product tour (“Kea is just a conversational tool…”).
- * A login that already gets the welcome-back line must not cover it with this caption.
+ * Spoken product tour (“How to use Kea”).
+ * Only after stage 1 questionnaire finishes (pending flag), including admin
+ * Account → Onboarding. A normal returning login must go straight to chat.
  */
 export function shouldShowSpokenTour(options: {
   isAdmin: boolean
@@ -30,10 +31,6 @@ export function shouldShowSpokenTour(options: {
   /** Set when the get-to-know-you questionnaire has just been saved. */
   awaitingTour?: boolean
 }) {
-  if (options.busy || options.isAdmin || !options.profileKnown || options.completed) {
-    return false
-  }
-  if (options.awaitingTour && !options.hasTalked) return true
-  if (options.hasName || options.hasTalked) return false
-  return true
+  if (options.busy || !options.profileKnown) return false
+  return Boolean(options.awaitingTour)
 }

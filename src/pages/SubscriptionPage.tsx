@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { CompanionNav } from '../components/companion/CompanionNav'
 import { OfferPopup } from '../components/companion/OfferPopup'
 import { SubscriptionPanel } from '../components/companion/SubscriptionPanel'
-import { UsagePanel } from '../components/companion/UsagePanel'
 import { getTalkAccess } from '../architecture/keaBilling'
 import { useSession } from '../context/SessionContext'
 import {
@@ -18,9 +17,6 @@ import {
 export function SubscriptionPage() {
   const [searchParams] = useSearchParams()
   const { email, userId, isAdmin } = useSession()
-  const [showUsage, setShowUsage] = useState(
-    () => searchParams.get('view') === 'usage',
-  )
   const [popup1Open, setPopup1Open] = useState(() =>
     shouldShowPopup1('subscriptions'),
   )
@@ -43,6 +39,10 @@ export function SubscriptionPage() {
     }
   }, [isAdmin])
 
+  if (searchParams.get('view') === 'usage') {
+    return <Navigate to="/usage" replace />
+  }
+
   return (
     <main
       className={`companion-screen settings-screen${
@@ -64,25 +64,7 @@ export function SubscriptionPage() {
             ×
           </Link>
         </div>
-        {showUsage ? (
-          <>
-            <button
-              type="button"
-              className="settings-usage-link"
-              onClick={() => setShowUsage(false)}
-            >
-              Back to Subscription
-            </button>
-            <UsagePanel isAdmin={isAdmin} />
-          </>
-        ) : (
-          <SubscriptionPanel
-            email={email}
-            userId={userId}
-            isAdmin={isAdmin}
-            onViewUsage={() => setShowUsage(true)}
-          />
-        )}
+        <SubscriptionPanel email={email} userId={userId} isAdmin={isAdmin} />
       </div>
       {popup1Open ? (
         <OfferPopup

@@ -1,10 +1,28 @@
 /**
- * Daily talk-time performance (hours with Kea), independent of billing caps.
+ * Daily performance stats (talk seconds + Learn List adds/removes).
+ * Local first; synced to Supabase user_daily_stats for charts and tokens.
  */
 
+import type { DailyStatRow } from '../services/keaPerformanceCloud'
+
 const DAY_PREFIX = 'kea-talk-day-v1-'
+const STATS_PREFIX = 'kea-daily-stats-v1-'
 const FIRST_DAY_KEY = 'kea-talk-first-day-v1'
+const ADMIN_SEEDED_KEY = 'kea-daily-stats-admin-seed-v1'
 export const TALK_PERFORMANCE_EVENT = 'kea-talk-performance'
+
+export interface DayStat {
+  day: string
+  talkSeconds: number
+  wordsAdded: number
+  wordsRemoved: number
+}
+
+let cloudPush: ((row: DayStat) => void) | null = null
+
+export function setDailyStatsCloudPush(push: ((row: DayStat) => void) | null) {
+  cloudPush = push
+}
 
 function pad2(value: number) {
   return String(value).padStart(2, '0')
@@ -12,10 +30,6 @@ function pad2(value: number) {
 
 export function localDayKey(date = new Date()) {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
-}
-
-function storageKeyForDay(day: string) {
-  return `${DAY_PREFIX}${day}`
 }
 
 function parseDay(day: string): Date | null {
@@ -33,9 +47,17 @@ function parseDay(day: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function readSeconds(day: string) {
+function statsKey(day: string) {
+  return `${STATS_PREFIX}${day}`
+}
+
+function legacyTalkKey(day: string) {
+  return `${DAY_PREFIX}${day}`
+}
+
+function readLegacyTalkSeconds(day: string) {
   try {
-    const raw = localStorage.getItem(storageKeyForDay(day))
+    const raw = localStorage.getItem(legacyTalkKey(day))
     if (!raw) return 0
     const parsed = JSON.parse(raw) as { seconds?: number }
     const seconds = Number(parsed?.seconds)
@@ -45,15 +67,48 @@ function readSeconds(day: string) {
   }
 }
 
-function writeSeconds(day: string, seconds: number) {
+function emptyStat(day: string): DayStat {
+  return { day, talkSeconds: 0, wordsAdded: 0, wordsRemoved: 0 }
+}
+
+export function readDayStat(day: string): DayStat {
   try {
+    const raw = localStorage.getItem(statsKey(day))
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<DayStat>
+      return {
+        day,
+        talkSeconds: Math.max(0, Math.round(Number(parsed.talkSeconds) || 0)),
+        wordsAdded: Math.max(0, Math.round(Number(parsed.wordsAdded) || 0)),
+        wordsRemoved: Math.max(0, Math.round(Number(parsed.wordsRemoved) || 0)),
+      }
+    }
+  } catch {
+    // fall through to legacy
+  }
+  const legacy = readLegacyTalkSeconds(day)
+  if (legacy > 0) return { day, talkSeconds: legacy, wordsAdded: 0, wordsRemoved: 0 }
+  return emptyStat(day)
+}
+
+function writeDayStat(stat: DayStat) {
+  const next: DayStat = {
+    day: stat.day,
+    talkSeconds: Math.max(0, Math.round(stat.talkSeconds)),
+    wordsAdded: Math.max(0, Math.round(stat.wordsAdded)),
+    wordsRemoved: Math.max(0, Math.round(stat.wordsRemoved)),
+  }
+  try {
+    localStorage.setItem(statsKey(next.day), JSON.stringify(next))
+    // Keep legacy talk key in sync for billing / older readers.
     localStorage.setItem(
-      storageKeyForDay(day),
-      JSON.stringify({ seconds: Math.max(0, Math.round(seconds)) }),
+      legacyTalkKey(next.day),
+      JSON.stringify({ seconds: next.talkSeconds }),
     )
   } catch {
     // ignore quota
   }
+  cloudPush?.(next)
 }
 
 function readFirstDay(): string | null {
@@ -88,21 +143,76 @@ function notify() {
   window.dispatchEvent(new Event(TALK_PERFORMANCE_EVENT))
 }
 
+function bumpStat(
+  day: string,
+  patch: Partial<Pick<DayStat, 'talkSeconds' | 'wordsAdded' | 'wordsRemoved'>>,
+) {
+  ensureFirstDay(day)
+  const current = readDayStat(day)
+  writeDayStat({
+    day,
+    talkSeconds: current.talkSeconds + (patch.talkSeconds ?? 0),
+    wordsAdded: current.wordsAdded + (patch.wordsAdded ?? 0),
+    wordsRemoved: current.wordsRemoved + (patch.wordsRemoved ?? 0),
+  })
+  notify()
+}
+
 /** Record seconds spoken with Kea (all users, including admin). */
 export function recordTalkPerformanceSeconds(seconds: number) {
   const add = Math.max(0, seconds)
   if (!add) return
-  const day = localDayKey()
-  ensureFirstDay(day)
-  writeSeconds(day, readSeconds(day) + add)
+  bumpStat(localDayKey(), { talkSeconds: add })
+}
+
+export function recordWordsAdded(count = 1, day = localDayKey()) {
+  const add = Math.max(0, Math.round(count))
+  if (!add) return
+  bumpStat(day, { wordsAdded: add })
+}
+
+export function recordWordsRemoved(count = 1, day = localDayKey()) {
+  const add = Math.max(0, Math.round(count))
+  if (!add) return
+  bumpStat(day, { wordsRemoved: add })
+}
+
+export function mergeCloudDayStats(rows: DailyStatRow[]) {
+  for (const row of rows) {
+    if (!parseDay(row.day)) continue
+    ensureFirstDay(row.day)
+    const local = readDayStat(row.day)
+    writeDayStat({
+      day: row.day,
+      talkSeconds: Math.max(local.talkSeconds, row.talkSeconds),
+      wordsAdded: Math.max(local.wordsAdded, row.wordsAdded),
+      wordsRemoved: Math.max(local.wordsRemoved, row.wordsRemoved),
+    })
+  }
   notify()
 }
 
-export interface TalkDayHours {
-  date: string
-  label: string
-  seconds: number
-  hours: number
+export function exportAllDayStats(): DayStat[] {
+  const today = localDayKey()
+  let first = readFirstDay() ?? today
+  const found = new Set<string>()
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      if (key.startsWith(STATS_PREFIX)) {
+        found.add(key.slice(STATS_PREFIX.length))
+      } else if (key.startsWith(DAY_PREFIX)) {
+        found.add(key.slice(DAY_PREFIX.length))
+      }
+    }
+  } catch {
+    // ignore
+  }
+  for (const day of found) {
+    if (parseDay(day) && day < first) first = day
+  }
+  return eachDayInclusive(first, today).map((day) => readDayStat(day))
 }
 
 function eachDayInclusive(from: string, to: string): string[] {
@@ -127,30 +237,41 @@ function shortLabel(day: string) {
   })
 }
 
+export interface TalkDayHours {
+  date: string
+  label: string
+  seconds: number
+  hours: number
+}
+
 /** Every calendar day from first recorded use through today. */
 export function getTalkPerformanceSeries(): TalkDayHours[] {
   const today = localDayKey()
   let first = readFirstDay()
   if (!first) {
-    // Fall back: scan recent keys if first-day marker missing.
     first = today
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
-        if (!key?.startsWith(DAY_PREFIX)) continue
-        const day = key.slice(DAY_PREFIX.length)
+        if (!key) continue
+        let day = ''
+        if (key.startsWith(STATS_PREFIX)) day = key.slice(STATS_PREFIX.length)
+        else if (key.startsWith(DAY_PREFIX)) day = key.slice(DAY_PREFIX.length)
         if (parseDay(day) && day < first) first = day
       }
     } catch {
       // ignore
     }
-    const hasAny = readSeconds(first) > 0 || first !== today
-    if (!hasAny && readSeconds(today) <= 0) return []
+    const hasAny =
+      readDayStat(first).talkSeconds > 0 ||
+      readDayStat(today).talkSeconds > 0 ||
+      first !== today
+    if (!hasAny) return []
     ensureFirstDay(first)
   }
 
   return eachDayInclusive(first, today).map((date) => {
-    const seconds = readSeconds(date)
+    const seconds = readDayStat(date).talkSeconds
     return {
       date,
       label: shortLabel(date),
@@ -160,9 +281,30 @@ export function getTalkPerformanceSeries(): TalkDayHours[] {
   })
 }
 
+export interface WordDayCounts {
+  date: string
+  label: string
+  added: number
+  removed: number
+}
+
+export function getWordPerformanceSeries(): WordDayCounts[] {
+  const today = localDayKey()
+  const first = readFirstDay() ?? today
+  return eachDayInclusive(first, today).map((date) => {
+    const stat = readDayStat(date)
+    return {
+      date,
+      label: shortLabel(date),
+      added: stat.wordsAdded,
+      removed: stat.wordsRemoved,
+    }
+  })
+}
+
 function averageSeconds(days: string[]) {
   if (days.length === 0) return 0
-  const total = days.reduce((sum, day) => sum + readSeconds(day), 0)
+  const total = days.reduce((sum, day) => sum + readDayStat(day).talkSeconds, 0)
   return total / days.length
 }
 
@@ -223,28 +365,91 @@ export function getTalkMovingAverageSeries(): TalkAveragePoint[] {
   })
 }
 
-export interface TalkMonth {
+export interface PerformanceMonthWindow {
   id: string
   label: string
-  points: TalkAveragePoint[]
+  /** Inclusive day keys in this month window (calendar month, or trailing 30). */
+  days: string[]
 }
 
-/** Moving-average points grouped so a phone can slide one month at a time. */
-export function getTalkAverageMonths(): TalkMonth[] {
-  const points = getTalkMovingAverageSeries()
-  const groups = new Map<string, TalkAveragePoint[]>()
-  for (const point of points) {
-    const id = point.date.slice(0, 7)
-    const list = groups.get(id) ?? []
-    list.push(point)
-    groups.set(id, list)
+/** Calendar months from first use through the current month (for slideable charts). */
+export function getPerformanceMonthWindows(): PerformanceMonthWindow[] {
+  const today = localDayKey()
+  const first = readFirstDay() ?? today
+  const start = parseDay(first)
+  const end = parseDay(today)
+  if (!start || !end) return []
+
+  const windows: PerformanceMonthWindow[] = []
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12)
+  const lastMonth = new Date(end.getFullYear(), end.getMonth(), 1, 12)
+
+  while (cursor <= lastMonth) {
+    const year = cursor.getFullYear()
+    const month = cursor.getMonth()
+    const id = `${year}-${pad2(month + 1)}`
+    const monthStart = localDayKey(new Date(year, month, 1, 12))
+    const monthEndDate = new Date(year, month + 1, 0, 12)
+    const monthEnd = localDayKey(
+      monthEndDate > end ? end : monthEndDate,
+    )
+    const from = monthStart < first ? first : monthStart
+    const days = eachDayInclusive(from, monthEnd)
+    if (days.length) {
+      windows.push({
+        id,
+        label: cursor.toLocaleDateString(undefined, {
+          month: 'long',
+          year: 'numeric',
+        }),
+        days,
+      })
+    }
+    cursor.setMonth(cursor.getMonth() + 1)
   }
-  return [...groups.entries()].map(([id, monthPoints]) => {
-    const [year, month] = id.split('-')
-    const date = new Date(Number(year), Number(month) - 1, 1, 12)
-    const label = Number.isNaN(date.getTime())
-      ? id
-      : date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
-    return { id, label, points: monthPoints }
-  })
+  return windows
+}
+
+/** Seed ~90 days of demo stats for admin preview (once per device). */
+export function ensureAdminDemoPerformance() {
+  try {
+    if (localStorage.getItem(ADMIN_SEEDED_KEY) === '1') return
+  } catch {
+    return
+  }
+  const today = new Date()
+  const first = new Date(today)
+  first.setDate(today.getDate() - 89)
+  ensureFirstDay(localDayKey(first))
+
+  for (let i = 0; i < 90; i++) {
+    const date = new Date(first)
+    date.setDate(first.getDate() + i)
+    const day = localDayKey(date)
+    const existing = readDayStat(day)
+    if (
+      existing.talkSeconds > 0 ||
+      existing.wordsAdded > 0 ||
+      existing.wordsRemoved > 0
+    ) {
+      continue
+    }
+    const wave = 0.35 + 0.25 * Math.sin(i / 7) + 0.15 * Math.sin(i / 3)
+    const spike = i % 23 === 0 ? 1.1 : i % 17 === 0 ? 0.55 : 0
+    const hours = Math.max(0, Math.min(1.9, wave + spike + (i % 5) * 0.02))
+    const added = Math.max(0, Math.round((i % 4 === 0 ? 2 : 0) + (i % 11 === 0 ? 3 : 0)))
+    const removed = Math.max(0, Math.round(i % 6 === 0 ? 1 : 0) + (i % 13 === 0 ? 2 : 0))
+    writeDayStat({
+      day,
+      talkSeconds: Math.round(hours * 3600),
+      wordsAdded: added,
+      wordsRemoved: removed,
+    })
+  }
+  try {
+    localStorage.setItem(ADMIN_SEEDED_KEY, '1')
+  } catch {
+    // ignore
+  }
+  notify()
 }

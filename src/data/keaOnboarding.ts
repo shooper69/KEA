@@ -106,6 +106,7 @@ export function resetOnboardingSteps() {
 }
 
 const PENDING_KEY = 'kea-spoken-tour-pending'
+const ARMED_KEY = 'kea-spoken-tour-armed'
 
 function doneStorageKey(userKey = '') {
   return userKey ? `${DONE_KEY}:${userKey}` : DONE_KEY
@@ -115,13 +116,41 @@ function pendingStorageKey(userKey = '') {
   return userKey ? `${PENDING_KEY}:${userKey}` : PENDING_KEY
 }
 
+function armSpokenTourSession() {
+  try {
+    sessionStorage.setItem(ARMED_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+function clearSpokenTourArm() {
+  try {
+    sessionStorage.removeItem(ARMED_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+export function isSpokenTourArmed() {
+  try {
+    return sessionStorage.getItem(ARMED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** Stage 2 is due after the get-to-know-you answers are saved. */
 export function markSpokenTourPending(userKey = '') {
   try {
     localStorage.setItem(pendingStorageKey(userKey), '1')
+    // Re-running get-to-know-you (e.g. Account → Onboarding) must replay the tour.
+    localStorage.removeItem(doneStorageKey(userKey))
+    localStorage.removeItem(DONE_KEY)
   } catch {
     // ignore
   }
+  armSpokenTourSession()
   window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 
@@ -131,6 +160,33 @@ export function isSpokenTourPending(userKey = '') {
   } catch {
     return false
   }
+}
+
+export function clearSpokenTourPending(userKey = '') {
+  try {
+    localStorage.removeItem(pendingStorageKey(userKey))
+    localStorage.removeItem(PENDING_KEY)
+  } catch {
+    // ignore
+  }
+  clearSpokenTourArm()
+  window.dispatchEvent(new Event(ONBOARDING_CHANGED))
+}
+
+/**
+ * Drop leftover stage-2 flags from an abandoned tour so a normal login
+ * goes straight to chat (after audio route), not How to use Kea.
+ */
+export function clearStaleSpokenTourPending(
+  userKey: string,
+  options: { hasTalked: boolean; completed: boolean },
+) {
+  if (!isSpokenTourPending(userKey)) return false
+  // Still in the same visit that just finished the questionnaire.
+  if (isSpokenTourArmed()) return false
+  if (!options.hasTalked && !options.completed) return false
+  clearSpokenTourPending(userKey)
+  return true
 }
 
 export function hasCompletedSpokenOnboarding(userKey = '') {
@@ -145,9 +201,11 @@ export function markSpokenOnboardingComplete(userKey = '') {
   try {
     localStorage.setItem(doneStorageKey(userKey), '1')
     localStorage.removeItem(pendingStorageKey(userKey))
+    localStorage.removeItem(PENDING_KEY)
   } catch {
     // ignore
   }
+  clearSpokenTourArm()
   window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 
@@ -156,9 +214,12 @@ export function clearSpokenOnboardingComplete(userKey = '') {
   try {
     localStorage.removeItem(doneStorageKey(userKey))
     localStorage.removeItem(DONE_KEY)
+    localStorage.removeItem(pendingStorageKey(userKey))
+    localStorage.removeItem(PENDING_KEY)
   } catch {
     // ignore
   }
+  clearSpokenTourArm()
   window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 

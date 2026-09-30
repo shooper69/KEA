@@ -15,7 +15,6 @@ import {
 } from '../architecture/voiceCatalog'
 import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
-import { UsagePanel } from '../components/companion/UsagePanel'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
 import { ProfileFace } from '../components/companion/ProfileFace'
 import { RussianScriptPopup } from '../components/companion/RussianScriptPopup'
@@ -44,13 +43,16 @@ import {
   sessionTimeoutLabel,
 } from '../data/keaSessionTimeout'
 import {
+  applyAudioRouteMic,
   listAudioInputs,
   savePreferredMicId,
-  syncAudioRouteFromPhone,
 } from '../architecture/keaMicrophone'
 import {
   audioRouteLabel,
+  probeAudioEnvironment,
+  readAudioRoute,
   type KeaAudioEnvironment,
+  type KeaAudioRoute,
 } from '../architecture/keaAudioRoute'
 import type { ChatKeep, LanguageCode, SkyTheme } from '../types'
 
@@ -148,7 +150,6 @@ export function SettingsPage() {
     | 'notifications'
     | 'profile'
     | 'security'
-    | 'usage'
   >('choices')
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -162,7 +163,9 @@ export function SettingsPage() {
       navigate('/performance', { replace: true })
       return
     }
-    if (next === 'usage') setTab('usage')
+    if (next === 'usage') {
+      navigate('/usage', { replace: true })
+    }
   }, [searchParams, navigate])
 
   const catalog = loadVoiceCatalog()
@@ -182,20 +185,43 @@ export function SettingsPage() {
   })
   const [audioEnvironment, setAudioEnvironment] =
     useState<KeaAudioEnvironment | null>(null)
+  const [audioRoute, setAudioRoute] = useState<KeaAudioRoute | null>(() =>
+    readAudioRoute(),
+  )
   const [audioRefreshBusy, setAudioRefreshBusy] = useState(false)
 
   async function refreshAudioEnvironment() {
     setAudioRefreshBusy(true)
     try {
-      const next = await syncAudioRouteFromPhone()
+      const next = await probeAudioEnvironment()
       setAudioEnvironment(next)
+      setAudioRoute(readAudioRoute() ?? next.route)
+    } catch {
+      setAudioEnvironment(null)
+    } finally {
+      setAudioRefreshBusy(false)
+    }
+  }
+
+  async function chooseAudioRoute(route: KeaAudioRoute) {
+    setAudioRefreshBusy(true)
+    try {
+      await applyAudioRouteMic(route)
+      setAudioRoute(route)
       try {
         setPreferredMicId(localStorage.getItem('kea-preferred-mic-id') || '')
       } catch {
         // ignore
       }
+      const next = await probeAudioEnvironment()
+      setAudioEnvironment(next)
+      setListeningSaved(
+        route === 'bluetooth'
+          ? 'Connected to Bluetooth when available.'
+          : 'Audio preference saved.',
+      )
     } catch {
-      setAudioEnvironment(null)
+      setListeningSaved('Could not apply that audio choice.')
     } finally {
       setAudioRefreshBusy(false)
     }
@@ -378,7 +404,11 @@ export function SettingsPage() {
   }
 
   return (
-    <main className="companion-screen settings-screen">
+    <main
+      className={`companion-screen settings-screen${
+        isAdmin && skyTheme === 'night' ? ' settings-screen--night' : ''
+      }`}
+    >
       <CloudAtmosphere presence="idle" />
       <header className="settings-screen__header">
         <CompanionNav />
@@ -404,7 +434,6 @@ export function SettingsPage() {
               ['notifications', 'Notifications'],
               ['profile', 'Profile'],
               ['security', 'Security'],
-              ['usage', 'Usage'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -423,7 +452,7 @@ export function SettingsPage() {
           <>
         {isAdmin ? (
         <section className="settings-card">
-          <h2>Night bird</h2>
+          <h2>Themes</h2>
           <p className="settings-note">
             Admin only while we test night viewing. Everyone else stays in the
             clouds.
@@ -451,21 +480,6 @@ export function SettingsPage() {
               <strong>Night bird</strong>
               Warm, dim dark for the phone after lights out. Less blue light,
               easier on tired eyes.
-            </span>
-          </label>
-          <label className="settings-choice">
-            <input
-              type="radio"
-              name="sky"
-              checked={skyTheme === 'weather'}
-              onChange={() => setProfile({ skyTheme: 'weather' as SkyTheme })}
-            />
-            <span>
-              <strong>Today the weather will be …</strong>
-              Sun bursting through, then rain, then a rainbow, at random.
-              <span className="settings-wip-note">
-                Work in progress.
-              </span>
             </span>
           </label>
         </section>
@@ -714,36 +728,70 @@ export function SettingsPage() {
           >
             Save
           </button>
-          <h3 className="settings-sound__heading">Phone audio</h3>
+          <h3 className="settings-sound__heading">Output</h3>
           <div className="welcome-field">
-            <span>What this phone reports</span>
+            <span>Where Kea should talk and listen</span>
+            <div className="audio-route-settings">
+              <button
+                type="button"
+                className={`kea-button${
+                  audioRoute === 'speaker' ? '' : ' kea-button--ghost'
+                }`}
+                disabled={audioRefreshBusy}
+                onClick={() => void chooseAudioRoute('speaker')}
+              >
+                Phone speaker
+              </button>
+              <button
+                type="button"
+                className={`kea-button${
+                  audioRoute === 'headphones' ? '' : ' kea-button--ghost'
+                }`}
+                disabled={audioRefreshBusy}
+                onClick={() => void chooseAudioRoute('headphones')}
+              >
+                Headphones
+              </button>
+              <button
+                type="button"
+                className={`kea-button${
+                  audioRoute === 'bluetooth' ? '' : ' kea-button--ghost'
+                }`}
+                disabled={audioRefreshBusy}
+                onClick={() => void chooseAudioRoute('bluetooth')}
+              >
+                {audioEnvironment?.bluetoothConnected
+                  ? 'Connect Bluetooth / car'
+                  : 'Connect Bluetooth'}
+              </button>
+            </div>
             <p className="audio-route-status__summary">
-              {audioEnvironment
-                ? audioEnvironment.summary
-                : audioRouteLabel(null)}
+              {audioRoute
+                ? audioRouteLabel(audioRoute)
+                : audioEnvironment
+                  ? audioEnvironment.summary
+                  : audioRouteLabel(null)}
             </p>
             {audioEnvironment ? (
               <p className="settings-note">{audioEnvironment.detail}</p>
             ) : (
               <p className="settings-note">
-                Open this tab to read Bluetooth, headphones, and the phone mic
-                from what the OS lists for Kea.
+                Pick speaker, headphones, or Bluetooth/car. Kea uses the matching
+                microphone when the phone lists one.
               </p>
             )}
-            {audioEnvironment && audioEnvironment.devices.some((d) => d.label) ? (
-              <ul className="audio-route__devices audio-route__devices--settings">
-                {audioEnvironment.devices
-                  .filter((item) => item.label.trim())
-                  .slice(0, 6)
-                  .map((item) => (
-                    <li key={`${item.kind}-${item.deviceId}`}>
-                      <span className="audio-route__device-kind">
-                        {item.kind === 'output' ? 'Out' : 'In'}
-                      </span>
-                      <span>{item.label}</span>
-                    </li>
-                  ))}
-              </ul>
+            {audioEnvironment?.bluetoothConnected ? (
+              <p className="settings-note">
+                Bluetooth audio is listed on this phone
+                {audioEnvironment.devices.find((d) => d.role === 'bluetooth' && d.label)
+                  ? ` · ${
+                      audioEnvironment.devices.find(
+                        (d) => d.role === 'bluetooth' && d.label,
+                      )?.label
+                    }`
+                  : ''}
+                . Tap Connect Bluetooth / car above to use it.
+              </p>
             ) : null}
             <button
               type="button"
@@ -751,7 +799,7 @@ export function SettingsPage() {
               disabled={audioRefreshBusy}
               onClick={() => void refreshAudioEnvironment()}
             >
-              {audioRefreshBusy ? 'Reading…' : 'Refresh'}
+              {audioRefreshBusy ? 'Reading…' : 'Refresh devices'}
             </button>
           </div>
         </section>
@@ -768,7 +816,6 @@ export function SettingsPage() {
             onClose={() => setMicSheetOpen(false)}
           />
         ) : null}
-        {tab === 'usage' ? <UsagePanel isAdmin={isAdmin} /> : null}
         {tab === 'profile' ? (
         <section className="settings-card">
           <h2>Profile</h2>

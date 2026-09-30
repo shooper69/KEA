@@ -38,6 +38,7 @@ import {
   shouldShowSubLeaveOffer,
 } from '../data/keaOffers'
 import {
+  clearStaleSpokenTourPending,
   hasCompletedSpokenOnboarding,
   isSpokenTourPending,
   ONBOARDING_CHANGED,
@@ -151,6 +152,15 @@ export function ConversationPage() {
     return () => window.removeEventListener(ONBOARDING_CHANGED, bump)
   }, [])
 
+  useEffect(() => {
+    if (reviewOnboarding) return
+    const cleared = clearStaleSpokenTourPending(userKey, {
+      hasTalked: hasUserTalked(),
+      completed: hasCompletedSpokenOnboarding(userKey),
+    })
+    if (cleared) setOnboardingRevision((n) => n + 1)
+  }, [userKey, reviewOnboarding])
+
   const spokenTour = shouldShowSpokenTour({
     isAdmin,
     profileKnown,
@@ -158,7 +168,7 @@ export function ConversationPage() {
     hasTalked: hasUserTalked(),
     completed: onboardingRevision >= 0 && hasCompletedSpokenOnboarding(userKey),
     awaitingTour: isSpokenTourPending(userKey),
-    busy: Boolean(block) || audioRouteOpen || quizOpen,
+    busy: Boolean(block) || audioRouteOpen,
   })
 
   useHoldKeaListening(
@@ -253,6 +263,7 @@ export function ConversationPage() {
 
   // On login / Talk ready: one short welcome in the learning language.
   // A returning name is already on this device, so do not wait for the cloud profile.
+  // Stay quiet while the audio check popup is on screen.
   useEffect(() => {
     const returning = Boolean(firstName.trim()) || hasUserTalked()
     if (
@@ -260,6 +271,7 @@ export function ConversationPage() {
       block ||
       spokenTour ||
       quizOpen ||
+      audioRouteOpen ||
       (!profileKnown && !returning)
     ) {
       return
@@ -296,10 +308,21 @@ export function ConversationPage() {
     textMode,
     restartListen,
     quizOpen,
+    audioRouteOpen,
     profileKnown,
     target,
     firstName,
   ])
+
+  // If the audio check appears, cut any welcome speech immediately.
+  useEffect(() => {
+    if (!audioRouteOpen) return
+    voice.stopSpeech()
+    // Let the welcome run again after they finish the audio check.
+    sessionGreetedRef.current = ''
+    setOpeningDone(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioRouteOpen])
 
   const wake = useKeaWakeWord({
     enabled:
@@ -421,21 +444,20 @@ export function ConversationPage() {
             <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
               <img src={KEA_FLY_SRC} alt="" />
             </span>
+            <p className="onboarding-caption__title">How to use Kea</p>
             {onboardLine ? (
               <p className="onboarding-caption__line">{onboardLine}</p>
             ) : null}
-            {onboard.canAdvance ? (
-              <div className="onboarding-caption__actions">
-                <button
-                  type="button"
-                  className="kea-button onboarding-caption__next"
-                  onClick={onboard.advance}
-                >
-                  Next
-                </button>
-                <p className="onboarding-caption__hint">Or say yes</p>
-              </div>
-            ) : null}
+            <div className="onboarding-caption__actions">
+              <button
+                type="button"
+                className="kea-button onboarding-caption__next"
+                onClick={onboard.advance}
+              >
+                Next
+              </button>
+              <p className="onboarding-caption__hint">Or say yes</p>
+            </div>
           </div>
         ) : (
           <RisingWords
@@ -458,13 +480,13 @@ export function ConversationPage() {
             onSend={sendTyped}
           />
         </div>
-      ) : !quizOpen && !textMode ? (
+      ) : !quizOpen && !spokenTour && !textMode ? (
       <VoiceMic
-        live={live || spokenTour}
+        live={live}
         status={micStatus}
-        wakePhrase={wake.listens && !audioRouteOpen && !spokenTour}
+        wakePhrase={wake.listens && !audioRouteOpen}
         onToggle={() => {
-          if (audioRouteOpen || spokenTour || quizOpen) return
+          if (audioRouteOpen || quizOpen) return
           const now = Date.now()
           if (now - lastTapAt.current < 450) return
           lastTapAt.current = now
