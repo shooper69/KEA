@@ -9,17 +9,19 @@ export function shouldShowLearnerQuiz(options: {
   profileKnown: boolean
   hasAnswers: boolean
   hasTalked: boolean
+  dismissed?: boolean
 }) {
   if (options.review) return true
   if (options.isAdmin) return false
+  if (options.dismissed) return false
   if (!options.profileKnown || options.hasAnswers || options.hasTalked) return false
   return true
 }
 
 /**
  * Spoken product tour (“How to use Kea”).
- * Only after stage 1 questionnaire finishes (pending flag), including admin
- * Account → Onboarding. A normal returning login must go straight to chat.
+ * Only in the same browser visit that just finished the questionnaire
+ * (pending + session arm). A later login or Reset must go straight to chat.
  */
 export function shouldShowSpokenTour(options: {
   isAdmin: boolean
@@ -30,7 +32,10 @@ export function shouldShowSpokenTour(options: {
   busy: boolean
   /** Set when the get-to-know-you questionnaire has just been saved. */
   awaitingTour?: boolean
+  /** True only in the visit that armed the tour after stage 1. */
+  tourArmed?: boolean
 }) {
   if (options.busy || !options.profileKnown) return false
-  return Boolean(options.awaitingTour)
+  if (!options.awaitingTour) return false
+  return Boolean(options.tourArmed)
 }

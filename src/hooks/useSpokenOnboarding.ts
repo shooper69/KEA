@@ -144,11 +144,23 @@ export function useSpokenOnboarding({
     const speakLine = (text: string, lang: string) =>
       new Promise<void>((resolve) => {
         let settled = false
+        let poll = 0
+        let safety = 0
         const done = () => {
           if (settled) return
           settled = true
+          if (poll) window.clearInterval(poll)
+          if (safety) window.clearTimeout(safety)
           resolve()
         }
+        // Next / stop bumps speak generation so onend may never fire — poll + timeout.
+        poll = window.setInterval(() => {
+          if (cancelledRef.current || advanceNowRef.current) done()
+        }, 80)
+        safety = window.setTimeout(
+          done,
+          Math.min(28_000, 2_800 + text.length * 90),
+        )
         try {
           void speakKeaLine(text, {
             lang,

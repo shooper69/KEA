@@ -16,6 +16,7 @@ import {
 import { speakManagedVoice } from '../services/keaSpeak'
 import { getSupabase } from '../lib/supabase'
 import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
+import { KeaLanguageField } from '../components/companion/KeaLanguageField'
 import { ProfileFace } from '../components/companion/ProfileFace'
 import { RussianScriptPopup } from '../components/companion/RussianScriptPopup'
 import {
@@ -558,60 +559,36 @@ export function SettingsPage() {
               Choose the language you use, and the language Kea replies in.
               They should be different.
             </p>
-            <label className="welcome-field">
-              <span>Your language</span>
-              <select
-                value={draftNative ?? ''}
-                onChange={(event) => {
-                  const next = event.target.value as LanguageCode
-                  if (!next) return
-                  setDraftNative(next)
-                  setLanguagesSaved('')
-                  if (draftTarget === next) {
-                    setDraftTarget(
-                      SUPPORTED_LANGUAGES.find((item) => item.code !== next)
-                        ?.code ?? null,
-                    )
-                  }
-                }}
-              >
-                <option value="" disabled>
-                  Choose your language
-                </option>
-                {SUPPORTED_LANGUAGES.map((language) => (
-                  <option key={language.code} value={language.code}>
-                    {language.name} · {language.nativeName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="welcome-field">
-              <span>Kea&apos;s reply language</span>
-              <select
-                value={draftTarget ?? ''}
-                onChange={(event) => {
-                  const next = event.target.value as LanguageCode
-                  if (!next) return
-                  setDraftTarget(next)
-                  setLanguagesSaved('')
-                  if (draftNative === next) {
-                    setDraftNative(
-                      SUPPORTED_LANGUAGES.find((item) => item.code !== next)
-                        ?.code ?? null,
-                    )
-                  }
-                }}
-              >
-                <option value="" disabled>
-                  Choose Kea&apos;s reply language
-                </option>
-                {SUPPORTED_LANGUAGES.map((language) => (
-                  <option key={`reply-${language.code}`} value={language.code}>
-                    {language.name} · {language.nativeName}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <KeaLanguageField
+              label="Your language"
+              value={draftNative ?? ''}
+              placeholder="Choose your language"
+              onChange={(next) => {
+                setDraftNative(next)
+                setLanguagesSaved('')
+                if (draftTarget === next) {
+                  setDraftTarget(
+                    SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                      ?.code ?? null,
+                  )
+                }
+              }}
+            />
+            <KeaLanguageField
+              label="Kea's reply language"
+              value={draftTarget ?? ''}
+              placeholder="Choose Kea's reply language"
+              onChange={(next) => {
+                setDraftTarget(next)
+                setLanguagesSaved('')
+                if (draftNative === next) {
+                  setDraftNative(
+                    SUPPORTED_LANGUAGES.find((item) => item.code !== next)
+                      ?.code ?? null,
+                  )
+                }
+              }}
+            />
             {languagesSaved ? <p className="settings-note">{languagesSaved}</p> : null}
             <button
               type="button"
@@ -1150,6 +1127,16 @@ export function SettingsPage() {
         <DeleteAccountPanel />
           </>
         ) : null}
+        <section className="settings-card">
+          <h2>Help</h2>
+          <p className="settings-note">
+            Questions about your account, subscription, or Kea itself:{' '}
+            <Link className="settings-usage-link" to="/support">
+              Customer Support
+            </Link>
+            .
+          </p>
+        </section>
       </div>
     </main>
   )

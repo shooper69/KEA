@@ -15,6 +15,7 @@ import {
   type RussianScript,
 } from '../../architecture/russianScript'
 import { LanguageFlag } from './LanguageFlag'
+import { KeaLanguageField } from './KeaLanguageField'
 import { RussianScriptPopup } from './RussianScriptPopup'
 
 /**
@@ -170,15 +171,15 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
                     Close
                   </button>
                 </div>
-                <LanguageChoices
+                <KeaLanguageField
                   label="I speak"
-                  selected={draftNative}
-                  onPick={setNative}
+                  value={draftNative}
+                  onChange={setNative}
                 />
-                <LanguageChoices
+                <KeaLanguageField
                   label="I am learning"
-                  selected={draftLearning}
-                  onPick={setLearning}
+                  value={draftLearning}
+                  onChange={setLearning}
                 />
               </div>
             </>,
@@ -186,42 +187,6 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
           )
         : null}
       {scriptOpen ? <RussianScriptPopup onChoose={chooseScript} /> : null}
-    </div>
-  )
-}
-
-function LanguageChoices({
-  label,
-  selected,
-  onPick,
-}: {
-  label: string
-  selected: LanguageCode
-  onPick: (code: LanguageCode) => void
-}) {
-  return (
-    <div className="language-switcher__field">
-      <span>{label}</span>
-      <div className="language-switcher__list" role="listbox" aria-label={label}>
-        {SUPPORTED_LANGUAGES.map((language) => {
-          const chosen = language.code === selected
-          return (
-            <button
-              key={`${label}-${language.code}`}
-              type="button"
-              role="option"
-              aria-selected={chosen}
-              className={`language-switcher__option${chosen ? ' is-chosen' : ''}`}
-              onClick={() => onPick(language.code)}
-            >
-              <LanguageFlag code={language.code} />
-              <span>
-                {language.name} · {language.nativeName}
-              </span>
-            </button>
-          )
-        })}
-      </div>
     </div>
   )
 }

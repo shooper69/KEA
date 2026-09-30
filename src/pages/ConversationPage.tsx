@@ -39,7 +39,10 @@ import {
 } from '../data/keaOffers'
 import {
   clearStaleSpokenTourPending,
+  exitOnboardingToChat,
   hasCompletedSpokenOnboarding,
+  hasDismissedLearnerQuiz,
+  isSpokenTourArmed,
   isSpokenTourPending,
   ONBOARDING_CHANGED,
 } from '../data/keaOnboarding'
@@ -51,7 +54,7 @@ import { getAnswerSilenceSeconds } from '../data/keaAnswerSilence'
 import { setScreenWakeLock } from '../architecture/keaScreenWakeLock'
 import { useHoldKeaListening } from '../architecture/keaUiHold'
 import { getSpeakVoice } from '../architecture/voiceCatalog'
-import { prefetchManagedVoiceAudio } from '../services/keaSpeak'
+import { prefetchManagedVoiceAudio, stopKeaSpeech } from '../services/keaSpeak'
 import type { VoicePresenceState } from '../types'
 
 const TEXT_MODE_KEY = 'kea-text-mode'
@@ -118,6 +121,7 @@ export function ConversationPage() {
     profileKnown,
     hasAnswers: learnerAnswers != null,
     hasTalked: hasUserTalked(),
+    dismissed: hasDismissedLearnerQuiz(userKey),
   })
   const [onboardingRevision, setOnboardingRevision] = useState(0)
   const [onboardLine, setOnboardLine] = useState('')
@@ -168,6 +172,7 @@ export function ConversationPage() {
     hasTalked: hasUserTalked(),
     completed: onboardingRevision >= 0 && hasCompletedSpokenOnboarding(userKey),
     awaitingTour: isSpokenTourPending(userKey),
+    tourArmed: isSpokenTourArmed(),
     busy: Boolean(block) || audioRouteOpen,
   })
 
@@ -470,9 +475,38 @@ export function ConversationPage() {
                 setSearchParams(next, { replace: true })
               }
             }}
+            onExit={() => {
+              if (searchParams.get('onboarding') === '1') {
+                const next = new URLSearchParams(searchParams)
+                next.delete('onboarding')
+                setSearchParams(next, { replace: true })
+              }
+              setOnboardingRevision((n) => n + 1)
+              sessionGreetedRef.current = ''
+              setOpeningDone(false)
+            }}
           />
         ) : spokenTour ? (
           <div className="onboarding-caption" role="status" aria-live="polite">
+            <button
+              type="button"
+              className="onboarding-caption__exit"
+              aria-label="Exit onboarding and go to chat"
+              onClick={() => {
+                try {
+                  stopKeaSpeech()
+                } catch {
+                  // ignore
+                }
+                exitOnboardingToChat(userKey)
+                setOnboardLine('')
+                setOnboardingRevision((n) => n + 1)
+                sessionGreetedRef.current = ''
+                setOpeningDone(false)
+              }}
+            >
+              ×
+            </button>
             <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
               <img src={KEA_FLY_SRC} alt="" />
             </span>

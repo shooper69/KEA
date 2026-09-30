@@ -176,6 +176,15 @@ function playBlobUrl(
     if (currentAudio === audio) currentAudio = null
     if (gen === speakGeneration) options.onerror?.()
   }
+  audio.onpause = () => {
+    // stopKeaSpeech() pauses without ending — still unblock awaiters.
+    if (gen !== speakGeneration) {
+      clearAudioProgress()
+      if (revoke) URL.revokeObjectURL(url)
+      if (currentAudio === audio) currentAudio = null
+      options.onend?.()
+    }
+  }
   return audio.play().catch(() => {
     clearAudioProgress()
     if (revoke) URL.revokeObjectURL(url)
@@ -221,8 +230,17 @@ export async function speakManagedVoice(
         await playBlobUrl(options.prefetchedUrl, text, gen, options, true)
         return
       }
-      const blob = await loadManagedVoiceAudio(voice, text)
-      if (gen !== speakGeneration) return
+      const blob = await Promise.race([
+        loadManagedVoiceAudio(voice, text),
+        new Promise<Blob | null>((resolve) => {
+          window.setTimeout(() => resolve(null), 16_000)
+        }),
+      ])
+      if (gen !== speakGeneration) {
+        // stopKeaSpeech cancelled this line — treat as finished so callers unblock.
+        options.onend?.()
+        return
+      }
       if (!blob) {
         bail()
         return
@@ -230,6 +248,7 @@ export async function speakManagedVoice(
       const url = URL.createObjectURL(blob)
       if (gen !== speakGeneration) {
         URL.revokeObjectURL(url)
+        options.onend?.()
         return
       }
       await playBlobUrl(url, text, gen, options, true)

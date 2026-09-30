@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getLanguage, SUPPORTED_LANGUAGES } from '../../config/languages'
+import { getLanguage } from '../../config/languages'
 import { KEA_FLY_SRC } from '../../data/keaAbout'
 import {
   AGE_OPTIONS,
@@ -12,13 +12,15 @@ import {
   type WeeklyTimeId,
 } from '../../data/keaLearnerProfile'
 import { useSession } from '../../context/SessionContext'
-import { markSpokenTourPending } from '../../data/keaOnboarding'
+import { markSpokenTourPending, exitOnboardingToChat } from '../../data/keaOnboarding'
 import { speakKeaLine, stopKeaSpeech } from '../../services/keaSpeak'
 import type { LanguageCode } from '../../types'
+import { KeaLanguageField } from './KeaLanguageField'
 
 interface LearnerQuestionnaireProps {
   targetLanguage: LanguageCode
   onDone?: () => void
+  onExit?: () => void
 }
 
 type Step = 'intro' | 0 | 1 | 2 | 3 | 4 | 5
@@ -26,6 +28,7 @@ type Step = 'intro' | 0 | 1 | 2 | 3 | 4 | 5
 export function LearnerQuestionnaire({
   targetLanguage,
   onDone,
+  onExit,
 }: LearnerQuestionnaireProps) {
   const { firstName, email, nativeLanguage, languageCode, setProfile, saveLearnerProfile } =
     useSession()
@@ -149,6 +152,19 @@ export function LearnerQuestionnaire({
 
   return (
     <div className="onboarding-caption learner-quiz-spoken" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        className="onboarding-caption__exit"
+        aria-label="Exit onboarding and go to chat"
+        onClick={() => {
+          stopKeaSpeech()
+          const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
+          exitOnboardingToChat(userKey)
+          onExit?.()
+        }}
+      >
+        ×
+      </button>
       <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
         <img src={KEA_FLY_SRC} alt="" />
       </span>
@@ -157,38 +173,20 @@ export function LearnerQuestionnaire({
 
       {step === 0 ? (
         <div className="learner-quiz-spoken__langs">
-          <label>
-            <span>I speak</span>
-            <select
-              value={spoken}
-              onChange={(event) => setSpoken(event.target.value as LanguageCode)}
-            >
-              <option value="" disabled>
-                Choose language
-              </option>
-              {SUPPORTED_LANGUAGES.map((language) => (
-                <option key={`spoken-${language.code}`} value={language.code}>
-                  {language.name} · {language.nativeName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>I want to learn</span>
-            <select
-              value={learning}
-              onChange={(event) => setLearning(event.target.value as LanguageCode)}
-            >
-              <option value="" disabled>
-                Choose language
-              </option>
-              {SUPPORTED_LANGUAGES.map((language) => (
-                <option key={`learn-${language.code}`} value={language.code}>
-                  {language.name} · {language.nativeName}
-                </option>
-              ))}
-            </select>
-          </label>
+          <KeaLanguageField
+            tone="onboarding"
+            label="I speak"
+            value={spoken}
+            placeholder="Choose language"
+            onChange={setSpoken}
+          />
+          <KeaLanguageField
+            tone="onboarding"
+            label="I want to learn"
+            value={learning}
+            placeholder="Choose language"
+            onChange={setLearning}
+          />
         </div>
       ) : null}
 

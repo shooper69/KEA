@@ -74,6 +74,7 @@ export default function App() {
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/cookie-policy" element={<CookiePolicyPage />} />
           <Route path="/delete-account" element={<DeleteAccountPage />} />
+          <Route path="/support" element={<SupportPage />} />
           <Route
             path="/home"
             element={
@@ -145,14 +146,6 @@ export default function App() {
             element={
               <RequireOnboard>
                 <UsagePage />
-              </RequireOnboard>
-            }
-          />
-          <Route
-            path="/support"
-            element={
-              <RequireOnboard>
-                <SupportPage />
               </RequireOnboard>
             }
           />

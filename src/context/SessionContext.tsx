@@ -30,6 +30,9 @@ import {
   normalizeSessionTimeoutMinutes,
   SESSION_TIMEOUT_NEVER,
 } from '../data/keaSessionTimeout'
+import {
+  clearSpokenTourPending,
+} from '../data/keaOnboarding'
 import { getSupabase, isKeaCloudConfigured } from '../lib/supabase'
 import {
   fetchCloudProfile,
@@ -523,6 +526,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     window.clearTimeout(saveTimer.current)
+    const leavingKey =
+      (profile.email || '').trim().toLowerCase() ||
+      (profile.firstName || '').trim().toLowerCase()
+    clearSpokenTourPending(leavingKey)
     await getSupabase()?.auth.signOut()
     closeAdminSession()
     setAdminUnlocked(false)

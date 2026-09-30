@@ -7,6 +7,8 @@ import {
   getTalkTrendPercent,
   TALK_PERFORMANCE_EVENT,
 } from '../../architecture/keaTalkPerformance'
+import { dismissSpokenTour } from '../../data/keaOnboarding'
+import { useSession } from '../../context/SessionContext'
 import { KeaMark } from './KeaMark'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { UserMenu } from './UserMenu'
@@ -109,6 +111,7 @@ export function CompanionNav({
   textMode = false,
   onToggleTextMode,
 }: CompanionNavProps) {
+  const { email, firstName } = useSession()
   const [clearOpen, setClearOpen] = useState(false)
   const [trend, setTrend] = useState(() => getTalkTrendPercent())
   useHoldKeaListening(clearOpen)
@@ -126,6 +129,8 @@ export function CompanionNav({
 
   function confirmClear() {
     setClearOpen(false)
+    const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
+    dismissSpokenTour(userKey)
     requestClearTalkAndSoftReset()
   }
 
@@ -207,7 +212,8 @@ export function CompanionNav({
         >
           <ClearChatIcon />
           <span className="corner-tip" role="tooltip">
-            Clears the screen, says welcome, and Kea starts listening. You stay signed in.
+            Clears the screen, skips How to use Kea if stuck, says welcome, and
+            Kea starts listening. You stay signed in.
           </span>
         </a>
       </div>
@@ -227,7 +233,8 @@ export function CompanionNav({
               Clear this chat and reset Kea?
             </p>
             <p className="kea-confirm__note">
-              Clears the screen, says welcome, and Kea starts listening. You stay signed in.
+              Clears the screen, skips How to use Kea if it is open, says
+              welcome, and Kea starts listening. You stay signed in.
             </p>
             <div className="kea-confirm__actions">
               <button

@@ -107,6 +107,7 @@ export function resetOnboardingSteps() {
 
 const PENDING_KEY = 'kea-spoken-tour-pending'
 const ARMED_KEY = 'kea-spoken-tour-armed'
+const QUIZ_DISMISSED_KEY = 'kea-learner-quiz-dismissed'
 
 function doneStorageKey(userKey = '') {
   return userKey ? `${DONE_KEY}:${userKey}` : DONE_KEY
@@ -174,19 +175,76 @@ export function clearSpokenTourPending(userKey = '') {
 }
 
 /**
- * Drop leftover stage-2 flags from an abandoned tour so a normal login
- * goes straight to chat (after audio route), not How to use Kea.
+ * Drop leftover stage-2 flags so a later login / reload goes to chat,
+ * not an abandoned How to use Kea screen.
+ * Keeps the tour only while this visit is still armed after stage 1.
  */
 export function clearStaleSpokenTourPending(
   userKey: string,
-  options: { hasTalked: boolean; completed: boolean },
+  _options?: { hasTalked: boolean; completed: boolean },
 ) {
   if (!isSpokenTourPending(userKey)) return false
-  // Still in the same visit that just finished the questionnaire.
   if (isSpokenTourArmed()) return false
-  if (!options.hasTalked && !options.completed) return false
   clearSpokenTourPending(userKey)
   return true
+}
+
+function quizDismissedStorageKey(userKey = '') {
+  return userKey ? `${QUIZ_DISMISSED_KEY}:${userKey}` : QUIZ_DISMISSED_KEY
+}
+
+export function hasDismissedLearnerQuiz(userKey = '') {
+  try {
+    return localStorage.getItem(quizDismissedStorageKey(userKey)) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Skip get-to-know-you on this device (exit X). */
+export function dismissLearnerQuiz(userKey = '') {
+  try {
+    localStorage.setItem(quizDismissedStorageKey(userKey), '1')
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event(ONBOARDING_CHANGED))
+}
+
+/**
+ * Exit X on any onboarding step: leave Stage 1 / Stage 2 and open chat.
+ */
+export function exitOnboardingToChat(userKey = '') {
+  dismissLearnerQuiz(userKey)
+  markSpokenOnboardingComplete(userKey)
+}
+
+/** Skip or abandon How to use Kea and treat it as done on this device. */
+export function dismissSpokenTour(userKey = '') {
+  markSpokenOnboardingComplete(userKey)
+}
+
+/**
+ * Wipe every pending stage-2 flag on this device (Reset / language restart).
+ * Marks the tour complete so chat opens instead of How to use Kea.
+ */
+export function abandonSpokenTourEverywhere() {
+  clearSpokenTourArm()
+  try {
+    const remove: string[] = []
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i)
+      if (!key) continue
+      if (key === PENDING_KEY || key.startsWith(`${PENDING_KEY}:`)) {
+        remove.push(key)
+      }
+    }
+    for (const key of remove) localStorage.removeItem(key)
+    localStorage.setItem(DONE_KEY, '1')
+  } catch {
+    // ignore
+  }
+  window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 
 export function hasCompletedSpokenOnboarding(userKey = '') {
@@ -216,6 +274,8 @@ export function clearSpokenOnboardingComplete(userKey = '') {
     localStorage.removeItem(DONE_KEY)
     localStorage.removeItem(pendingStorageKey(userKey))
     localStorage.removeItem(PENDING_KEY)
+    localStorage.removeItem(quizDismissedStorageKey(userKey))
+    localStorage.removeItem(QUIZ_DISMISSED_KEY)
   } catch {
     // ignore
   }

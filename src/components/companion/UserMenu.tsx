@@ -11,7 +11,8 @@ export function UserMenu() {
     useSession()
   const navigate = useNavigate()
   const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
-  const { installed, busy, promptInstall, manualInstallHint } = usePwaInstall()
+  const { installed, busy, canPrompt, promptInstall, manualInstallHint } =
+    usePwaInstall()
   const [comingSoon, setComingSoon] = useState<string | null>(null)
   const [installAsk, setInstallAsk] = useState(false)
   const [installNote, setInstallNote] = useState('')
@@ -40,14 +41,25 @@ export function UserMenu() {
       setInstallNote('Kea is already installed on this phone.')
       return
     }
+    // No browser install prompt available yet — show how to add manually.
+    if (!canPrompt) {
+      setInstallNote(manualInstallHint())
+      return
+    }
     setInstallAsk(true)
   }
 
   async function confirmInstallApp() {
-    setInstallAsk(false)
+    // Keep the confirm dialog open until prompt() has started — Chrome needs
+    // prompt() in the same user gesture as this tap.
     const result = await promptInstall()
+    setInstallAsk(false)
     if (result === 'manual') {
       setInstallNote(manualInstallHint())
+      return
+    }
+    if (result === 'accepted') {
+      setInstallNote('Kea is on your home screen. Open it from the app icon.')
     }
   }
 
@@ -216,7 +228,7 @@ export function UserMenu() {
                 disabled={busy}
                 onClick={() => void confirmInstallApp()}
               >
-                Install
+                {busy ? 'Installing…' : 'Install'}
               </button>
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
 import type { LanguageCode, TranscriptMessage } from '../types'
 import { withoutRejoinWelcomes } from './keaStartSpeech'
 import { looksLikeSystemText } from './whisperText'
+import { abandonSpokenTourEverywhere } from '../data/keaOnboarding'
 
 const TALK_KEY = 'kea-talk-transcript-v1'
 /**
@@ -334,6 +335,7 @@ export function requestClearTalkAndSoftReset() {
   } catch {
     // ignore
   }
+  abandonSpokenTourEverywhere()
   clearTalkTranscript()
   try {
     sessionStorage.setItem(RESTART_LISTEN_KEY, '1')
