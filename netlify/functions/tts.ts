@@ -1,3 +1,12 @@
+import { isPublicTtsAllowed } from '../../src/server/keaPublicSpendGate'
+import {
+  allowAuthenticatedTts,
+  allowPublicSpend,
+  clientIpFromHeaders,
+  MAX_AUTH_TTS_CHARS,
+} from '../../src/server/keaPublicRateLimit'
+import { requireKeaUser } from '../../src/server/keaUserAuth'
+
 const OPENAI_VOICES = new Set([
   'alloy',
   'ash',
@@ -53,6 +62,7 @@ type TtsEvent = {
   httpMethod: string
   body: string | null
   isBase64Encoded?: boolean
+  headers?: Record<string, string | undefined>
 }
 
 export async function handler(event: TtsEvent) {
@@ -86,6 +96,33 @@ export async function handler(event: TtsEvent) {
     return {
       statusCode: 400,
       body: JSON.stringify({ error: 'Need an OpenAI voice and some text.' }),
+    }
+  }
+
+  const ip = clientIpFromHeaders(event.headers)
+  if (isPublicTtsAllowed(text)) {
+    if (!allowPublicSpend(`tts-public:${ip}`, 20)) {
+      return {
+        statusCode: 429,
+        body: JSON.stringify({ error: 'Too many requests. Try again shortly.' }),
+      }
+    }
+  } else {
+    if (text.length > MAX_AUTH_TTS_CHARS) {
+      return {
+        statusCode: 413,
+        body: JSON.stringify({ error: 'That line is too long to speak.' }),
+      }
+    }
+    const auth = await requireKeaUser(event.headers)
+    if (!auth.ok) {
+      return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+    }
+    if (!allowAuthenticatedTts(auth.userId, ip)) {
+      return {
+        statusCode: 429,
+        body: JSON.stringify({ error: 'Too many requests. Try again shortly.' }),
+      }
     }
   }
 

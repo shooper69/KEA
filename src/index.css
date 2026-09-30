@@ -160,6 +160,35 @@ a.kea-button {
   box-shadow: none;
 }
 
+.kea-button--danger {
+  background: linear-gradient(180deg, #d94a4a 0%, #b02020 100%);
+  color: #fff8f0;
+  box-shadow:
+    inset 0 -1px 0 rgba(60, 8, 8, 0.28),
+    0 2px 0 #6e1010,
+    0 4px 8px rgba(80, 12, 12, 0.18);
+}
+
+.kea-button--danger:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 0 #6e1010,
+    0 2px 4px rgba(80, 12, 12, 0.16);
+}
+
+.delete-account__list {
+  margin: 0.35rem 0 1rem;
+  padding-left: 1.15rem;
+}
+
+.delete-account__list li {
+  margin: 0.25rem 0;
+}
+
+.delete-account__error {
+  color: #c62828;
+}
+
 .kea-button:disabled {
   opacity: 0.38;
   cursor: not-allowed;
@@ -2824,49 +2853,112 @@ body:has(.welcome-screen),
   width: min(40rem, calc(100% - 1.5rem));
   max-height: 100%;
   margin: 0 auto;
-  padding: max(1rem, env(safe-area-inset-top)) 0.25rem
-    max(1.5rem, env(safe-area-inset-bottom));
+  padding: max(1rem, env(safe-area-inset-top)) 0.75rem
+    max(3.5rem, calc(env(safe-area-inset-bottom) + 2.5rem));
   overflow-y: auto;
   overscroll-behavior: contain;
+  text-align: center;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.legal-screen__content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.legal-screen .settings-title-row {
+  justify-content: center;
+  position: relative;
+}
+
+.legal-screen .settings-title-row h1 {
+  width: 100%;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+}
+
+.legal-screen .settings-close {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #fff;
+}
+
+.legal-screen .legal-doc.settings-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0.5rem 0.35rem 2rem;
+  text-align: center;
+  color: #fff;
 }
 
 .legal-doc h2 {
-  margin: 1.1rem 0 0.4rem;
-  font-size: 1rem;
+  margin: 1.25rem 0 0.45rem;
+  font-size: 1.05rem;
+  color: #fff;
+  text-align: center;
 }
 
 .legal-doc p,
-.legal-doc li {
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: var(--ink-muted);
+.legal-doc li,
+.legal-doc strong {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: #fff;
+  text-align: center;
 }
 
 .legal-doc ul {
-  margin: 0.35rem 0 0.75rem;
-  padding-left: 1.15rem;
+  margin: 0.35rem auto 0.85rem;
+  padding-left: 0;
+  list-style-position: inside;
+  max-width: 36rem;
+  text-align: center;
 }
 
 .legal-doc a {
-  color: var(--ink);
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .legal-doc__updated {
-  margin: 0 0 0.85rem;
-  font-size: 0.78rem;
-  color: var(--ink-muted);
+  margin: 0 0 0.95rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
 }
 
 .cookie-policy__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
-  margin: 0.75rem 0 1rem;
+  margin: 0.75rem auto 1.25rem;
+  justify-content: center;
 }
 
 .legal-screen .site-footer {
-  margin-top: 1.25rem;
-  padding-bottom: 0.5rem;
+  margin-top: 1.5rem;
+  padding-bottom: 1.25rem;
+  color: #fff;
+}
+
+.legal-screen .site-footer--plain .site-footer__nav a,
+.legal-screen .site-footer--plain .site-footer__copy {
+  color: #fff;
+}
+
+.legal-screen .site-footer--plain .site-footer__nav a:hover,
+.legal-screen .site-footer--plain .site-footer__nav a:focus-visible {
+  color: #fff;
+  opacity: 0.85;
 }
 
 .store-badge {

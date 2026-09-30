@@ -5,6 +5,14 @@ import {
   DEFAULT_AVERAGE_REPLY_WORDS,
   maxTokensForAverageWords,
 } from '../data/keaSpeech.ts'
+import { isPublicPlainTranslateAllowed } from './keaPublicSpendGate.ts'
+import {
+  allowAuthenticatedChat,
+  allowPublicSpend,
+  chatPayloadTooLarge,
+  clientIpFromHeaders,
+} from './keaPublicRateLimit.ts'
+import { requireKeaUser } from './keaUserAuth.ts'
 import { buildKeaSystemPrompt } from './keaPrompt.ts'
 
 interface ChatTurn {
@@ -37,6 +45,14 @@ function readBody(req: IncomingMessage): Promise<string> {
   })
 }
 
+function reqHeaders(req: IncomingMessage): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(req.headers)) {
+    out[key] = Array.isArray(value) ? value[0] : value
+  }
+  return out
+}
+
 export async function handleKeaChat(
   req: IncomingMessage,
   res: ServerResponse,
@@ -67,6 +83,35 @@ export async function handleKeaChat(
   } catch {
     res.statusCode = 400
     res.end(JSON.stringify({ error: 'Invalid JSON' }))
+    return
+  }
+
+  const headers = reqHeaders(req)
+  const ip = clientIpFromHeaders(headers)
+  if (isPublicPlainTranslateAllowed(payload)) {
+    if (!allowPublicSpend(`chat-public:${ip}`, 30)) {
+      res.statusCode = 429
+      res.end(JSON.stringify({ error: 'Too many requests. Try again shortly.' }))
+      return
+    }
+  } else {
+    const auth = await requireKeaUser(headers)
+    if (!auth.ok) {
+      res.statusCode = auth.status
+      res.end(JSON.stringify({ error: auth.error }))
+      return
+    }
+    if (!allowAuthenticatedChat(auth.userId, ip)) {
+      res.statusCode = 429
+      res.end(JSON.stringify({ error: 'Too many requests. Try again shortly.' }))
+      return
+    }
+  }
+
+  const oversized = chatPayloadTooLarge(payload)
+  if (oversized) {
+    res.statusCode = 413
+    res.end(JSON.stringify({ error: oversized }))
     return
   }
 

@@ -15,7 +15,7 @@ Recommended order:
 2. **Auth / Supabase RLS / API gates** (real protection)
 3. **Thin Playwright smoke** on critical paths (welcome → login → talk → paywall)
 4. **Deeper review** (billing, voice cost, privacy copy, admin)
-5. **Production config + launch**
+5. **Production config + launch** (then Play AAB)
 
 Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expand it after the security baseline, not instead of it. Today coverage is thin (`e2e/welcome.spec.ts`, `e2e/learner-quiz-gate.spec.ts`).
 
@@ -30,11 +30,92 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 
 ---
 
+## Decisions (locked 2026-09-30)
+
+| Topic | Decision |
+| --- | --- |
+| Play listing | **Free** download |
+| Payments | **Stripe on kea.chat (website)** — not Play Billing unless Play objects |
+| Play risk | Accepted for now; Plan B = enable Play Billing if required |
+| PWA | **Out of scope** for Play AAB shipping (browser install stays as-is) |
+| Play Console | Owner-owned (assets, package id, signing, staged rollout, listing, AAB upload) |
+| Play testers | Owner chooses tester emails **inside Play Console** — unrelated to web hardening |
+| Order of work | **1)** Harden + ship robust Kea on GitHub → **2)** then build AAB → **3)** then code lock / freeze so changes do not creep in |
+| Stripe mode for launch | **Live** (`sk_live_…` on Netlify `keachat`) |
+| Switching Stripe later | Swap Netlify (and local `.env`) `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` between live and test keys; point webhook endpoint at matching mode. Cursor Stripe MCP can **query** live or test when that mode is connected — it does **not** flip Netlify env by itself. |
+| kea.chat signup | **Anyone can register** (open signup). Not related to Play tester lists. |
+
+### Clarification — “open signup vs invite-only” (was confusing)
+
+That phrase was about **who can create a Kea account on kea.chat**, not about Play Store.
+
+| What | Who controls it | Part of this hardening track? |
+| --- | --- | --- |
+| Play internal/closed testers | You, in Play Console (email list) | **No** — listing / AAB later |
+| Website signup (register on kea.chat) | Kea app + Supabase Auth | Only if we chose to lock the site to invites; **we are not doing that** |
+
+Play tester emails do **not** need to be decided for security hardening. Ignore that old `[!]` item.
+
+---
+
+## Final plan of action (before AAB)
+
+Execute in this order. Tick boxes here and in the section checklists; log work in **Work log** below.
+
+### Phase A — Close money / abuse holes (do now)
+
+1. [x] Inventory secrets + attack surface (2026-09-30)
+2. [x] Gate OpenAI spend: chat / TTS / Whisper require signed-in session; narrow public welcome translate/TTS with IP caps
+3. [x] Server-side Stripe checkout: ignore client price / %; only Kea catalog Price IDs + server discount codes
+4. [x] Bind billing portal + session-confirm to authenticated user (no open `customerId` / session abuse)
+5. [x] Lock `profiles` Stripe/subscription columns to service-role writes only (trigger migration applied)
+6. [x] Authenticated rate / size limits on chat + TTS (+ Whisper); public caps already partial
+7. [x] Baseline Netlify security headers (frame, nosniff, referrer, Permissions-Policy, light CSP)
+
+### Phase B — Auth, data, client integrity
+
+8. [ ] Confirm email confirmation, password reset, redirect allowlist on production
+9. [ ] Second-account RLS spot-check (learn list / profile)
+10. [ ] Paywall not bypassable by `localStorage` alone once APIs trust cloud subscription
+11. [ ] XSS / storage review; admin client-only caveats documented
+
+### Phase C — Smoke + ops
+
+12. [ ] `npm run guard` + `npm run build` clean; deploy hardening to Netlify
+13. [ ] One **live** Checkout happy path (small real charge or known live card flow) + webhook → access
+14. [ ] Expand Playwright only after A–B gates: login modal, signed-in talk gate, learn list
+15. [ ] OpenAI spend alert + Stripe live/test key separation documented on Netlify
+16. [ ] Support path for “I paid but cannot talk”
+
+### Phase D — After robust GitHub release (not now)
+
+17. [ ] Tag / release final hardened build on GitHub
+18. [ ] **Code lock:** freeze main (or protect branch / require PR + owner approval) so new features do not creep in while packaging
+19. [ ] Owner: build AAB and upload to Play internal/closed testing (tester emails in Play Console)
+20. [ ] Owner: Data safety + content rating as required by Play
+21. [ ] Device install from Play test track + mic talk smoke
+22. [ ] If Play objects to web Stripe → Play Billing Plan B
+
+**Out of this track for now:** AAB build, Play tester lists, PWA debates, mic/wake perfection.
+
+---
+
+## How Stripe live ↔ test actually switches
+
+| Layer | What to change |
+| --- | --- |
+| **App / Netlify** | `STRIPE_SECRET_KEY` (`sk_live_…` ↔ `sk_test_…`) and matching `STRIPE_WEBHOOK_SECRET`; webhook URL mode in Stripe Dashboard |
+| **Cursor Stripe MCP** | Session can use `livemode: true` or `false` **if** that mode is connected (`list_available_accounts_or_orgs` / `manage_stripe_accounts`). Today Kea shows **live** (`acct_1UJfe36G7iCRQAR8`). MCP does **not** rewrite Netlify env. |
+| **Admin UI** | Catalog IDs in Admin → Stripe assume live account; test mode needs test Price IDs if you switch keys |
+
+---
+
 ## 0. Scope freeze
 
-- [ ] Agree what “launch” means (open signup vs invite-only, paid tiers live, voice live)
-- [ ] Freeze non-essential product changes during the security window
-- [ ] Confirm isolation: no Remelife / Investech CLIs, orgs, tokens, or databases (`npm run guard`)
+- [x] Agree what “launch” means for this track — harden web Kea, Stripe live on kea.chat, free Play later; Play testers = Console only
+- [x] Freeze non-essential product changes during the security window (AAB deferred until after hardened GitHub release)
+- [x] Confirm isolation: no Remelife / Investech CLIs, orgs, tokens, or databases (`npm run guard`)
+- [ ] After final hardened release: lock repo against creeping changes (branch protection / freeze)
 
 ---
 
@@ -42,7 +123,7 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 
 ### Secrets and keys
 
-- [ ] List every secret in Netlify + local `.env` (and nowhere else)
+- [x] List every secret in Netlify + local `.env` (and nowhere else) — inventoried 2026-09-30; OpenAI/Stripe/service-role stay server-side; anon is browser-safe
   - `OPENAI_API_KEY`
   - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
   - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (server only)
@@ -54,7 +135,8 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 
 ### Attack surface map
 
-- [ ] Public pages: `/`, `/method`, legal, marketing
+- [x] Mapped 2026-09-30 (public / auth / app / admin / Netlify functions / Supabase tables) — see Work log inventory notes
+- [ ] Public pages: `/`, `/method`, legal, marketing — re-check at deploy
 - [ ] Auth: signup, login, confirm email, password reset
 - [ ] App: `/conversation`, `/learn`, `/settings`, `/subscription`, `/usage`, `/performance`
 - [ ] Admin routes (email-gated)
@@ -81,19 +163,21 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 - [ ] Policies: user can only `select/insert/update/delete` own rows (`auth.uid() = user_id` / `id`)
 - [ ] No table is `GRANT`ed to `anon` beyond what public marketing needs (prefer none)
 - [ ] `learn_list` add / practice_count / delete sync cannot be abused cross-user
-- [ ] `learner_profile` and subscription fields cannot be forged by another user
-- [ ] Service-role usage only in trusted server paths (billing webhook, admin ops)
+- [x] `learner_profile` and subscription fields cannot be forged by another user — cross-user RLS; billing columns locked from client UPDATE (2026-09-30 trigger)
+- [x] Service-role usage only in trusted server paths (billing webhook, admin ops)
 - [ ] Spot-check with a second test account: cannot read first account’s learn list or profile
+- [x] **Billing columns on `profiles`:** block client UPDATE of `stripe_*` / `subscription_*` (service role / webhook only) — migration `20260930160000_kea_profiles_billing_lock.sql` applied to Kea Production
 
 ---
 
 ## 4. API / Netlify function hardening
 
-- [ ] Chat / TTS / Whisper require an authenticated session (or another tight gate) before spending OpenAI money
-- [ ] Rate limits or quotas per user / IP on expensive routes (chat, TTS, transcribe)
-- [ ] Request size limits on audio upload and chat payloads
-- [ ] Stripe webhook verifies signature (`STRIPE_WEBHOOK_SECRET`)
-- [ ] Billing endpoints cannot start checkout for arbitrary price IDs outside Kea plans
+- [x] Chat / TTS / Whisper require an authenticated session (or another tight gate) before spending OpenAI money — signed-in Bearer required; short welcome `plain-translate` / short TTS remain public with IP caps
+- [x] Rate limits or quotas per user / IP on expensive routes (chat, TTS, transcribe) — public + authenticated (per user and IP, in-memory per instance)
+- [x] Request size limits on audio upload and chat payloads — Whisper 20MB; chat message/history caps; auth TTS max 2000 chars
+- [x] Stripe webhook verifies signature (`STRIPE_WEBHOOK_SECRET`) — code path exists; confirm live secret on Netlify at deploy
+- [x] Billing endpoints cannot start checkout for arbitrary price IDs / spoofed amounts outside Kea plans
+- [x] Billing portal + session confirm require auth / ownership binding
 - [ ] Website-tracker ingest: origin allowlist, consent required, rate limited
 - [ ] Website-tracker admin: admin-only auth
 - [ ] No stack traces or internal env names returned to the browser
@@ -108,7 +192,7 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 - [ ] XSS: user speech and Kea replies rendered as text, not raw HTML
 - [ ] Deep links (`?login=1`, `?onboarding=1`) cannot escalate privileges
 - [ ] Paywall and talk gates cannot be bypassed by flipping client state alone
-- [ ] Content-Security-Policy / security headers on Netlify (at least baseline: frame, sniffing, referrer)
+- [x] Content-Security-Policy / security headers on Netlify (baseline + light CSP in `netlify.toml`)
 
 ---
 
@@ -119,6 +203,7 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 - [ ] “Save transcripts” and notification settings do what they say
 - [ ] Account delete / data export path decided (even if manual at launch)
 - [ ] Stripe customer portal works; cancelled sub updates Kea access
+- [ ] Play Data safety form (owner) matches privacy copy when AAB ships
 
 ---
 
@@ -130,7 +215,7 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 - [ ] Mic permission, welcome line, listen / reply / correct flow
 - [ ] Learn List: word added → count climbs → removed after mastery uses → row gone in Supabase
 - [ ] Settings Sound / languages / profile save to cloud
-- [ ] Subscription checkout (test mode) → webhook → access unlocked
+- [ ] Subscription checkout (**live**) → webhook → access unlocked
 - [ ] Leave funnel / offers do not break talk
 - [ ] Mobile Chrome + Safari; Bluetooth / headphones path if advertising car use
 
@@ -141,7 +226,7 @@ Do run the existing e2e suite early and keep it green (`npm run test:e2e`). Expa
 - [ ] Add: signed-in redirect to conversation (fixture account)
 - [ ] Add: paywall / gate visible when blocked
 - [ ] Add: Learn List page renders for signed-in user
-- [ ] Optional later: Stripe test checkout (harder; often stay manual)
+- [ ] Optional later: Stripe checkout automation (usually stay manual)
 
 Command: `npm run test:e2e`
 
@@ -150,10 +235,10 @@ Command: `npm run test:e2e`
 ## 8. Cost and abuse controls
 
 - [ ] OpenAI spend alerts / hard budget in OpenAI dashboard
-- [ ] Stripe test vs live keys clearly separated; live keys only on production
+- [~] Stripe test vs live keys clearly separated; **launch = live on production**; switch back to test by env swap (see table above)
 - [ ] Free / trial talk minutes enforced server-side where money is at risk
 - [ ] Admin cost page numbers sanity-checked against real invoices
-- [ ] Whisper / TTS cannot be hammered anonymously
+- [x] Whisper / TTS cannot be hammered anonymously — auth required (short public TTS rate-capped)
 
 ---
 
@@ -171,10 +256,21 @@ Command: `npm run test:e2e`
 
 - [ ] DNS / HTTPS / `kea.chat` correct
 - [ ] Auth emails landing (not junk) for a fresh Gmail and Apple Mail address
-- [ ] One full paid path in **test** mode, then switch carefully to live if launching paid
+- [ ] One full paid path in **live** mode confirmed
 - [ ] Create a fresh user on a clean device and walk the happy path
 - [ ] Watch OpenAI + Stripe + Netlify logs for the first hour
 - [ ] Freeze risky admin edits (master definition, offers) unless needed
+
+---
+
+## 11. Play Store (owner track — after web hardening)
+
+- [ ] AAB built and uploaded to internal/closed testing
+- [ ] Listing live fields final (owner)
+- [ ] Data safety + content rating (owner)
+- [x] Account deletion URL for Play: https://kea.chat/delete-account (also Settings → Security)
+- [ ] Device install from Play test track + mic talk smoke
+- [ ] If Play rejects web Stripe → Play Billing Plan B
 
 ---
 
@@ -182,13 +278,13 @@ Command: `npm run test:e2e`
 
 | Day | Focus |
 | --- | --- |
-| 1 | Inventory secrets + attack surface; fix anything exposed |
-| 2 | Supabase RLS + second-account cross-access tests |
-| 3 | API auth, rate limits, Stripe webhook, tracker gates |
-| 4 | Client XSS / storage / paywall bypass review |
-| 5 | Expand Playwright smoke; manual mobile path |
-| 6 | Privacy copy, cost alerts, deploy/rollback |
-| 7 | Launch-day checklist |
+| 1 | Inventory + OpenAI auth gates (started) |
+| 2 | Stripe checkout/portal harden + profile billing column lock |
+| 3 | Rate/size limits, security headers, deploy |
+| 4 | RLS second-account tests + paywall server trust |
+| 5 | Playwright expand + manual mobile path |
+| 6 | Privacy copy, cost alerts, ops/rollback |
+| 7 | Live Checkout prove-out → GitHub release → code lock → then AAB |
 
 ---
 
@@ -196,8 +292,98 @@ Command: `npm run test:e2e`
 
 - Formal penetration test by a third party
 - Full CSP lockdown that breaks TTS / analytics
-- Perfect GDPR self-serve delete UI (decide manual process first)
+- Perfect GDPR self-serve delete UI (decide manual process first) → **done**: `/delete-account` + Settings → Security
 - Exhaustive Playwright for every voice edge case
+- PWA ↔ Play AAB packaging debates
+- Mic/wake “perfect in noise” (separate product work)
+- Play Console listing asset upload (owner)
+
+---
+
+## Work log
+
+### 2026-09-30 — Authenticated rate limits + Netlify security headers
+
+**Build:**
+
+- Extended `keaPublicRateLimit.ts`: auth chat 60/min/user (+ IP), TTS 40/min, Whisper 40/min; chat payload size checks; auth TTS max 2000 chars.
+- Wired into Vite handlers and Netlify `chat` / `tts` / `transcribe` functions.
+- `netlify.toml` `/*` headers: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` (mic self), `COOP`, light CSP (self + Supabase + Stripe + Google Fonts; `unsafe-inline` kept for JSON-LD / styles).
+
+**Problems / notes:**
+
+- Limits are in-memory per function instance (cold starts reset counters) — good enough for casual abuse, not a global Redis quota.
+- CSP allows `'unsafe-inline'` scripts for JSON-LD in `index.html`; tighten later if we move that out.
+- Headers apply after next Netlify deploy of this `netlify.toml`.
+
+**Errors:** none in this step.
+
+---
+
+### 2026-09-30 — Open signup confirmed; Stripe checkout / portal / billing-column harden
+
+**Decision:** Anyone can register on kea.chat (open signup).
+
+**Build:**
+
+- Checkout requires Bearer session; uses server `KEA_PLAN_TO_PRICE` only (ignores client `monthlyPrice` / `stripePriceId` / `discountPercent`).
+- Discounts: server `KEA_SERVER_DISCOUNTS` only (default codes); removed client free `activatePlan` bypass for 100% off.
+- Portal: auth required; customer id loaded from profile via service role (ignores client `customerId`).
+- Session confirm: auth required; rejects other users’ Checkout sessions; upserts for authenticated user only.
+- Success/cancel/return URLs restricted to kea.chat / localhost.
+- Migration `20260930160000_kea_profiles_billing_lock.sql` pushed to Kea Production (`db push` succeeded).
+- Client: `keaPay.ts` + `SubscriptionPanel` send auth headers; slim checkout payload.
+
+**Problems / notes:**
+
+- Admin-edited discount codes in `localStorage` are **not** trusted by the server yet (only seeded defaults). If admin changes % in UI, server must be updated later (or sync discounts to cloud).
+- Docker warning on `db push` (no Docker Desktop) — remote migrate still applied; local cache warning only.
+- Paywall still partly `localStorage` until talk APIs also check cloud subscription (Phase B item).
+- Hardening commits may still be uncommitted locally until an explicit commit/push.
+
+**Errors:** none on `kea:supabase db push` for billing lock (exit 0).
+
+---
+
+### 2026-09-30 — Clarify Play testers vs website signup; AAB timing
+
+**Owner clarification:** “Open signup vs invite-only” was misread as Play tester emails. Play Console tester lists are **owner-only** and **not** part of hardening. Website stays normal open registration.
+
+**Order restated:** finish robust Kea on GitHub → **then** AAB → **then** lock code against creep. AAB not started now.
+
+**Doc:** removed false blocker; Phase D reordered; code-lock checkbox added under scope freeze.
+
+---
+
+### 2026-09-30 — Decisions + inventory + OpenAI API auth
+
+**Decisions recorded:** free Play; Stripe-on-web; PWA out of AAB scope; harden before AAB; Stripe **live** for launch; Play Console owner-owned.
+
+**Inventory (read-only explore):**
+
+- OpenAI / Stripe secret / service-role: server-only (good).
+- Anon Supabase in browser (expected).
+- **Critical:** `/api/chat`, `/api/tts`, `/api/transcribe` had **no** session gate → OpenAI spend abuse.
+- Checkout trusted client `monthlyPrice` / `discountPercent` (spoof risk) — **still open**.
+- Billing portal/session unauthenticated — **still open**.
+- `profiles` own-row RLS allows self-write of subscription columns — **still open**.
+- Tracker ingest/admin and Stripe webhook path relatively stronger.
+
+**Build / code changes:**
+
+- Added `src/server/keaUserAuth.ts`, `keaPublicSpendGate.ts`, `keaPublicRateLimit.ts`, `src/services/keaAuthHeaders.ts`.
+- Gated Netlify + Vite handlers for chat / TTS / transcribe; clients send Bearer.
+- Public short welcome translate/TTS kept with IP caps; Whisper always auth + 20MB cap on Netlify.
+- Release 1 earlier same day: `v1.0.0` / commit `41883d4` (session welcome blank screen + channel prompt). Unrelated auth-gate work may still be **local uncommitted** until next commit.
+
+**Problems / notes:**
+
+- Windows `gh` via `kea:github` mangles titles with spaces (`Release 1` → use `Release-1` or API).
+- Welcome marketing still depends on narrow public spend; authenticated quotas not done yet.
+- Stripe MCP: Kea account connected in **livemode**; flipping production to test = Netlify key swap, not MCP alone.
+- ~~Still need: open signup vs invite-only~~ — **closed:** not about Play testers; web stays open signup.
+
+**Errors:** none blocking in this session after auth-gate edits (typecheck of full tree not re-run in this step).
 
 ---
 
@@ -206,3 +392,4 @@ Command: `npm run test:e2e`
 - Isolation rule remains: use `npm run kea:supabase` / `kea:netlify` / `kea:github` only.
 - Prefer fixing real gates (RLS, auth on spendy APIs) over adding more UI-only checks.
 - Revisit this file after each launch candidate; tick boxes in git so the next release inherits the bar.
+- Keep this Work log updated whenever hardening lands or something fails in testing.

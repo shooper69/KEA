@@ -2,6 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { handleKeaAccountDelete } from './src/server/handleKeaAccountDelete.ts'
 import { handleKeaBilling } from './src/server/handleKeaBilling.ts'
 import { handleKeaChat } from './src/server/handleKeaChat.ts'
 import { handleKeaTranscribe } from './src/server/handleKeaTranscribe.ts'
@@ -117,6 +118,14 @@ function keaApiPlugin(env: Record<string, string>): Plugin {
           STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
           SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
           SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+        })
+        return
+      }
+      if (url.startsWith('/api/account/delete')) {
+        void handleKeaAccountDelete(req, res, {
+          SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+          SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+          STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
         })
         return
       }

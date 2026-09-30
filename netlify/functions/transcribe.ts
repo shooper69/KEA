@@ -1,11 +1,18 @@
 import { cleanSpokenText } from '../../src/architecture/whisperText'
+import {
+  allowAuthenticatedTranscribe,
+  clientIpFromHeaders,
+} from '../../src/server/keaPublicRateLimit'
+import { requireKeaUser } from '../../src/server/keaUserAuth'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 type TranscribeEvent = {
   httpMethod: string
   body: string | null
   isBase64Encoded?: boolean
+  headers?: Record<string, string | undefined>
 }
 
 type WhisperVerbose = {
@@ -32,6 +39,18 @@ function confidenceFromVerbose(data: WhisperVerbose): number {
 export async function handler(event: TranscribeEvent) {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) }
+  }
+
+  const auth = await requireKeaUser(event.headers)
+  if (!auth.ok) {
+    return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+  }
+  const ip = clientIpFromHeaders(event.headers)
+  if (!allowAuthenticatedTranscribe(auth.userId, ip)) {
+    return {
+      statusCode: 429,
+      body: JSON.stringify({ error: 'Too many requests. Try again shortly.' }),
+    }
   }
 
   const apiKey = process.env.OPENAI_API_KEY
@@ -73,6 +92,12 @@ export async function handler(event: TranscribeEvent) {
   const bytes = Buffer.from(audio, 'base64')
   if (bytes.length < 200) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Recording was too short' }) }
+  }
+  if (bytes.length > MAX_AUDIO_BYTES) {
+    return {
+      statusCode: 413,
+      body: JSON.stringify({ error: 'Recording is too large' }),
+    }
   }
 
   const blob = new Blob([new Uint8Array(bytes)], { type: mimeType })

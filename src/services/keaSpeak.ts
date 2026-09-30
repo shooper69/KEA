@@ -4,6 +4,7 @@ import {
   VOICE_SAMPLE,
   type ManagedVoice,
 } from '../architecture/voiceCatalog'
+import { keaAuthHeaders } from './keaAuthHeaders'
 
 let currentAudio: HTMLAudioElement | null = null
 let progressRaf = 0
@@ -123,7 +124,7 @@ async function loadManagedVoiceAudio(
     try {
       const response = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await keaAuthHeaders(),
         body: JSON.stringify({ voice: voice.openaiVoice, text: spoken }),
       })
       if (!response.ok) return null

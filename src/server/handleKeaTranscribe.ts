@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { cleanSpokenText } from '../architecture/whisperText.ts'
+import {
+  allowAuthenticatedTranscribe,
+  clientIpFromHeaders,
+} from './keaPublicRateLimit.ts'
+import { requireKeaUser } from './keaUserAuth.ts'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 
@@ -52,6 +57,23 @@ export async function handleKeaTranscribe(
   if (req.method !== 'POST') {
     res.statusCode = 405
     res.end(JSON.stringify({ error: 'Method not allowed' }))
+    return
+  }
+
+  const headers: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(req.headers)) {
+    headers[key] = Array.isArray(value) ? value[0] : value
+  }
+  const auth = await requireKeaUser(headers)
+  if (!auth.ok) {
+    res.statusCode = auth.status
+    res.end(JSON.stringify({ error: auth.error }))
+    return
+  }
+  const ip = clientIpFromHeaders(headers)
+  if (!allowAuthenticatedTranscribe(auth.userId, ip)) {
+    res.statusCode = 429
+    res.end(JSON.stringify({ error: 'Too many requests. Try again shortly.' }))
     return
   }
 

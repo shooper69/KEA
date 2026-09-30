@@ -5,6 +5,7 @@ import { getMasterDefinition } from '../data/keaMasterDefinition'
 import { getAverageReplyWords } from '../data/keaSpeech'
 import type { LearnerLevel } from '../types'
 import type { TranscriptMessage } from '../types'
+import { keaAuthHeaders } from './keaAuthHeaders'
 
 const MAX_HISTORY_TURNS = 16
 const MAX_TURN_CHARS = 480
@@ -54,7 +55,7 @@ export async function askKea(options: {
 
   const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
       nativeLanguage: options.nativeLanguage,
       targetLanguage: options.targetLanguage,
@@ -83,7 +84,7 @@ export async function glossLearnWord(
 ): Promise<string> {
   const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
       mode: 'plain-translate',
       targetLanguage: targetLanguageName,
@@ -100,7 +101,7 @@ export async function glossLearnWord(
 export async function translateSpanishToEnglish(text: string): Promise<string> {
   const response = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
       mode: 'translate',
       text,

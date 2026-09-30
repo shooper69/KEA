@@ -4,11 +4,20 @@ import {
   DEFAULT_AVERAGE_REPLY_WORDS,
   maxTokensForAverageWords,
 } from '../../src/data/keaSpeech'
+import { isPublicPlainTranslateAllowed } from '../../src/server/keaPublicSpendGate'
+import {
+  allowAuthenticatedChat,
+  allowPublicSpend,
+  chatPayloadTooLarge,
+  clientIpFromHeaders,
+} from '../../src/server/keaPublicRateLimit'
+import { requireKeaUser } from '../../src/server/keaUserAuth'
 import { buildKeaSystemPrompt } from '../../src/server/keaPrompt'
 
 type ChatEvent = {
   httpMethod: string
   body: string | null
+  headers?: Record<string, string | undefined>
 }
 
 export async function handler(event: ChatEvent) {
@@ -28,10 +37,10 @@ export async function handler(event: ChatEvent) {
   }
 
   let payload: {
-    mode?: 'chat' | 'translate'
-    nativeLanguage: string
-    targetLanguage: string
-    level: string
+    mode?: 'chat' | 'translate' | 'plain-translate'
+    nativeLanguage?: string
+    targetLanguage?: string
+    level?: string
     text?: string
     masterDefinition?: string
     aboutKea?: string
@@ -40,7 +49,7 @@ export async function handler(event: ChatEvent) {
     learnerProfile?: string
     learnerName?: string
     averageReplyWords?: number
-    messages: Array<{ role: 'user' | 'assistant'; content: string }>
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>
   }
 
   try {
@@ -49,13 +58,79 @@ export async function handler(event: ChatEvent) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }
   }
 
+  const publicOk = isPublicPlainTranslateAllowed(payload)
+  const ip = clientIpFromHeaders(event.headers)
+  if (publicOk) {
+    if (!allowPublicSpend(`chat-public:${ip}`, 30)) {
+      return {
+        statusCode: 429,
+        body: JSON.stringify({ error: 'Too many requests. Try again shortly.' }),
+      }
+    }
+  } else {
+    const auth = await requireKeaUser(event.headers)
+    if (!auth.ok) {
+      return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
+    }
+    if (!allowAuthenticatedChat(auth.userId, ip)) {
+      return {
+        statusCode: 429,
+        body: JSON.stringify({ error: 'Too many requests. Try again shortly.' }),
+      }
+    }
+  }
+
+  const oversized = chatPayloadTooLarge(payload)
+  if (oversized) {
+    return { statusCode: 413, body: JSON.stringify({ error: oversized }) }
+  }
+
   const averageReplyWords = clampAverageReplyWords(
     payload.averageReplyWords ?? DEFAULT_AVERAGE_REPLY_WORDS,
   )
   const isTranslate = payload.mode === 'translate'
-  if (isTranslate && !payload.text?.trim()) {
+  const isPlainTranslate = payload.mode === 'plain-translate'
+  const targetName = payload.targetLanguage?.trim() || 'English'
+  if ((isTranslate || isPlainTranslate) && !payload.text?.trim()) {
     return { statusCode: 400, body: JSON.stringify({ error: 'Nothing to translate' }) }
   }
+
+  const openaiMessages = isPlainTranslate
+    ? [
+        {
+          role: 'system' as const,
+          content: `Translate into natural spoken ${targetName}. Keep first person (I, me, my). Return only the translation — no labels, quotes, or commentary.`,
+        },
+        { role: 'user' as const, content: payload.text?.trim() ?? '' },
+      ]
+    : isTranslate
+      ? [
+          {
+            role: 'system' as const,
+            content:
+              'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
+          },
+          { role: 'user' as const, content: payload.text?.trim() ?? '' },
+        ]
+      : [
+          {
+            role: 'system' as const,
+            content: buildKeaSystemPrompt({
+              nativeLanguage: payload.nativeLanguage ?? 'English',
+              targetLanguage: payload.targetLanguage ?? 'Spanish',
+              level: payload.level ?? 'intermediate',
+              masterDefinition:
+                payload.masterDefinition?.trim() || DEFAULT_KEA_MASTER_DEFINITION,
+              aboutKea: payload.aboutKea,
+              bannedTopicsBlock: payload.bannedTopicsBlock,
+              memoryBlock: payload.memoryBlock,
+              learnerProfile: payload.learnerProfile,
+              learnerName: payload.learnerName,
+              averageReplyWords,
+            }),
+          },
+          ...(payload.messages ?? []),
+        ]
 
   const openaiResponse = await fetch(
     'https://api.openai.com/v1/chat/completions',
@@ -67,39 +142,13 @@ export async function handler(event: ChatEvent) {
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        temperature: isTranslate ? 0.2 : 0.7,
-        max_tokens: isTranslate
-          ? 200
-          : maxTokensForAverageWords(averageReplyWords) + 120,
-        messages: isTranslate
-          ? [
-              {
-                role: 'system',
-                content:
-                  'Translate Spanish into plain, natural English for a language learner. Return only the English. No labels, quotes, or extra commentary. If the text has no Spanish, return it unchanged. Keep mixed English words as they are.',
-              },
-              { role: 'user', content: payload.text?.trim() ?? '' },
-            ]
-          : [
-              {
-                role: 'system',
-                content: buildKeaSystemPrompt({
-                  nativeLanguage: payload.nativeLanguage,
-                  targetLanguage: payload.targetLanguage,
-                  level: payload.level ?? 'intermediate',
-                  masterDefinition:
-                    payload.masterDefinition?.trim() ||
-                    DEFAULT_KEA_MASTER_DEFINITION,
-                  aboutKea: payload.aboutKea,
-                  bannedTopicsBlock: payload.bannedTopicsBlock,
-                  memoryBlock: payload.memoryBlock,
-                  learnerProfile: payload.learnerProfile,
-                  learnerName: payload.learnerName,
-                  averageReplyWords,
-                }),
-              },
-              ...(payload.messages ?? []),
-            ],
+        temperature: isTranslate || isPlainTranslate ? 0.2 : 0.7,
+        max_tokens: isPlainTranslate
+          ? 400
+          : isTranslate
+            ? 200
+            : maxTokensForAverageWords(averageReplyWords) + 120,
+        messages: openaiMessages,
       }),
     },
   )
@@ -125,6 +174,8 @@ export async function handler(event: ChatEvent) {
 
   return {
     statusCode: 200,
-    body: JSON.stringify(isTranslate ? { translation: reply } : { reply }),
+    body: JSON.stringify(
+      isTranslate || isPlainTranslate ? { translation: reply } : { reply },
+    ),
   }
 }

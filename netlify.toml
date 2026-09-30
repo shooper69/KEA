@@ -8,6 +8,17 @@
 [functions]
   directory = "netlify/functions"
 
+# Baseline security headers for the SPA (and assets under /*).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), geolocation=(), microphone=(self), payment=(self)"
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://checkout.stripe.com https://billing.stripe.com; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.stripe.com; upgrade-insecure-requests"
+
 [[headers]]
   for = "/favicon.ico"
   [headers.values]
@@ -44,6 +55,12 @@
 [[redirects]]
   from = "/api/billing/*"
   to = "/.netlify/functions/billing/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/account/delete"
+  to = "/.netlify/functions/account-delete"
   status = 200
   force = true
 

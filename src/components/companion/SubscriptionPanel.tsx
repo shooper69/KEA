@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  activatePlan,
   getTalkAccess,
   refreshBillingStatus,
   trialDaysLeft,
@@ -111,29 +110,11 @@ export function SubscriptionPanel({
   function subscribe(plan: (typeof catalog.plans)[number]) {
     setBusy(plan.id)
     setMessage('')
-    const price = discountedPrice(plan.monthlyPrice, percentOff)
-    if (price <= 0) {
-      activatePlan(plan.id, applied ? `discount:${applied.code}` : 'discount')
-      clearAppliedDiscount()
-      setApplied(null)
-      setAccess(getTalkAccess(isAdmin))
-      setMessage(
-        applied
-          ? `Subscribed with “${applied.code}” — no charge.`
-          : 'Subscribed — no charge.',
-      )
-      setBusy(null)
-      return
-    }
+    // Always go through server Checkout — price and discounts are server-trusted.
     void startKeaCheckout({
       planId: plan.id,
-      planName: plan.name,
-      monthlyPrice: plan.monthlyPrice,
-      stripePriceId: plan.stripePriceId,
       email,
-      userId: userId || undefined,
       discountCode: applied?.code,
-      discountPercent: percentOff > 0 ? percentOff : 0,
     }).catch((error: unknown) => {
       setMessage(
         error instanceof Error ? error.message : 'Could not start payment.',

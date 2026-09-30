@@ -6,30 +6,21 @@ import {
 } from '../architecture/keaBilling'
 import type { PlanId } from '../architecture/keaPlans'
 import { getSupabase } from '../lib/supabase'
+import { keaAuthHeaders } from './keaAuthHeaders'
 
 export async function startKeaCheckout(options: {
   planId: PlanId
-  planName: string
-  monthlyPrice: number
-  stripePriceId: string
   email: string
-  userId?: string
   discountCode?: string
-  discountPercent?: number
 }) {
   const origin = window.location.origin
   const response = await fetch('/api/billing/checkout', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
       planId: options.planId,
-      planName: options.planName,
-      monthlyPrice: options.monthlyPrice,
-      stripePriceId: options.stripePriceId,
       email: options.email,
-      userId: options.userId || '',
       discountCode: options.discountCode || '',
-      discountPercent: options.discountPercent ?? 0,
       successUrl: `${origin}/subscription?checkout=success`,
       cancelUrl: `${origin}/subscription?checkout=cancel`,
     }),
@@ -46,6 +37,7 @@ export async function confirmCheckoutSession(
 ): Promise<BillingState | null> {
   const response = await fetch(
     `/api/billing/session?id=${encodeURIComponent(sessionId)}`,
+    { headers: await keaAuthHeaders() },
   )
   const data = (await response.json()) as {
     paid?: boolean
@@ -70,15 +62,10 @@ export async function confirmCheckoutSession(
 }
 
 export async function openKeaBillingPortal() {
-  const billing = loadBilling()
-  if (!billing.stripeCustomerId) {
-    throw new Error('No Stripe customer on this account yet. Subscribe first.')
-  }
   const response = await fetch('/api/billing/portal', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
-      customerId: billing.stripeCustomerId,
       returnUrl: `${window.location.origin}/subscription`,
     }),
   })

@@ -37,7 +37,7 @@ export function LegalDocumentPage({
 export function PrivacyPolicyPage() {
   return (
     <LegalDocumentPage title="Privacy Policy">
-      <p className="legal-doc__updated">Last updated: 25 September 2026</p>
+      <p className="legal-doc__updated">Last updated: 30 September 2026</p>
       <p>
         Kea (“we”, “us”) provides a conversational language companion at{' '}
         <a href="https://kea.chat">kea.chat</a>. This policy explains what
@@ -91,14 +91,18 @@ export function PrivacyPolicyPage() {
       <p>
         We keep account and conversation data while your account is active, and
         for a reasonable period afterward if needed for support, billing, or
-        legal reasons. You can ask us to delete your account by emailing{' '}
+        legal reasons. You can delete your Kea account and associated data at
+        any time at{' '}
+        <Link to="/delete-account">kea.chat/delete-account</Link>, or from
+        Settings → Security in the app. You can also email{' '}
         <a href="mailto:team@kea.chat">team@kea.chat</a>.
       </p>
       <h2>Your rights</h2>
       <p>
         Depending on where you live, you may have rights to access, correct,
-        delete, or export your data, or to object to certain processing. Contact
-        us to exercise these rights.
+        delete, or export your data, or to object to certain processing. Use{' '}
+        <Link to="/delete-account">Delete my Kea data</Link> for deletion, or
+        contact us to exercise other rights.
       </p>
       <h2>Children</h2>
       <p>

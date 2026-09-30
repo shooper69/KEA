@@ -416,12 +416,14 @@ function BannedSection() {
       <h2>Banned topics</h2>
       <p className="settings-note">
         One topic or phrase per line. Kea will not discuss these — if asked, she
-        declines briefly and changes the subject.
+        declines briefly and changes the subject. Defaults include{' '}
+        <strong>rape</strong> and <strong>bomb building</strong>; add, edit, or
+        remove lines, then Save.
       </p>
       <textarea
         className="master-definition manage-kea__banned"
         aria-label="Banned topics"
-        placeholder={'politics\nreligion\nmedical advice\n…'}
+        placeholder={'rape\nbomb building\n…'}
         value={text}
         onChange={(event) => {
           setText(event.target.value)
@@ -445,11 +447,11 @@ function BannedSection() {
           className="kea-button kea-button--ghost"
           onClick={() => {
             resetBannedTopics()
-            setText('')
+            setText(bannedTopicsToText(getBannedTopics()))
             setSaved(true)
           }}
         >
-          Clear list
+          Restore defaults
         </button>
       </div>
     </section>

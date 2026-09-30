@@ -5,9 +5,13 @@ import {
   normalizeSubscriptionStatus,
   planFromSubscriptionObject,
   planIdFromPriceId,
+  priceIdForPlan,
+  readProfileBilling,
+  serverDiscountForCode,
   upsertBillingProfile,
   type KeaPlanId,
 } from './keaStripeBilling.ts'
+import { requireKeaUser } from './keaUserAuth.ts'
 
 type BillingEnv = {
   STRIPE_SECRET_KEY?: string
@@ -18,15 +22,10 @@ type BillingEnv = {
 
 type CheckoutPayload = {
   planId?: string
-  planName?: string
-  monthlyPrice?: number
   email?: string
-  userId?: string
   successUrl?: string
   cancelUrl?: string
-  stripePriceId?: string
   discountCode?: string
-  discountPercent?: number
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -51,6 +50,33 @@ function pathOf(req: IncomingMessage) {
 function header(req: IncomingMessage, name: string) {
   const raw = req.headers[name.toLowerCase()]
   return Array.isArray(raw) ? raw[0] : raw
+}
+
+function reqHeaders(req: IncomingMessage): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(req.headers)) {
+    out[key] = Array.isArray(value) ? value[0] : value
+  }
+  return out
+}
+
+function keaOriginUrl(candidate: string | undefined, fallback: string) {
+  const raw = (candidate || '').trim() || fallback
+  try {
+    const url = new URL(raw)
+    const host = url.hostname.toLowerCase()
+    if (
+      host === 'kea.chat' ||
+      host === 'www.kea.chat' ||
+      host === 'localhost' ||
+      host === '127.0.0.1'
+    ) {
+      return url.toString()
+    }
+  } catch {
+    // fall through
+  }
+  return fallback
 }
 
 async function stripeForm(
@@ -323,6 +349,12 @@ export async function handleKeaBilling(
   }
 
   if (path.endsWith('/checkout') && method === 'POST') {
+    const auth = await requireKeaUser(reqHeaders(req))
+    if (!auth.ok) {
+      json(res, auth.status, { error: auth.error })
+      return
+    }
+
     let payload: CheckoutPayload
     try {
       payload = JSON.parse((await readBody(req)).toString('utf8')) as CheckoutPayload
@@ -330,24 +362,21 @@ export async function handleKeaBilling(
       json(res, 400, { error: 'Invalid JSON' })
       return
     }
-    const cents = Math.round(Number(payload.monthlyPrice) * 100)
-    if (!payload.planId || !Number.isFinite(cents) || cents < 100) {
-      json(res, 400, { error: 'Need a plan and a monthly price.' })
-      return
-    }
     if (!isKeaPlanId(payload.planId)) {
       json(res, 400, { error: 'Unknown Kea plan.' })
       return
     }
-    const discountPercent = Math.min(
-      100,
-      Math.max(0, Math.round(Number(payload.discountPercent) || 0)),
-    )
-    const discountCode = String(payload.discountCode ?? '').trim()
+    const planId = payload.planId
+    const stripePriceId = priceIdForPlan(planId)
+    const discount = serverDiscountForCode(String(payload.discountCode ?? ''))
     let couponId: string | null = null
-    if (discountPercent > 0 && discountPercent < 100 && discountCode) {
+    if (discount && discount.percentOff > 0 && discount.percentOff < 100) {
       try {
-        couponId = await ensurePercentOffCoupon(key, discountCode, discountPercent)
+        couponId = await ensurePercentOffCoupon(
+          key,
+          discount.code,
+          discount.percentOff,
+        )
       } catch (caught) {
         json(res, 502, {
           error:
@@ -358,15 +387,31 @@ export async function handleKeaBilling(
         return
       }
     }
-    const success =
-      payload.successUrl?.trim() ||
-      'https://kea.chat/subscription?checkout=success'
-    const cancel =
-      payload.cancelUrl?.trim() ||
-      'https://kea.chat/subscription?checkout=cancel'
+    // 100% off: still create a coupon so Checkout can zero the first invoice.
+    if (discount && discount.percentOff >= 100) {
+      try {
+        couponId = await ensurePercentOffCoupon(key, discount.code, 100)
+      } catch (caught) {
+        json(res, 502, {
+          error:
+            caught instanceof Error
+              ? caught.message
+              : 'Could not prepare Stripe discount',
+        })
+        return
+      }
+    }
+
+    const success = keaOriginUrl(
+      payload.successUrl,
+      'https://kea.chat/subscription?checkout=success',
+    )
+    const cancel = keaOriginUrl(
+      payload.cancelUrl,
+      'https://kea.chat/subscription?checkout=cancel',
+    )
     const joiner = success.includes('?') ? '&' : '?'
     const form = new URLSearchParams()
-    // Checkout Studio fixed_by_ui (+ Kea sample_only values already real below).
     form.set('ui_mode', 'hosted_page')
     form.set('mode', 'subscription')
     form.set('billing_address_collection', 'auto')
@@ -377,53 +422,31 @@ export async function handleKeaBilling(
     form.set('saved_payment_method_options[payment_method_save]', 'enabled')
     form.set('integration_identifier', 'hosted_web_0001')
     form.set('origin_context', 'web')
-    // Present Checkout amounts in the customer’s local currency when eligible.
     form.set('adaptive_pricing[enabled]', 'true')
     form.set('success_url', `${success}${joiner}session_id={CHECKOUT_SESSION_ID}`)
     form.set('cancel_url', cancel)
-    form.set('metadata[planId]', payload.planId)
-    form.set('subscription_data[metadata][planId]', payload.planId)
-    if (discountCode) {
-      form.set('metadata[kea_discount_code]', discountCode)
-      form.set('subscription_data[metadata][kea_discount_code]', discountCode)
+    form.set('metadata[planId]', planId)
+    form.set('subscription_data[metadata][planId]', planId)
+    form.set('client_reference_id', auth.userId)
+    form.set('metadata[userId]', auth.userId)
+    form.set('subscription_data[metadata][userId]', auth.userId)
+    if (auth.email) form.set('customer_email', auth.email)
+    else if (payload.email?.trim()) {
+      form.set('customer_email', payload.email.trim().toLowerCase())
     }
-    if (discountPercent > 0) {
-      form.set('metadata[kea_discount_percent]', String(discountPercent))
+    form.set('line_items[0][price]', stripePriceId)
+    form.set('line_items[0][quantity]', '1')
+    if (discount) {
+      form.set('metadata[kea_discount_code]', discount.code)
+      form.set('subscription_data[metadata][kea_discount_code]', discount.code)
+      form.set('metadata[kea_discount_percent]', String(discount.percentOff))
       form.set(
         'subscription_data[metadata][kea_discount_percent]',
-        String(discountPercent),
+        String(discount.percentOff),
       )
     }
-    if (payload.userId?.trim()) {
-      form.set('client_reference_id', payload.userId.trim())
-      form.set('metadata[userId]', payload.userId.trim())
-      form.set('subscription_data[metadata][userId]', payload.userId.trim())
-    } else {
-      form.set('client_reference_id', payload.planId)
-    }
-    if (payload.email?.trim()) form.set('customer_email', payload.email.trim())
-    if (payload.stripePriceId?.trim()) {
-      form.set('line_items[0][price]', payload.stripePriceId.trim())
-      form.set('line_items[0][quantity]', '1')
-    } else {
-      form.set('line_items[0][quantity]', '1')
-      form.set('line_items[0][price_data][currency]', 'usd')
-      form.set('line_items[0][price_data][unit_amount]', String(cents))
-      form.set('line_items[0][price_data][recurring][interval]', 'month')
-      form.set(
-        'line_items[0][price_data][product_data][name]',
-        `Kea ${payload.planName || payload.planId}`,
-      )
-      form.set(
-        'line_items[0][price_data][product_data][metadata][kea_plan_id]',
-        payload.planId,
-      )
-    }
-    // Stripe: discounts XOR allow_promotion_codes
     if (couponId) {
       form.set('discounts[0][coupon]', couponId)
-    } else {
-      form.set('allow_promotion_codes', 'true')
     }
     const { ok, data } = await stripeForm(key, 'checkout/sessions', form)
     if (!ok) {
@@ -437,6 +460,11 @@ export async function handleKeaBilling(
   }
 
   if (path.endsWith('/session') && method === 'GET') {
+    const auth = await requireKeaUser(reqHeaders(req))
+    if (!auth.ok) {
+      json(res, auth.status, { error: auth.error })
+      return
+    }
     const id = new URL(req.url ?? '', 'http://local').searchParams.get('id')
     if (!id) {
       json(res, 400, { error: 'Missing session id' })
@@ -448,6 +476,17 @@ export async function handleKeaBilling(
       return
     }
     const meta = (data.metadata ?? {}) as Record<string, string>
+    const sessionUserId =
+      typeof meta.userId === 'string' && meta.userId
+        ? meta.userId
+        : typeof data.client_reference_id === 'string' &&
+            !isKeaPlanId(data.client_reference_id)
+          ? data.client_reference_id
+          : ''
+    if (sessionUserId && sessionUserId !== auth.userId) {
+      json(res, 403, { error: 'This checkout belongs to another account.' })
+      return
+    }
     let planId =
       (isKeaPlanId(meta.planId) && meta.planId) ||
       (isKeaPlanId(data.client_reference_id) ? data.client_reference_id : '')
@@ -477,17 +516,15 @@ export async function handleKeaBilling(
       subscriptionStatus === 'active' ||
       subscriptionStatus === 'trialing'
 
-    // Best-effort cloud sync when the browser confirms checkout.
     if (paid) {
       await upsertBillingProfile(env, {
-        userId: typeof meta.userId === 'string' ? meta.userId : null,
+        userId: auth.userId,
         customerId: typeof data.customer === 'string' ? data.customer : null,
         subscriptionId: subscriptionId || null,
         planId: isKeaPlanId(planId) ? planId : null,
         status: normalizeSubscriptionStatus(subscriptionStatus || 'active'),
         currentPeriodEnd,
-        email:
-          typeof data.customer_email === 'string' ? data.customer_email : null,
+        email: auth.email || null,
       })
     }
 
@@ -498,28 +535,37 @@ export async function handleKeaBilling(
       subscription: subscriptionId,
       subscriptionStatus: subscriptionStatus || (paid ? 'active' : ''),
       currentPeriodEnd,
-      userId: meta.userId || '',
+      userId: auth.userId,
     })
     return
   }
 
   if (path.endsWith('/portal') && method === 'POST') {
-    let payload: { customerId?: string; returnUrl?: string }
+    const auth = await requireKeaUser(reqHeaders(req))
+    if (!auth.ok) {
+      json(res, auth.status, { error: auth.error })
+      return
+    }
+    let payload: { returnUrl?: string }
     try {
       payload = JSON.parse((await readBody(req)).toString('utf8')) as typeof payload
     } catch {
       json(res, 400, { error: 'Invalid JSON' })
       return
     }
-    if (!payload.customerId) {
-      json(res, 400, { error: 'Need a Stripe customer' })
+    const profile = await readProfileBilling(env, auth.userId)
+    const customerId = profile?.customerId
+    if (!customerId) {
+      json(res, 400, {
+        error: 'No Stripe customer on this account yet. Subscribe first.',
+      })
       return
     }
     const form = new URLSearchParams()
-    form.set('customer', payload.customerId)
+    form.set('customer', customerId)
     form.set(
       'return_url',
-      payload.returnUrl?.trim() || 'https://kea.chat/subscription',
+      keaOriginUrl(payload.returnUrl, 'https://kea.chat/subscription'),
     )
     const { ok, data } = await stripeForm(key, 'billing_portal/sessions', form)
     if (!ok) {

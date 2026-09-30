@@ -1,4 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { isPublicTtsAllowed } from './keaPublicSpendGate.ts'
+import {
+  allowAuthenticatedTts,
+  allowPublicSpend,
+  clientIpFromHeaders,
+  MAX_AUTH_TTS_CHARS,
+} from './keaPublicRateLimit.ts'
+import { requireKeaUser } from './keaUserAuth.ts'
 
 const OPENAI_VOICES = new Set([
   'alloy',
@@ -61,6 +69,14 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
   })
 }
 
+function reqHeaders(req: IncomingMessage): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {}
+  for (const [key, value] of Object.entries(req.headers)) {
+    out[key] = Array.isArray(value) ? value[0] : value
+  }
+  return out
+}
+
 export async function handleKeaTts(
   req: IncomingMessage,
   res: ServerResponse,
@@ -102,6 +118,37 @@ export async function handleKeaTts(
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ error: 'Need an OpenAI voice and some text.' }))
     return
+  }
+
+  const headers = reqHeaders(req)
+  const ip = clientIpFromHeaders(headers)
+  if (isPublicTtsAllowed(text)) {
+    if (!allowPublicSpend(`tts-public:${ip}`, 20)) {
+      res.statusCode = 429
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'Too many requests. Try again shortly.' }))
+      return
+    }
+  } else {
+    if (text.length > MAX_AUTH_TTS_CHARS) {
+      res.statusCode = 413
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'That line is too long to speak.' }))
+      return
+    }
+    const auth = await requireKeaUser(headers)
+    if (!auth.ok) {
+      res.statusCode = auth.status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: auth.error }))
+      return
+    }
+    if (!allowAuthenticatedTts(auth.userId, ip)) {
+      res.statusCode = 429
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'Too many requests. Try again shortly.' }))
+      return
+    }
   }
 
   const openaiResponse = await requestSpeech(apiKey, voice, text)

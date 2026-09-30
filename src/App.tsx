@@ -14,6 +14,7 @@ import { AboutKeaPage } from './pages/AboutKeaPage'
 import { MethodPage } from './pages/MethodPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
+import { DeleteAccountPage } from './pages/DeleteAccountPage'
 import { LearnListPage } from './pages/LearnListPage'
 import { PerformancePage } from './pages/PerformancePage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/cookie-policy" element={<CookiePolicyPage />} />
+          <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route
             path="/home"
             element={

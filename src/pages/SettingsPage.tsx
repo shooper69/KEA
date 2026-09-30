@@ -55,6 +55,7 @@ import {
   type KeaAudioEnvironment,
   type KeaAudioRoute,
 } from '../architecture/keaAudioRoute'
+import { DeleteAccountPanel } from '../components/companion/DeleteAccountPanel'
 import type { ChatKeep, LanguageCode, SkyTheme } from '../types'
 
 function PlayIcon() {
@@ -166,6 +167,17 @@ export function SettingsPage() {
     }
     if (next === 'usage') {
       navigate('/usage', { replace: true })
+      return
+    }
+    if (
+      next === 'choices' ||
+      next === 'languages' ||
+      next === 'listening' ||
+      next === 'notifications' ||
+      next === 'profile' ||
+      next === 'security'
+    ) {
+      setTab(next)
     }
   }, [searchParams, navigate])
 
@@ -1135,6 +1147,7 @@ export function SettingsPage() {
             </p>
           )}
         </section>
+        <DeleteAccountPanel />
           </>
         ) : null}
       </div>

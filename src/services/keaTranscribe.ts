@@ -1,4 +1,5 @@
 import { cleanSpokenText } from '../architecture/whisperText'
+import { keaAuthHeaders } from './keaAuthHeaders'
 
 export interface WhisperTranscript {
   text: string
@@ -36,7 +37,7 @@ export async function transcribeWithWhisper(
           : 'audio/webm'
   const response = await fetch('/api/transcribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: await keaAuthHeaders(),
     body: JSON.stringify({
       audio,
       mimeType,

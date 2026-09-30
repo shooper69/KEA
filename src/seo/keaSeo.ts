@@ -121,6 +121,16 @@ const pages: Array<[string, KeaPageSeo]> = [
     },
   ],
   [
+    '/delete-account',
+    {
+      title: 'Delete my Kea data · Kea',
+      description:
+        'Permanently delete your Kea account, Learn List, topics, and data stored on this device.',
+      path: '/delete-account',
+      index: true,
+    },
+  ],
+  [
     '/privacy-policy',
     {
       title: 'Privacy Policy · Kea',

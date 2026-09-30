@@ -21,6 +21,43 @@ export const KEA_PRICE_TO_PLAN: Record<string, KeaPlanId> = {
   price_1UJqsd6G7iCRQAR87yJmgO4R: 'unlimited',
 }
 
+/** Plan → live Stripe Price id (server catalog only — never trust the browser). */
+export const KEA_PLAN_TO_PRICE: Record<KeaPlanId, string> = {
+  starter: 'price_1UJqsa6G7iCRQAR8Scrj3QK0',
+  companion: 'price_1UJqsb6G7iCRQAR8eywbl44K',
+  unlimited: 'price_1UJqsd6G7iCRQAR87yJmgO4R',
+}
+
+/** Server-trusted discount codes (mirror of product defaults; ignore client %). */
+export const KEA_SERVER_DISCOUNTS: Array<{
+  code: string
+  percentOff: number
+}> = [
+  { code: "kea's friend", percentOff: 100 },
+  { code: 'Flying', percentOff: 50 },
+  { code: 'Superlearner', percentOff: 60 },
+]
+
+function normalizeDiscountCode(code: string) {
+  return code.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function serverDiscountForCode(entry: string): {
+  code: string
+  percentOff: number
+} | null {
+  const needle = normalizeDiscountCode(entry)
+  if (!needle) return null
+  const hit = KEA_SERVER_DISCOUNTS.find(
+    (item) => normalizeDiscountCode(item.code) === needle,
+  )
+  return hit ? { code: hit.code, percentOff: hit.percentOff } : null
+}
+
+export function priceIdForPlan(planId: KeaPlanId) {
+  return KEA_PLAN_TO_PRICE[planId]
+}
+
 export function isKeaPlanId(value: unknown): value is KeaPlanId {
   return value === 'starter' || value === 'companion' || value === 'unlimited'
 }
@@ -144,6 +181,40 @@ export async function findProfileIdForBilling(
     return match?.id ?? null
   }
   return null
+}
+
+export async function readProfileBilling(
+  env: { SUPABASE_URL?: string; SUPABASE_SERVICE_ROLE_KEY?: string },
+  userId: string,
+): Promise<{
+  customerId: string | null
+  subscriptionId: string | null
+  planId: string | null
+  status: string | null
+} | null> {
+  const { ok, data } = await supabaseRest(
+    env,
+    `profiles?id=eq.${encodeURIComponent(userId)}&select=stripe_customer_id,stripe_subscription_id,subscription_plan_id,subscription_status&limit=1`,
+    { method: 'GET' },
+  )
+  if (!ok || !Array.isArray(data) || !data[0]) return null
+  const row = data[0] as Record<string, unknown>
+  return {
+    customerId:
+      typeof row.stripe_customer_id === 'string' ? row.stripe_customer_id : null,
+    subscriptionId:
+      typeof row.stripe_subscription_id === 'string'
+        ? row.stripe_subscription_id
+        : null,
+    planId:
+      typeof row.subscription_plan_id === 'string'
+        ? row.subscription_plan_id
+        : null,
+    status:
+      typeof row.subscription_status === 'string'
+        ? row.subscription_status
+        : null,
+  }
 }
 
 export async function upsertBillingProfile(

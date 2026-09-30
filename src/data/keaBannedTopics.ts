@@ -1,17 +1,20 @@
 const STORAGE_KEY = 'kea-banned-topics-v1'
 
+/** Seed list — editable in Admin → Manage Kea → Banned topics. */
+export const DEFAULT_BANNED_TOPICS = ['rape', 'bomb building'] as const
+
 export function getBannedTopics(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
+    if (!raw) return [...DEFAULT_BANNED_TOPICS]
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
+    if (!Array.isArray(parsed)) return [...DEFAULT_BANNED_TOPICS]
     return parsed
       .map((item) => String(item ?? '').trim())
       .filter(Boolean)
       .slice(0, 80)
   } catch {
-    return []
+    return [...DEFAULT_BANNED_TOPICS]
   }
 }
 
@@ -23,8 +26,12 @@ export function saveBannedTopics(topics: string[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned))
 }
 
+/** Restore the default banned list (still editable after save). */
 export function resetBannedTopics() {
-  localStorage.removeItem(STORAGE_KEY)
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify([...DEFAULT_BANNED_TOPICS]),
+  )
 }
 
 /** One topic per line for the admin textarea. */
