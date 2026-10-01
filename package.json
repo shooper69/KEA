@@ -13,15 +13,24 @@
     "kea:auth-emails": "node scripts/kea-auth-emails.mjs && node scripts/kea-sync-auth-emails.mjs",
     "kea:supabase": "node scripts/kea-cli.mjs supabase",
     "kea:netlify": "node scripts/kea-cli.mjs netlify",
-    "kea:github": "node scripts/kea-cli.mjs github"
+    "kea:github": "node scripts/kea-cli.mjs github",
+    "cap:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:bundle": "npm run cap:sync && node scripts/kea-android-bundle.mjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/splash-screen": "^8.0.2",
     "@supabase/supabase-js": "^2.116.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
     "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

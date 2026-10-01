@@ -1,3 +1,4 @@
+import { Browser } from '@capacitor/browser'
 import {
   activatePlan,
   applyCloudSubscription,
@@ -5,15 +6,26 @@ import {
   type BillingState,
 } from '../architecture/keaBilling'
 import type { PlanId } from '../architecture/keaPlans'
+import { isKeaNativeApp } from '../lib/keaNative'
 import { getSupabase } from '../lib/supabase'
 import { keaAuthHeaders } from './keaAuthHeaders'
+
+/** Stripe Checkout / Customer Portal must leave the WebView on Android. */
+async function openBillingUrl(url: string) {
+  if (isKeaNativeApp()) {
+    await Browser.open({ url })
+    return
+  }
+  window.location.assign(url)
+}
 
 export async function startKeaCheckout(options: {
   planId: PlanId
   email: string
   discountCode?: string
 }) {
-  const origin = window.location.origin
+  // Always return to the public site after Checkout (works for web + Play wrapper).
+  const origin = 'https://kea.chat'
   const response = await fetch('/api/billing/checkout', {
     method: 'POST',
     headers: await keaAuthHeaders(),
@@ -29,7 +41,7 @@ export async function startKeaCheckout(options: {
   if (!response.ok || !data.url) {
     throw new Error(data.error ?? 'Could not start checkout')
   }
-  window.location.assign(data.url)
+  await openBillingUrl(data.url)
 }
 
 export async function confirmCheckoutSession(
@@ -66,14 +78,14 @@ export async function openKeaBillingPortal() {
     method: 'POST',
     headers: await keaAuthHeaders(),
     body: JSON.stringify({
-      returnUrl: `${window.location.origin}/subscription`,
+      returnUrl: 'https://kea.chat/subscription',
     }),
   })
   const data = (await response.json()) as { url?: string; error?: string }
   if (!response.ok || !data.url) {
     throw new Error(data.error ?? 'Could not open billing portal')
   }
-  window.location.assign(data.url)
+  await openBillingUrl(data.url)
 }
 
 /** Pull subscription fields from Kea Production profile into local access. */

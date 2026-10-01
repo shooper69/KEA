@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { openKeaMicrophone } from '../architecture/keaMicrophone'
-import { heardOnboardingYes } from '../architecture/keaOnboardingYes'
-import { looksLikeWhisperHallucination } from '../architecture/whisperText'
 import {
   loadOnboardingSteps,
   markSpokenOnboardingComplete,
-  withOkPrompt,
+  spokenOnboardingLine,
   type OnboardingStep,
 } from '../data/keaOnboarding'
 import { getLanguage } from '../config/languages'
 import { speakKeaLine, stopKeaSpeech } from '../services/keaSpeak'
-import { transcribeWithWhisper } from '../services/keaTranscribe'
 import type { LanguageCode } from '../types'
 
 interface UseSpokenOnboardingOptions {
@@ -21,18 +17,9 @@ interface UseSpokenOnboardingOptions {
   onStepText?: (text: string) => void
 }
 
-function pickRecorderMime() {
-  const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus',
-  ]
-  return types.find((type) => MediaRecorder.isTypeSupported(type)) ?? ''
-}
-
 /**
- * Spoken product tour: Kea explains each step, asks OK?, waits for yes, then continues.
+ * Spoken product tour: Kea explains each step; the user presses Next to continue.
+ * No voice “yes” — button only.
  */
 export function useSpokenOnboarding({
   active,
@@ -88,6 +75,7 @@ export function useSpokenOnboarding({
       setCanAdvance(false)
       setStepIndex(0)
       setSteps([])
+      advanceWaitRef.current = null
       return
     }
 
@@ -109,38 +97,6 @@ export function useSpokenOnboarding({
       return
     }
 
-    let stream: MediaStream | null = null
-    let audioContext: AudioContext | null = null
-    let analyser: AnalyserNode | null = null
-    let raf = 0
-    let recorder: MediaRecorder | null = null
-    let chunks: Blob[] = []
-    let mime = ''
-
-    const teardownMic = () => {
-      advanceWaitRef.current = null
-      if (raf) {
-        cancelAnimationFrame(raf)
-        raf = 0
-      }
-      if (recorder && recorder.state !== 'inactive') {
-        try {
-          recorder.stop()
-        } catch {
-          // ignore
-        }
-      }
-      recorder = null
-      analyser = null
-      stream?.getTracks().forEach((track) => track.stop())
-      stream = null
-      chunks = []
-      if (audioContext) {
-        void audioContext.close().catch(() => {})
-        audioContext = null
-      }
-    }
-
     const speakLine = (text: string, lang: string) =>
       new Promise<void>((resolve) => {
         let settled = false
@@ -153,7 +109,6 @@ export function useSpokenOnboarding({
           if (safety) window.clearTimeout(safety)
           resolve()
         }
-        // Next / stop bumps speak generation so onend may never fire — poll + timeout.
         poll = window.setInterval(() => {
           if (cancelledRef.current || advanceNowRef.current) done()
         }, 80)
@@ -172,149 +127,20 @@ export function useSpokenOnboarding({
         }
       })
 
-    const listenForYes = async (): Promise<boolean> => {
-      if (cancelledRef.current) return false
-      if (advanceNowRef.current) return true
-      setPhase('listening')
-      try {
-        const opened = await openKeaMicrophone()
+    const waitForNext = () =>
+      new Promise<void>((resolve) => {
         if (cancelledRef.current || advanceNowRef.current) {
-          opened.stream.getTracks().forEach((track) => track.stop())
-          return Boolean(advanceNowRef.current)
+          resolve()
+          return
         }
-        stream = opened.stream
-        mime = pickRecorderMime()
-        try {
-          recorder = mime
-            ? new MediaRecorder(stream, { mimeType: mime })
-            : new MediaRecorder(stream)
-        } catch {
-          opened.stream.getTracks().forEach((track) => track.stop())
-          return Boolean(advanceNowRef.current)
+        setCanAdvance(true)
+        setPhase('listening')
+        advanceWaitRef.current = () => {
+          advanceWaitRef.current = null
+          setCanAdvance(false)
+          resolve()
         }
-        chunks = []
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) chunks.push(event.data)
-        }
-
-        audioContext = new AudioContext()
-        if (audioContext.state === 'suspended') await audioContext.resume()
-        const source = audioContext.createMediaStreamSource(stream)
-        analyser = audioContext.createAnalyser()
-        analyser.fftSize = 1024
-        source.connect(analyser)
-        const samples = new Uint8Array(analyser.fftSize)
-        let speechMs = 0
-        let silenceMs = 0
-        let started = false
-        const speechFloor = 0.035
-        const minSpeech = 280
-        const silenceEnd = 700
-        const maxMs = 6000
-
-        try {
-          recorder.start()
-        } catch {
-          teardownMic()
-          return Boolean(advanceNowRef.current)
-        }
-        const startedAt = performance.now()
-        let settled = false
-
-        const blob = await new Promise<Blob>((resolve) => {
-          const finishClip = () => {
-            if (settled) return
-            settled = true
-            if (raf) {
-              cancelAnimationFrame(raf)
-              raf = 0
-            }
-            try {
-              recorder?.requestData()
-            } catch {
-              // ignore
-            }
-            try {
-              if (recorder && recorder.state !== 'inactive') recorder.stop()
-              else {
-                resolve(
-                  new Blob(chunks, {
-                    type: recorder?.mimeType || mime || 'audio/webm',
-                  }),
-                )
-              }
-            } catch {
-              resolve(new Blob(chunks, { type: mime || 'audio/webm' }))
-            }
-          }
-          const tick = (now: number) => {
-            if (
-              cancelledRef.current ||
-              advanceNowRef.current ||
-              settled ||
-              !analyser ||
-              !recorder
-            ) {
-              finishClip()
-              return
-            }
-            raf = requestAnimationFrame(tick)
-            try {
-              analyser.getByteTimeDomainData(samples)
-            } catch {
-              finishClip()
-              return
-            }
-            let sum = 0
-            for (const value of samples) {
-              const n = (value - 128) / 128
-              sum += n * n
-            }
-            const rms = Math.sqrt(sum / samples.length)
-            if (rms > speechFloor) {
-              speechMs += 16
-              silenceMs = 0
-              if (speechMs >= minSpeech) started = true
-            } else if (started) {
-              silenceMs += 16
-              if (silenceMs >= silenceEnd) finishClip()
-            }
-            if (now - startedAt >= maxMs) finishClip()
-          }
-          recorder!.onstop = () => {
-            settled = true
-            resolve(
-              new Blob(chunks, {
-                type: recorder?.mimeType || mime || 'audio/webm',
-              }),
-            )
-          }
-          advanceWaitRef.current = () => {
-            advanceNowRef.current = true
-            finishClip()
-          }
-          raf = requestAnimationFrame(tick)
-        })
-
-        advanceWaitRef.current = null
-        teardownMic()
-        if (cancelledRef.current) return false
-        if (advanceNowRef.current) return true
-        if (blob.size < 1200) return false
-        const result = await transcribeWithWhisper(blob, {
-          prompt: 'The speaker may simply say yes, okay, or sure.',
-          language: 'en',
-        })
-        if (cancelledRef.current) return false
-        if (!result.text.trim() || looksLikeWhisperHallucination(result.text)) {
-          return false
-        }
-        return heardOnboardingYes(result.text)
-      } catch {
-        teardownMic()
-        return Boolean(advanceNowRef.current)
-      }
-    }
+      })
 
     const run = async () => {
       try {
@@ -324,28 +150,14 @@ export function useSpokenOnboarding({
           setStepIndex(i)
           setCanAdvance(false)
           advanceNowRef.current = false
-          const line = withOkPrompt(list[i].spoken)
+          const line = spokenOnboardingLine(list[i].spoken)
           onStepTextRef.current?.(line)
           setPhase('speaking')
           await speakLine(line, locale)
           if (cancelledRef.current) return
-          if (advanceNowRef.current) {
-            setCanAdvance(false)
-            continue
-          }
-          setCanAdvance(true)
-
-          let confirmed = false
-          for (let attempt = 0; attempt < 4 && !confirmed; attempt++) {
-            if (cancelledRef.current) return
-            confirmed = await listenForYes()
-            if (confirmed) break
-            if (cancelledRef.current) return
-            setPhase('speaking')
-            await speakLine('Just say yes when you are ready. OK?', locale)
-            if (cancelledRef.current) return
-            setCanAdvance(true)
-          }
+          if (advanceNowRef.current) continue
+          await waitForNext()
+          if (cancelledRef.current) return
         }
         if (!cancelledRef.current) finish()
       } catch {
@@ -363,7 +175,6 @@ export function useSpokenOnboarding({
       } catch {
         // ignore
       }
-      teardownMic()
     }
   }, [active, nativeLanguage, finish])
 

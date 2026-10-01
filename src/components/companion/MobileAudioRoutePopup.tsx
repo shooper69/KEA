@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
-  clearAudioRoutePromptPending,
+  markAudioRouteSessionDone,
   probeAudioEnvironment,
   readAudioRoute,
   type KeaAudioEnvironment,
@@ -47,7 +47,7 @@ export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
     try {
       await applyAudioRouteMic(route)
     } finally {
-      clearAudioRoutePromptPending()
+      markAudioRouteSessionDone()
       setSaving(false)
       onDone()
     }

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { VoicePresenceState } from '../../types'
 
 const KEA_MIC_SRC = '/kea-04.png'
@@ -11,17 +11,10 @@ interface VoiceMicProps {
   onToggle: () => void
 }
 
-function ignoreAccidentalKeyboardActivate(
-  event: KeyboardEvent<HTMLButtonElement>,
-) {
-  // Typing / Space must not fire the mic like a tap. Allow only real
-  // keyboard focus (:focus-visible from Tab).
-  if (event.key !== 'Enter' && event.key !== ' ') return
-  if (!event.currentTarget.matches(':focus-visible')) {
-    event.preventDefault()
-  }
-}
-
+/**
+ * Kea talk control + the two chat-bubble hints.
+ * Prefer pointerup (finger/mouse) so taps feel instant on phones.
+ */
 export function VoiceMic({
   live,
   status,
@@ -35,9 +28,11 @@ export function VoiceMic({
       ? "Tap to talk or stop me, or say 'Hey Kea' or 'Stop Kea'"
       : 'Tap to talk or stop me'
 
-  function handleToggle() {
+  function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
+    // Only primary button / finger; ignore hover leftovers.
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    event.preventDefault()
     onToggle()
-    // Drop focus so later Space/typing cannot re-trigger the button.
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
@@ -49,8 +44,7 @@ export function VoiceMic({
         type="button"
         className="voice-mic__prompt voice-mic__prompt--left"
         aria-label={actionLabel}
-        onClick={handleToggle}
-        onKeyDown={ignoreAccidentalKeyboardActivate}
+        onPointerUp={handlePointerUp}
       >
         Tap to talk
         <br />
@@ -66,8 +60,7 @@ export function VoiceMic({
           }`}
           aria-pressed={live}
           aria-label={actionLabel}
-          onClick={handleToggle}
-          onKeyDown={ignoreAccidentalKeyboardActivate}
+          onPointerUp={handlePointerUp}
         >
           <span className="voice-mic__waves" aria-hidden="true">
             <span className="voice-mic__ring voice-mic__ring--1" />
@@ -77,16 +70,20 @@ export function VoiceMic({
           <img className="voice-mic__icon" src={KEA_MIC_SRC} alt="" />
         </button>
       </div>
-      <p
-        className={`voice-mic__prompt voice-mic__prompt--right${
-          wakePhrase ? '' : ' voice-mic__prompt--reserved'
-        }`}
-        aria-hidden="true"
+      <button
+        type="button"
+        className="voice-mic__prompt voice-mic__prompt--right"
+        aria-label={
+          wakePhrase
+            ? "Or say 'Hey Kea' or 'Stop Kea'"
+            : "Or say 'Hey Kea' or 'Stop Kea' when available"
+        }
+        onPointerUp={handlePointerUp}
       >
-        or say 'Hey Kea'
+        or say &apos;Hey Kea&apos;
         <br />
-        or 'Stop Kea'
-      </p>
+        or &apos;Stop Kea&apos;
+      </button>
     </div>
   )
 }

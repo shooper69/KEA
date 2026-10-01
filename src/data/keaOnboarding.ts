@@ -1,4 +1,5 @@
 import { getLearnMasteryUses } from './keaLearnMastery'
+import { clearFirstMeetGreetingDone } from '../architecture/keaStartSpeech'
 
 const STORAGE_KEY = 'kea-onboarding-steps-v1'
 const DONE_KEY = 'kea-spoken-onboarding-done-v1'
@@ -8,7 +9,7 @@ export interface OnboardingStep {
   id: string
   /** Short admin label */
   title: string
-  /** What Kea says for this feature (OK? is added when speaking). */
+  /** What Kea says for this feature. */
   spoken: string
 }
 
@@ -55,6 +56,18 @@ export const DEFAULT_ONBOARDING_STEPS: OnboardingStep[] = [
     spoken:
       'You can choose your own voice for me in Settings whenever you like.',
   },
+  {
+    id: 'reports',
+    title: 'Reports',
+    spoken:
+      'In the account menu you will find reports. Performance shows whether your talk time went up or down over the last seven days. Usage shows how much you have been talking. Your Learn List tracks the words and phrases you are practising.',
+  },
+  {
+    id: 'companion',
+    title: 'Companion',
+    spoken:
+      "I'm a companion, and as you learn we will get to know each other better. I hope this will be the beginning of a beautiful relationship. Shall we get started?",
+  },
 ]
 
 function isStep(value: unknown): value is OnboardingStep {
@@ -71,20 +84,29 @@ export function fillOnboardingPlaceholders(spoken: string) {
   return spoken.replace(/\{masteryUses\}/g, String(getLearnMasteryUses()))
 }
 
+/** Spoken line for a tour step (no “OK?” / voice-yes prompt). */
+export function spokenOnboardingLine(spoken: string) {
+  return fillOnboardingPlaceholders(spoken).replace(/\s+/g, ' ').trim()
+}
+
 export function loadOnboardingSteps(): OnboardingStep[] {
+  const defaults = structuredClone(DEFAULT_ONBOARDING_STEPS)
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return structuredClone(DEFAULT_ONBOARDING_STEPS)
+    if (!raw) return defaults
     const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return structuredClone(DEFAULT_ONBOARDING_STEPS)
+    if (!Array.isArray(parsed)) return defaults
     const steps = parsed.filter(isStep).map((item) => ({
       id: item.id.trim() || crypto.randomUUID(),
       title: item.title.trim() || 'Step',
       spoken: item.spoken.trim(),
     }))
-    return steps.length > 0 ? steps : structuredClone(DEFAULT_ONBOARDING_STEPS)
+    if (steps.length === 0) return defaults
+    const known = new Set(steps.map((item) => item.id))
+    const missing = defaults.filter((item) => !known.has(item.id))
+    return [...steps, ...missing]
   } catch {
-    return structuredClone(DEFAULT_ONBOARDING_STEPS)
+    return defaults
   }
 }
 
@@ -280,12 +302,11 @@ export function clearSpokenOnboardingComplete(userKey = '') {
     // ignore
   }
   clearSpokenTourArm()
+  clearFirstMeetGreetingDone(userKey)
   window.dispatchEvent(new Event(ONBOARDING_CHANGED))
 }
 
 export function withOkPrompt(spoken: string) {
-  const text = fillOnboardingPlaceholders(spoken).replace(/\s+/g, ' ').trim()
-  if (!text) return 'OK?'
-  if (/\bok\?\s*$/i.test(text)) return text
-  return `${text.replace(/[.!?]*$/, '')}. OK?`
+  // Kept for older callers; tour no longer appends “OK?”.
+  return spokenOnboardingLine(spoken) || 'OK?'
 }

@@ -60,6 +60,13 @@ export function heardKeaStop(text: string) {
   if (new RegExp(`\\b${KEA_TOKEN}\\s+(stop|quit|end)\\b`).test(n)) {
     return true
   }
+  // Short alone when the whole utterance is just stop / quit talking.
+  if (/^(stop|quit|end)(\s+(please|now))?$/.test(n)) {
+    return true
+  }
+  if (/^(stop|quit)\s+(listening|talking)$/.test(n)) {
+    return true
+  }
   return false
 }
 

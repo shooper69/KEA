@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { startKeaAnimationEngine } from './architecture/keaAnimationEngine'
+import { isKeaNativeApp } from './lib/keaNative'
 import App from './App.tsx'
 import './index.css'
 
@@ -18,7 +19,10 @@ window.addEventListener('pageshow', (event) => {
   if (event.persisted) window.location.reload()
 })
 
-registerSW({ immediate: true })
+// Service workers fight Capacitor's local asset host — keep PWA on the website only.
+if (!isKeaNativeApp()) {
+  registerSW({ immediate: true })
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

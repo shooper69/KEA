@@ -87,16 +87,16 @@ Execute in this order. Tick boxes here and in the section checklists; log work i
 15. [~] OpenAI spend alert + Stripe live/test key separation — documented in this file; **owner** set OpenAI budget alert in dashboard
 16. [x] Support path for “I paid but cannot talk” — https://kea.chat/support (+ Settings Help)
 
-### Phase D — After robust GitHub release (not now)
+### Phase D — Play packaging (in progress)
 
 17. [ ] Tag / release final hardened build on GitHub
 18. [ ] **Code lock:** freeze main (or protect branch / require PR + owner approval) so new features do not creep in while packaging
-19. [ ] Owner: build AAB and upload to Play internal/closed testing (tester emails in Play Console)
+19. [~] Capacitor Android shell (`chat.kea.app`) — see `docs/play-aab.md`; owner signs + uploads AAB
 20. [ ] Owner: Data safety + content rating as required by Play
 21. [ ] Device install from Play test track + mic talk smoke
 22. [ ] If Play objects to web Stripe → Play Billing Plan B
 
-**Out of this track for now:** AAB build, Play tester lists, PWA debates, mic/wake perfection.
+**Stripe live Checkout (C13)** can continue in parallel; it does not block AAB packaging.
 
 ---
 

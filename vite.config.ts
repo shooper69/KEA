@@ -189,19 +189,19 @@ export default defineConfig(({ mode }) => {
           lang: 'en',
           icons: [
             {
-              src: '/favicon-192.png',
+              src: '/favicon-192.png?v=4',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png',
+              src: '/favicon-512.png?v=4',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png',
+              src: '/favicon-512.png?v=4',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

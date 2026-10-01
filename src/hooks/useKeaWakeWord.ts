@@ -23,11 +23,11 @@ interface UseKeaWakeWordOptions {
 }
 
 const SPEECH_HOLD_MS = 80
-const SHOT_COOLDOWN_MS = 1600
-const WAKE_SILENCE_MS = 420
+const SHOT_COOLDOWN_MS = 900
+const WAKE_SILENCE_MS = 380
 /** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 220
-const MAX_UTTERANCE_MS = 2800
+const MIN_SPEECH_BURST_MS = 180
+const MAX_UTTERANCE_MS = 2600
 const RING_SECONDS = 1.8
 const AMBIENT_CALIBRATE_MS = 650
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */

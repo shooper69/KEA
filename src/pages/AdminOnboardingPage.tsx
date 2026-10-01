@@ -68,9 +68,8 @@ export function AdminOnboardingPage() {
         <h2>Onboarding</h2>
         <p className="settings-note">
           Spoken tour for new registrants after the microphone choice. Kea says
-          each step, then “OK?”, and waits for the user to say yes before the
-          next one. Use {'{masteryUses}'} for the Learn List threshold (currently{' '}
-          {mastery}).
+          each step; the user presses Next to continue (no voice “yes”). Use{' '}
+          {'{masteryUses}'} for the Learn List threshold (currently {mastery}).
         </p>
         <div className="admin-onboarding__toolbar">
           <button type="button" className="kea-button" onClick={commit}>

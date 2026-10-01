@@ -16,21 +16,39 @@ test('returning members skip the questionnaire and hear one welcome', () => {
     }),
   ).toBe(false)
 
+  const prior = [
+    { id: 'u1', speaker: 'user' as const, text: 'hola' },
+  ]
   const line = buildStartSpeechLine({
     languageCode: 'en',
     firstName: 'Simon',
-    messages: [],
+    messages: prior,
   })
   expect(line.spoken).toBe('Welcome back Simon, what shall we talk about today?')
   expect(line.english).toBeUndefined()
+  expect(line.kind).toBe('welcome-back')
 
   const spanish = buildStartSpeechLine({
     languageCode: 'es',
     firstName: 'Simon',
-    messages: [],
+    messages: prior,
   })
   expect(spanish.spoken).toBe('Bienvenido de nuevo Simon, ¿de qué hablamos hoy?')
   expect(spanish.english).toBe('Welcome back Simon, what shall we talk about today?')
+})
+
+test('first meet greeting is long and bilingual once', () => {
+  const line = buildStartSpeechLine({
+    languageCode: 'es',
+    firstName: 'Simon',
+    messages: [],
+    userKey: 'test-first-meet',
+  })
+  expect(line.kind).toBe('welcome')
+  expect(line.spoken).toContain('Simon')
+  expect(line.spoken).toMatch(/encantada|conocerte|hablamos/i)
+  expect(line.english).toContain('nice to meet you')
+  expect(line.english).toContain('favourite food')
 })
 
 test('a new member sees the questionnaire once', () => {
@@ -130,7 +148,7 @@ test('How to use Kea only after stage 1, never on a normal login', () => {
   const line = buildStartSpeechLine({
     languageCode: 'en',
     firstName: '',
-    messages: [],
+    messages: [{ id: 'u1', speaker: 'user', text: 'hi' }],
   })
   expect(line.spoken).toBe('Welcome back, what shall we talk about today?')
   expect(line.english).toBeUndefined()

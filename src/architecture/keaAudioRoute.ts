@@ -2,6 +2,8 @@ import { speechRecognitionPings } from './keaWakeWord'
 
 const ROUTE_KEY = 'kea-audio-route-v1'
 const PROMPT_KEY = 'kea-audio-route-prompt'
+/** Set after the user picks a route this browser/PWA session. */
+const SESSION_DONE_KEY = 'kea-audio-route-session-done'
 
 /** How Kea should prefer the mic, based on what the phone reports. */
 export type KeaAudioRoute = 'speaker' | 'headphones' | 'bluetooth'
@@ -76,6 +78,34 @@ export function clearAudioRoutePromptPending() {
   } catch {
     // ignore
   }
+}
+
+/** Call when the user finishes the speaker / headphones / Bluetooth check. */
+export function markAudioRouteSessionDone() {
+  try {
+    sessionStorage.setItem(SESSION_DONE_KEY, '1')
+  } catch {
+    // ignore
+  }
+  clearAudioRoutePromptPending()
+}
+
+/**
+ * Open the audio check before talk on mobile (including installed PWA).
+ * Once per tab/PWA session after they choose; also after login flag.
+ */
+export function shouldOpenAudioRouteCheck(options?: {
+  restartListen?: boolean
+}) {
+  if (options?.restartListen) return false
+  if (!isKeaMobileDevice()) return false
+  if (consumeAudioRoutePromptPending()) return true
+  try {
+    if (sessionStorage.getItem(SESSION_DONE_KEY) === '1') return false
+  } catch {
+    // ignore
+  }
+  return true
 }
 
 export function shouldOfferAudioRoutePrompt(): boolean {

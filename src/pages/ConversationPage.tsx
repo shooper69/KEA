@@ -13,10 +13,11 @@ import { LearnerQuestionnaire } from '../components/companion/LearnerQuestionnai
 import { KEA_FLY_SRC } from '../data/keaAbout'
 import {
   clearAudioRoutePromptPending,
-  consumeAudioRoutePromptPending,
+  shouldOpenAudioRouteCheck,
 } from '../architecture/keaAudioRoute'
 import {
   isTalkHeld,
+  markFreshChatScreen,
   peekRestartListen,
   releaseRestartListen,
 } from '../architecture/keaTalkMemory'
@@ -28,6 +29,7 @@ import { hasUserTalked } from '../data/keaLearnerProfile'
 import { getTalkAccess, recordTalkSeconds } from '../architecture/keaBilling'
 import {
   buildStartSpeechLine,
+  markFirstMeetGreetingDone,
 } from '../architecture/keaStartSpeech'
 import {
   consumeSubLeaveOfferPending,
@@ -102,11 +104,9 @@ export function ConversationPage() {
     const timer = window.setTimeout(() => releaseRestartListen(), 400)
     return () => window.clearTimeout(timer)
   }, [])
-  const [audioRouteOpen, setAudioRouteOpen] = useState(() => {
-    if (restartListen) return false
-    // Consume so returning to chat mid-session never reopens the check.
-    return consumeAudioRoutePromptPending()
-  })
+  const [audioRouteOpen, setAudioRouteOpen] = useState(() =>
+    shouldOpenAudioRouteCheck({ restartListen }),
+  )
   const [popup1Open, setPopup1Open] = useState(() => shouldShowPopup1('home'))
   const [subLeaveOpen, setSubLeaveOpen] = useState(() => {
     if (!consumeSubLeaveOfferPending()) return false
@@ -190,7 +190,13 @@ export function ConversationPage() {
     nativeLanguage: nativeLanguage ?? 'en',
     userKey,
     onStepText: setOnboardLine,
-    onComplete: () => setOnboardLine(''),
+    onComplete: () => {
+      setOnboardLine('')
+      markFreshChatScreen()
+      sessionGreetedRef.current = ''
+      setOpeningDone(false)
+      setOnboardingRevision((n) => n + 1)
+    },
   })
 
   useEffect(() => {
@@ -222,6 +228,7 @@ export function ConversationPage() {
       languageCode: target,
       firstName,
       messages: voice.messages,
+      userKey,
     })
     const pref = greetingPrefetchRef.current
     const speechOpts =
@@ -237,6 +244,7 @@ export function ConversationPage() {
               return prefetchManagedVoiceAudio(managed, line.spoken)
             })(),
           }
+    if (line.kind === 'welcome') markFirstMeetGreetingDone(userKey)
     void voice.start(line.spoken, line.english, line.kind, speechOpts)
   }
 
@@ -249,11 +257,12 @@ export function ConversationPage() {
   // Prefetch the short welcome-back line as soon as the page opens,
   // including while the mic chooser is on screen.
   useEffect(() => {
-    if (block || spokenTour || quizOpen) return
+    if (block || spokenTour || quizOpen || audioRouteOpen) return
     const line = buildStartSpeechLine({
       languageCode: target,
       firstName,
       messages: voice.messages,
+      userKey,
     })
     const managed = getSpeakVoice()
     if (!managed || !line.spoken.trim()) return
@@ -265,7 +274,7 @@ export function ConversationPage() {
         greetingPrefetchRef.current.url = url
       }
     })
-  }, [block, spokenTour, quizOpen, target, firstName, voice.messages])
+  }, [block, spokenTour, quizOpen, audioRouteOpen, target, firstName, userKey, voice.messages])
 
   // On login / Talk ready: one short welcome in the learning language.
   // A returning name is already on this device, so do not wait for the cloud profile.
@@ -286,6 +295,7 @@ export function ConversationPage() {
       languageCode: target,
       firstName,
       messages: voice.messages,
+      userKey,
     })
     if (sessionGreetedRef.current === line.spoken) {
       setOpeningDone(true)
@@ -305,6 +315,7 @@ export function ConversationPage() {
           }
         : { listenAfter: voiceMode, silent: !voiceMode }
     setOpeningDone(true)
+    if (line.kind === 'welcome') markFirstMeetGreetingDone(userKey)
     void voice.start(line.spoken, line.english, line.kind, speechOpts)
     // Intentionally omit `voice` — greet once per Talk visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -318,6 +329,7 @@ export function ConversationPage() {
     profileKnown,
     target,
     firstName,
+    userKey,
   ])
 
   // If the audio check appears, cut any welcome speech immediately.
@@ -363,7 +375,6 @@ export function ConversationPage() {
 
   const wake = useKeaWakeWord({
     enabled:
-      openingDone &&
       profileKnown &&
       !live &&
       !block &&
@@ -522,7 +533,6 @@ export function ConversationPage() {
               >
                 Next
               </button>
-              <p className="onboarding-caption__hint">Or say yes</p>
             </div>
           </div>
         ) : (
@@ -550,14 +560,15 @@ export function ConversationPage() {
       <VoiceMic
         live={live}
         status={micStatus}
-        wakePhrase={wake.listens && !audioRouteOpen}
+        wakePhrase={!audioRouteOpen}
         onToggle={() => {
           if (audioRouteOpen || quizOpen) return
           const now = Date.now()
-          if (now - lastTapAt.current < 450) return
+          // Short debounce only — was 450ms and felt unresponsive / missed taps.
+          if (now - lastTapAt.current < 160) return
           lastTapAt.current = now
           wake.release()
-          if (live) {
+          if (live || voice.status !== 'idle') {
             voice.stop()
             return
           }

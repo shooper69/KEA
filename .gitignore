@@ -25,6 +25,21 @@ dist-ssr
 .kea/*.token
 .kea/*.mjs
 .kea/*.sql
+.kea/jdk-17/
+.kea/jdk-21/
+.kea/jdk-*/
+
+# Capacitor / Android
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/captures
+android/*.keystore
+android/*.jks
+*.keystore
+*.jks
+key.properties
 
 # Editor directories and files
 .vscode/*
@@ -36,3 +51,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+android/signing-secrets.txt
+

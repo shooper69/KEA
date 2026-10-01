@@ -13,8 +13,6 @@ export function SiteFooter({
       <nav className="site-footer__nav" aria-label="Legal">
         <Link to="/method">The Method</Link>
         <Link to="/privacy-policy">Privacy</Link>
-        <Link to="/support">Support</Link>
-        <Link to="/delete-account">Delete my data</Link>
         <Link to="/terms-of-service">Terms of Service</Link>
         <Link to="/cookie-policy">Cookies</Link>
       </nav>

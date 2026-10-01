@@ -1085,6 +1085,7 @@ export function useVoiceConversation({
   }, [start])
 
   const stop = useCallback(() => {
+    startingRef.current = false
     fatalListenRef.current = true
     handsFreeRef.current = false
     setHandsFree(false)
@@ -1127,9 +1128,12 @@ export function useVoiceConversation({
   }, [stop])
 
   const toggle = useCallback(() => {
-    if (startingRef.current) return
-    if (handsFreeRef.current || status !== 'idle') stop()
-    else void start()
+    // Always allow stop, even mid-start, so the Kea button never feels dead.
+    if (startingRef.current || handsFreeRef.current || status !== 'idle') {
+      stop()
+      return
+    }
+    void start()
   }, [start, status, stop])
 
   return {
