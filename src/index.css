@@ -3918,6 +3918,54 @@ button.memory-library__target--retry {
   z-index: 5;
 }
 
+.companion-nav__pwa-slot {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  z-index: 4;
+}
+
+.companion-nav__pwa-alert {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.1rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: #e11d2e;
+  font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
+  font-size: clamp(1.85rem, 7vw, 2.55rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.companion-nav__pwa-alert:focus-visible {
+  outline: 2px solid rgba(225, 29, 46, 0.55);
+  outline-offset: 3px;
+  border-radius: 0.35rem;
+}
+
+.kea-confirm__card--pwa {
+  width: min(19rem, calc(100% - 2rem));
+}
+
+.kea-confirm__note--hint {
+  margin-top: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.82rem;
+}
+
 .companion-nav__cluster {
   display: flex;
   align-items: center;

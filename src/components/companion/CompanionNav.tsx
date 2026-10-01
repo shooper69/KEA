@@ -11,6 +11,7 @@ import { dismissSpokenTour } from '../../data/keaOnboarding'
 import { useSession } from '../../context/SessionContext'
 import { KeaMark } from './KeaMark'
 import { LanguageSwitcher } from './LanguageSwitcher'
+import { PwaInstallAttention } from './PwaInstallAttention'
 import { UserMenu } from './UserMenu'
 
 function ClearChatIcon() {
@@ -144,6 +145,7 @@ export function CompanionNav({
         <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
         </Link>
+        <PwaInstallAttention />
         <div className="companion-nav__cluster">
         <LanguageSwitcher />
         {onToggleTextMode ? null : (

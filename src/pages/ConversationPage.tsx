@@ -148,7 +148,7 @@ export function ConversationPage() {
   const sessionGreetedRef = useRef('')
   // Wake stays off until this visit's welcome has started, so "Hey Kea"
   // cannot grab the mic and cancel the greeting.
-  const [openingDone, setOpeningDone] = useState(false)
+  const [, setOpeningDone] = useState(false)
 
   useEffect(() => {
     const bump = () => setOnboardingRevision((n) => n + 1)
