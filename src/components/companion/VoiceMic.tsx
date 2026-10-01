@@ -86,12 +86,14 @@ export function VoiceMic({
           onPointerDown={handlePointerDown}
           onClick={handleClick}
         >
-          <span className="voice-mic__waves" aria-hidden="true">
-            <span className="voice-mic__ring voice-mic__ring--1" />
-            <span className="voice-mic__ring voice-mic__ring--2" />
-            <span className="voice-mic__ring voice-mic__ring--3" />
+          <span className="voice-mic__figure">
+            <span className="voice-mic__waves" aria-hidden="true">
+              <span className="voice-mic__ring voice-mic__ring--1" />
+              <span className="voice-mic__ring voice-mic__ring--2" />
+              <span className="voice-mic__ring voice-mic__ring--3" />
+            </span>
+            <img className="voice-mic__icon" src={KEA_MIC_SRC} alt="" />
           </span>
-          <img className="voice-mic__icon" src={KEA_MIC_SRC} alt="" />
         </button>
       </div>
       <button

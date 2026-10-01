@@ -14,13 +14,13 @@ export function DeleteAccountPage() {
       <div className="legal-screen__content">
         <div className="settings-title-row">
           <h1>Delete my Kea data</h1>
-          <Link to="/" className="settings-close" aria-label="Back to Kea">
+          <Link to="/" className="settings-close" aria-label="Close">
             ×
           </Link>
         </div>
         <DeleteAccountPanel showSettingsLink />
-        <SiteFooter tone="plain" />
       </div>
+      <SiteFooter tone="plain" />
     </main>
   )
 }

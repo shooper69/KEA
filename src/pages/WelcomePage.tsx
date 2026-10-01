@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { AuthPanel } from '../components/companion/AuthPanel'
@@ -13,7 +13,7 @@ import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
 import { getMarketingIntroVoice } from '../architecture/voiceCatalog'
-import { welcomeScriptForLanguage } from '../architecture/welcomeMarketing'
+import { welcomeScriptForLanguage, WELCOME_CLOSING_TTS_HINT } from '../architecture/welcomeMarketing'
 import {
   dismissHomeOffer,
   getOffer,
@@ -263,24 +263,37 @@ export function WelcomePage() {
       /** Prefetch next paragraph while the current one plays — cuts the gap. */
       let nextUrl: Promise<string | null> | null =
         introVoice && paragraphs.length > 0
-          ? prefetchManagedVoiceAudio(introVoice, paragraphs[0])
+          ? prefetchManagedVoiceAudio(
+              introVoice,
+              paragraphs[0],
+              paragraphs.length === 1 ? WELCOME_CLOSING_TTS_HINT : undefined,
+            )
           : null
       const gapMs = 90
 
       for (let index = 0; index < paragraphs.length; index++) {
         if (runId !== introRunId.current) return
         const paragraph = paragraphs[index]
+        const closingHint =
+          index === paragraphs.length - 1 ? WELCOME_CLOSING_TTS_HINT : undefined
         const prefix = spokenSoFar
         const prefetchedUrl = nextUrl ? await nextUrl : null
         nextUrl =
           introVoice && index + 1 < paragraphs.length
-            ? prefetchManagedVoiceAudio(introVoice, paragraphs[index + 1])
+            ? prefetchManagedVoiceAudio(
+                introVoice,
+                paragraphs[index + 1],
+                index + 1 === paragraphs.length - 1
+                  ? WELCOME_CLOSING_TTS_HINT
+                  : undefined,
+              )
             : null
 
         await new Promise<void>((resolve) => {
           const opts = {
             lang: locale,
             prefetchedUrl,
+            ttsInstructions: closingHint,
             onCharIndex: (charIndex: number) => {
               if (runId !== introRunId.current) return
               const piece = snapToWordEnd(paragraph, charIndex)
@@ -567,7 +580,7 @@ export function WelcomePage() {
 
   return (
     <main
-      className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}${introMode ? ' welcome-screen--intro' : ''}`}
+      className={`companion-screen welcome-screen${authOpen ? ' welcome-screen--modal' : ''}${homeOfferOpen && !authOpen ? ' has-offer-dock' : ''}${leavePromptOpen && !authOpen ? ' welcome-screen--leave-funnel' : ''}${introMode ? ' welcome-screen--intro' : ''}${langMenuOpen && !authOpen ? ' welcome-screen--lang-open' : ''}`}
     >
       <CloudAtmosphere presence="idle" tempo="sunrise" />
       {!authOpen ? (
@@ -575,22 +588,24 @@ export function WelcomePage() {
           <Link to="/" className="method-screen__brand" aria-label="Kea home">
             <img
               className="method-screen__logo"
-              src="/kea-05.png"
+              src="/kea-mark.png"
               alt="Kea"
               width={180}
               height={90}
             />
           </Link>
           <nav className="method-screen__nav" aria-label="Site">
-            <Link to="/" className="method-screen__home">
+            <NavLink to="/" end className="method-screen__home">
               Home
-            </Link>
-            <Link to="/method" className="method-screen__page-title">
+            </NavLink>
+            <NavLink to="/method" className="method-screen__page-title">
               The Method
-            </Link>
+            </NavLink>
             <button
               type="button"
-              className="method-screen__page-title method-screen__login"
+              className={`method-screen__page-title method-screen__login${
+                authOpen === 'login' ? ' active' : ''
+              }`}
               onClick={openLogin}
             >
               Login
@@ -598,34 +613,54 @@ export function WelcomePage() {
           </nav>
         </header>
       ) : null}
-      <div
-        className={`welcome-screen__shell${
-          introMode ? ' welcome-screen__shell--intro' : ''
-        }`}
-      >
-        <div className="welcome-screen__pinned">
-          {introMode ? (
-            <>
-              <h1>{welcomeTitle}</h1>
-              {langPicker}
-            </>
-          ) : null}
-        </div>
-        <div className="welcome-screen__scroll" ref={introScrollRef}>
-          {!introMode ? (
-            <>
-              <h1>{welcomeTitle}</h1>
-              {langPicker}
-            </>
-          ) : null}
+      {!authOpen ? (
+        <div
+          className={`welcome-screen__shell${
+            introMode ? ' welcome-screen__shell--intro' : ''
+          }`}
+        >
+          <div className="welcome-screen__pinned">
+            {introMode ? <h1>{welcomeTitle}</h1> : null}
+          </div>
+          <div className="welcome-screen__scroll" ref={introScrollRef}>
+            {!introMode ? (
+              <div className="welcome-stage">
+                <div className="welcome-stage__mascot" aria-hidden="true">
+                  <div className="welcome-stage__bird-wrap welcome-stage__bird-wrap--waving">
+                    <span className="welcome-stage__mic-waves">
+                      <span className="welcome-stage__mic-ring welcome-stage__mic-ring--1" />
+                      <span className="welcome-stage__mic-ring welcome-stage__mic-ring--2" />
+                      <span className="welcome-stage__mic-ring welcome-stage__mic-ring--3" />
+                    </span>
+                    <img
+                      className="welcome-stage__bird"
+                      src="/kea-branch.png"
+                      alt=""
+                    />
+                  </div>
+                </div>
+                <div className="welcome-stage__panel">
+                  <p className="welcome-stage__eyebrow">
+                    Hands-free language companion
+                  </p>
+                  <h1>{welcomeTitle}</h1>
+                  <p className="welcome-stage__support">
+                    Say &ldquo;Hey Kea&rdquo; and talk like a friend — she
+                    listens, replies, and helps you learn as you go.
+                  </p>
+                  {langPicker}
+                  {homeActions}
+                </div>
+              </div>
+            ) : null}
 
-          {spokenBlock}
-          {!introMode ? homeActions : null}
+            {spokenBlock}
+          </div>
+          {introMode ? (
+            <div className="welcome-screen__dock">{homeActions}</div>
+          ) : null}
         </div>
-        {introMode ? (
-          <div className="welcome-screen__dock">{homeActions}</div>
-        ) : null}
-      </div>
+      ) : null}
 
       {!authOpen ? (
         <footer className="welcome-screen__store-footer">
@@ -650,31 +685,49 @@ export function WelcomePage() {
           }}
         >
           <div
-            className={`auth-modal__card${
-              authOpen === 'login' ? ' auth-modal__card--compact' : ''
-            }`}
+            className="auth-modal__stage"
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              className="auth-modal__close"
-              onClick={() => setAuthOpen(false)}
+            <div className="auth-modal__mascot" aria-hidden="true">
+              <div className="auth-modal__bird-wrap auth-modal__bird-wrap--waving">
+                <span className="auth-modal__mic-waves">
+                  <span className="auth-modal__mic-ring auth-modal__mic-ring--1" />
+                  <span className="auth-modal__mic-ring auth-modal__mic-ring--2" />
+                  <span className="auth-modal__mic-ring auth-modal__mic-ring--3" />
+                </span>
+                <img
+                  className="auth-modal__bird"
+                  src="/kea-04.png"
+                  alt=""
+                />
+              </div>
+            </div>
+            <div
+              className={`auth-modal__card${
+                authOpen === 'login' ? ' auth-modal__card--compact' : ''
+              }`}
             >
-              Close
-            </button>
-            {showCloudAuth || authOpen === 'login' ? (
-              <AuthPanel
-                initialView={
-                  isPasswordRecoveryLocation()
-                    ? 'reset'
-                    : window.location.hash.includes('type=recovery')
+              <button
+                type="button"
+                className="auth-modal__close"
+                onClick={() => setAuthOpen(false)}
+              >
+                Close
+              </button>
+              {showCloudAuth || authOpen === 'login' ? (
+                <AuthPanel
+                  initialView={
+                    isPasswordRecoveryLocation()
                       ? 'reset'
-                      : authOpen
-                }
-              />
-            ) : (
-              localProfileForm
-            )}
+                      : window.location.hash.includes('type=recovery')
+                        ? 'reset'
+                        : authOpen
+                  }
+                />
+              ) : (
+                localProfileForm
+              )}
+            </div>
           </div>
         </div>
       ) : null}

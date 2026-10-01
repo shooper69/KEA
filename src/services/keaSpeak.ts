@@ -63,15 +63,17 @@ type SpeakOptions = {
   prefetchedUrl?: string | null
   /** In-flight prefetch — awaited before play so canned lines can start fetch earlier. */
   prefetchPromise?: Promise<string | null> | null
+  /** Extra gpt-4o-mini-tts instructions merged with the default Kea style. */
+  ttsInstructions?: string
 }
 
 const TTS_CACHE = 'kea-tts-v2'
-const TTS_STYLE_REV = 'soft-charm-v2'
+const TTS_STYLE_REV = 'soft-charm-v3'
 const ttsBlobs = new Map<string, Blob>()
 const ttsInflight = new Map<string, Promise<Blob | null>>()
 
-function ttsCacheKey(voice: ManagedVoice, text: string) {
-  return `${TTS_STYLE_REV}:${voice.id}:${voice.openaiVoice ?? ''}:${text.trim()}`
+function ttsCacheKey(voice: ManagedVoice, text: string, instructions = '') {
+  return `${TTS_STYLE_REV}:${voice.id}:${voice.openaiVoice ?? ''}:${instructions}:${text.trim()}`
 }
 
 function ttsCacheRequest(key: string) {
@@ -112,10 +114,12 @@ async function storeCachedTts(key: string, blob: Blob) {
 async function loadManagedVoiceAudio(
   voice: ManagedVoice,
   text: string,
+  ttsInstructions?: string,
 ): Promise<Blob | null> {
   const spoken = text.trim()
   if (voice.provider !== 'openai' || !voice.openaiVoice || !spoken) return null
-  const key = ttsCacheKey(voice, spoken)
+  const hint = ttsInstructions?.trim() ?? ''
+  const key = ttsCacheKey(voice, spoken, hint)
   const cached = await readCachedTts(key)
   if (cached) return cached
   const pending = ttsInflight.get(key)
@@ -125,7 +129,11 @@ async function loadManagedVoiceAudio(
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: await keaAuthHeaders(),
-        body: JSON.stringify({ voice: voice.openaiVoice, text: spoken }),
+        body: JSON.stringify({
+          voice: voice.openaiVoice,
+          text: spoken,
+          ...(hint ? { instructions: hint } : {}),
+        }),
       })
       if (!response.ok) return null
       const blob = await response.blob()
@@ -146,8 +154,9 @@ async function loadManagedVoiceAudio(
 export async function prefetchManagedVoiceAudio(
   voice: ManagedVoice,
   text: string,
+  ttsInstructions?: string,
 ): Promise<string | null> {
-  const blob = await loadManagedVoiceAudio(voice, text)
+  const blob = await loadManagedVoiceAudio(voice, text, ttsInstructions)
   if (!blob) return null
   return URL.createObjectURL(blob)
 }
@@ -231,7 +240,7 @@ export async function speakManagedVoice(
         return
       }
       const blob = await Promise.race([
-        loadManagedVoiceAudio(voice, text),
+        loadManagedVoiceAudio(voice, text, options.ttsInstructions),
         new Promise<Blob | null>((resolve) => {
           window.setTimeout(() => resolve(null), 16_000)
         }),

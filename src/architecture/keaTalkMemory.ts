@@ -343,5 +343,21 @@ export function requestClearTalkAndSoftReset() {
   } catch {
     // ignore
   }
-  window.location.replace(keaRestartUrl())
+  const url = keaRestartUrl()
+  // Prefer href over replace — some Android PWAs ignore replace in a gesture.
+  try {
+    window.location.assign(url)
+  } catch {
+    window.location.href = url
+  }
+  // If the service worker soft-routes and never leaves, force a real reload.
+  window.setTimeout(() => {
+    try {
+      if (!window.location.search.includes('restart=')) {
+        window.location.reload()
+      }
+    } catch {
+      // ignore
+    }
+  }, 500)
 }

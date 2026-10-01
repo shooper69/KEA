@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { StoreBadges } from '../components/companion/StoreBadges'
 
@@ -49,10 +49,10 @@ const METHOD_CARDS = [
     alt: 'Speaking with Kea while voice becomes real progress',
   },
   {
-    title: 'Earn real rewards',
+    title: 'Rewards',
     body: [
       'Your progress is tracked in background so you can monitor your performance. You do not need levels and streaks, as you’ll find in most apps. For you know best what and when you want to learn.',
-      'And instead of stars, emojis and pings, with Kea you earn real rewards for your progress, that can be converted into discounts when you shop online.',
+      'No stars, emojis and pings, And you’ll not be pushed to view adverts or provide feedback. Just to keep talking. The rewards will come soon enough.',
     ],
     image: '/method/method-earn-taps.webp',
     alt: 'Glowing tokens rising from a friendly conversation',
@@ -77,13 +77,16 @@ export function MethodPage() {
             />
           </Link>
           <nav className="method-screen__nav" aria-label="Site">
-            <Link to="/" className="method-screen__home">
+            <NavLink to="/" end className="method-screen__home">
               Home
-            </Link>
-            <Link to="/method" className="method-screen__page-title">
+            </NavLink>
+            <NavLink to="/method" className="method-screen__page-title">
               The Method
-            </Link>
-            <Link to="/?login=1" className="method-screen__page-title method-screen__login">
+            </NavLink>
+            <Link
+              to="/?login=1"
+              className="method-screen__page-title method-screen__login"
+            >
               Login
             </Link>
           </nav>
@@ -134,7 +137,12 @@ export function MethodPage() {
 
         <div className="method-screen__cta">
           <p className="method-screen__invite">
-            So let’s see if we’re going to become friends.
+            <span className="method-screen__invite-line">
+              So let’s see if we’re
+            </span>
+            <span className="method-screen__invite-line">
+              going to become friends
+            </span>
           </p>
           <Link to="/?register=1" className="kea-button method-screen__cta-button">
             Create free account

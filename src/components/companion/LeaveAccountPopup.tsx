@@ -29,14 +29,6 @@ interface LeaveAccountPopupProps {
   onLeave: () => void
 }
 
-function snapToWordEnd(text: string, charIndex: number) {
-  if (charIndex <= 0) return ''
-  if (charIndex >= text.length) return text
-  let end = charIndex
-  while (end < text.length && !/\s/.test(text[end]!)) end += 1
-  return text.slice(0, end)
-}
-
 /** Conversational leave funnel — Kea speaks and shows each line in turn. */
 export function LeaveAccountPopup({
   onCreateAccount,
@@ -45,13 +37,14 @@ export function LeaveAccountPopup({
 }: LeaveAccountPopupProps) {
   const [steps] = useState(() => loadLeaveFunnel().steps)
   const [index, setIndex] = useState(0)
-  const [line, setLine] = useState('')
+  const [declineLine, setDeclineLine] = useState('')
   const [busy, setBusy] = useState(false)
   const [awaiting, setAwaiting] = useState(false)
   const [declining, setDeclining] = useState(false)
   const runId = useRef(0)
 
   const step: LeaveFunnelStep | undefined = steps[index]
+  const visibleLine = declining ? declineLine : (step?.spoken ?? '')
   const scene = declining ? SCENE_COUNT - 1 : index % SCENE_COUNT
   const keaSrc = KEA_BY_SCENE[scene] ?? KEA_FLY_SRC
 
@@ -65,23 +58,17 @@ export function LeaveAccountPopup({
   useEffect(() => {
     if (!step || declining) return
     const id = ++runId.current
+    const text = step.spoken
     setBusy(true)
     setAwaiting(false)
-    setLine('')
     stopKeaSpeech()
     const voice = getMarketingIntroVoice()
-    const text = step.spoken
     const finish = () => {
       if (id !== runId.current) return
-      setLine(text)
       setBusy(false)
       setAwaiting(true)
     }
     const opts = {
-      onCharIndex: (charIndex: number) => {
-        if (id !== runId.current) return
-        setLine(snapToWordEnd(text, charIndex))
-      },
       onend: finish,
       onerror: finish,
     }
@@ -97,22 +84,17 @@ export function LeaveAccountPopup({
     setDeclining(true)
     setAwaiting(false)
     setBusy(true)
-    setLine('')
+    setDeclineLine(decline)
     const id = ++runId.current
     stopKeaSpeech()
     const voice = getMarketingIntroVoice()
     await new Promise<void>((resolve) => {
       const finish = () => {
         if (id !== runId.current) return
-        setLine(decline)
         setBusy(false)
         resolve()
       }
       const opts = {
-        onCharIndex: (charIndex: number) => {
-          if (id !== runId.current) return
-          setLine(snapToWordEnd(decline, charIndex))
-        },
         onend: finish,
         onerror: finish,
       }
@@ -174,10 +156,10 @@ export function LeaveAccountPopup({
           <p
             id="leave-funnel-line"
             className="leave-funnel__line"
-            aria-live="off"
+            aria-live="polite"
             aria-busy={busy}
           >
-            {line || (busy ? '…' : '')}
+            {visibleLine}
           </p>
           {awaiting && !declining ? (
             <div className="leave-funnel__actions">
@@ -215,9 +197,9 @@ export function LeaveAccountPopup({
               ) : null}
               {step.advance === 'start' ? (
                 <>
-                <button type="button" className="kea-button" onClick={onStart}>
-                  Let&apos;s get to know each other
-                </button>
+                  <button type="button" className="kea-button" onClick={onStart}>
+                    Let&apos;s get to know each other
+                  </button>
                   <button
                     type="button"
                     className="kea-button kea-button--ghost"

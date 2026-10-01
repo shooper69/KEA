@@ -154,8 +154,8 @@ type InstallAppVariant = 'store' | 'header'
 
 /**
  * Install Kea as a Progressive Web App (home-screen app).
- * `store` — compact button beside the Play badge (PC / tablet).
- * `header` — “Get the app” text control (phone).
+ * `store` — compact button beside the store badges.
+ * `header` — “Get the app” text control.
  */
 export function InstallAppButton({
   className = '',

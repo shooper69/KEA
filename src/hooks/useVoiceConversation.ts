@@ -48,7 +48,7 @@ import {
   DEFAULT_LISTEN_IDLE_SECONDS,
   MIN_LISTEN_IDLE_SECONDS,
 } from '../data/keaListenIdle'
-import { heardKeaStop, oneShotSpeechRecognition } from '../architecture/keaWakeWord'
+import { heardKeaStop, oneShotSpeechRecognition, speechRecognitionPings } from '../architecture/keaWakeWord'
 import {
   isKeaUiHeld,
   KEA_UI_HOLD,
@@ -931,8 +931,11 @@ export function useVoiceConversation({
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
-  /** While Kea is talking, keep listening for “Stop Kea” so hands-free stop works. */
+  /** While Kea is talking, listen for “Stop Kea” — desktop only (phones ping). */
   const watchStopWhileSpeaking = useCallback(() => {
+    if (speechRecognitionPings()) {
+      return () => {}
+    }
     const gen = ++stopWatchGen.current
     const tick = async () => {
       while (

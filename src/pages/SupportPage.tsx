@@ -15,12 +15,11 @@ export function SupportPage() {
       <div className="legal-screen__content">
         <div className="settings-title-row">
           <h1>Customer Support</h1>
-          <Link to="/" className="settings-close" aria-label="Back to Kea">
+          <Link to="/" className="settings-close" aria-label="Close">
             ×
           </Link>
         </div>
         <article className="settings-card legal-doc support-doc">
-          <p className="legal-doc__updated">Kea · kea.chat</p>
           <h2>We’re here to help</h2>
           <p>
             If something isn’t working, you have a question about your account or
@@ -55,8 +54,8 @@ export function SupportPage() {
             </Link>
           </p>
         </article>
-        <SiteFooter tone="plain" />
       </div>
+      <SiteFooter tone="plain" />
     </main>
   )
 }

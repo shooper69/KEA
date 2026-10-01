@@ -8,7 +8,6 @@ import {
 import {
   getSpeechRecognition,
   heardKeaWake,
-  oneShotSpeechRecognition,
   speechRecognitionAvailable,
   speechRecognitionPings,
   type KeaSpeechRecognition,
@@ -104,11 +103,10 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
 
   useEffect(() => {
     const Ctor = getSpeechRecognition()
-    // Phones: do NOT run continuous SpeechRecognition (beeps / breaks).
-    // Use energy gate + one-shot SR (fast) with Whisper fallback.
+    // Phones: do NOT run continuous or one-shot SpeechRecognition (beeps).
+    // Use energy gate + Whisper only.
     const mobile = speechRecognitionPings()
     const preferContinuousSpeech = Boolean(Ctor) && !mobile
-    const canOneShot = Boolean(Ctor)
     const canWhisper =
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia)
@@ -119,7 +117,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       abortRef.current = () => {}
       return
     }
-    if (!preferContinuousSpeech && !canWhisper && !canOneShot) {
+    if (!preferContinuousSpeech && !canWhisper) {
       setArmed(false)
       setWakeMic('')
       abortRef.current = () => {}
@@ -216,40 +214,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       silenceHold = 0
       speechBurstMs = 0
 
-      // Mobile / any one-shot path: try device ASR first (low latency).
-      // Release the wake mic briefly — Chrome often cannot SR while GUM holds it.
-      if (canOneShot && Ctor && (mobile || !preferContinuousSpeech)) {
-        const tracks = [
-          ...(stream?.getAudioTracks() ?? []),
-          ...(watchStream?.getAudioTracks() ?? []),
-        ]
-        for (const track of tracks) track.enabled = false
-        try {
-          logWake(`one-shot speech (${reason})`)
-          const said = await oneShotSpeechRecognition(2400, heardKeaWake)
-          logWake('one-shot transcript', said || '(empty)')
-          if (dead || waking || cancelled || !enabledRef.current) return
-          if (said && heardKeaWake(said)) {
-            logWake('wake matched', said)
-            fireWake()
-            return
-          }
-        } catch (caught) {
-          logWake(
-            'one-shot failed',
-            caught instanceof Error ? caught.message : 'speech failed',
-          )
-        } finally {
-          for (const track of tracks) {
-            try {
-              track.enabled = true
-            } catch {
-              // ignore
-            }
-          }
-        }
-      }
-
+      // Phones: Whisper only. Browser SpeechRecognition pings on every start.
       const ordered = new Float32Array(ring.length)
       let index = 0
       for (let p = ringPos; p < ring.length; p++) ordered[index++] = ring[p]
@@ -319,7 +284,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         const calibrateUntil = performance.now() + AMBIENT_CALIBRATE_MS
         logWake('armed', {
           mobile,
-          oneShot: canOneShot,
+          path: mobile ? 'whisper' : 'speech',
           mic: opened.info.label,
         })
         const tick = (now: number) => {
@@ -379,7 +344,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           recognitionAvailable: true,
           recognitionRunning: true,
           recognitionLanguage: mobile
-            ? `wake-oneshot · ${opened.info.label}`
+            ? `wake-whisper · ${opened.info.label}`
             : `wake-whisper · ${opened.info.label}`,
         })
       } catch (caught) {

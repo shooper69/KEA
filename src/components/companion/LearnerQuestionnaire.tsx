@@ -163,7 +163,7 @@ export function LearnerQuestionnaire({
           onExit?.()
         }}
       >
-        ×
+        ✕
       </button>
       <span className="rising-words__who rising-words__who--kea" aria-hidden="true">
         <img src={KEA_FLY_SRC} alt="" />

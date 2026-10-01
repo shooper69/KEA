@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { keaRestartUrl, requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
+import { requestClearTalkAndSoftReset } from '../../architecture/keaTalkMemory'
 import { useHoldKeaListening } from '../../architecture/keaUiHold'
 import {
   formatTrendPercent,
@@ -115,6 +115,7 @@ export function CompanionNav({
   const { email, firstName } = useSession()
   const [clearOpen, setClearOpen] = useState(false)
   const [trend, setTrend] = useState(() => getTalkTrendPercent())
+  const resetArmedAt = useRef(0)
   useHoldKeaListening(clearOpen)
 
   useEffect(() => {
@@ -129,10 +130,17 @@ export function CompanionNav({
   }, [])
 
   function confirmClear() {
-    setClearOpen(false)
+    const now = Date.now()
+    if (now - resetArmedAt.current < 700) return
+    resetArmedAt.current = now
     const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
     dismissSpokenTour(userKey)
-    requestClearTalkAndSoftReset()
+    setClearOpen(false)
+    // Navigate on the next frame so the dialog tear-down cannot cancel the
+    // mobile/PWA gesture that must own the reload.
+    window.setTimeout(() => {
+      requestClearTalkAndSoftReset()
+    }, 0)
   }
 
   const trendLabel = formatTrendPercent(trend)
@@ -203,21 +211,14 @@ export function CompanionNav({
             </span>
           </button>
         ) : null}
-        <a
-          href={keaRestartUrl()}
+        <button
+          type="button"
           className="companion-nav__icon companion-nav__clear"
           aria-label="Reset Kea"
-          onClick={(event) => {
-            event.preventDefault()
-            setClearOpen(true)
-          }}
+          onClick={() => setClearOpen(true)}
         >
           <ClearChatIcon />
-          <span className="corner-tip" role="tooltip">
-            Clears the screen, skips How to use Kea if stuck, says welcome, and
-            Kea starts listening. You stay signed in.
-          </span>
-        </a>
+        </button>
       </div>
       {clearOpen ? (
         <div
@@ -225,10 +226,13 @@ export function CompanionNav({
           role="dialog"
           aria-modal="true"
           aria-labelledby="kea-clear-chat-title"
-          onClick={() => setClearOpen(false)}
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) setClearOpen(false)
+          }}
         >
           <div
             className="kea-confirm__card"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
           >
             <p id="kea-clear-chat-title" className="kea-confirm__title">
@@ -246,7 +250,20 @@ export function CompanionNav({
               >
                 Cancel
               </button>
-              <button type="button" className="kea-button" onClick={confirmClear}>
+              <button
+                type="button"
+                className="kea-button"
+                onPointerUp={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  confirmClear()
+                }}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  confirmClear()
+                }}
+              >
                 Reset
               </button>
             </div>

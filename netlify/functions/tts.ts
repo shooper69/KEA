@@ -31,7 +31,16 @@ const KEA_TTS_STYLE =
 
 const KEA_TTS_SPEED = 0.92
 
-async function requestSpeech(apiKey: string, voice: string, text: string) {
+async function requestSpeech(
+  apiKey: string,
+  voice: string,
+  text: string,
+  extraInstructions?: string,
+) {
+  const hint = extraInstructions?.trim()
+  const instructions = hint
+    ? `${KEA_TTS_STYLE} ${hint}`
+    : KEA_TTS_STYLE
   const first = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
@@ -42,7 +51,7 @@ async function requestSpeech(apiKey: string, voice: string, text: string) {
       model: 'gpt-4o-mini-tts',
       voice,
       input: text,
-      instructions: KEA_TTS_STYLE,
+      instructions,
       speed: KEA_TTS_SPEED,
     }),
   })
@@ -84,7 +93,7 @@ export async function handler(event: TtsEvent) {
     }
   }
 
-  let payload: { voice?: string; text?: string }
+  let payload: { voice?: string; text?: string; instructions?: string }
   try {
     const raw = event.isBase64Encoded
       ? Buffer.from(event.body ?? '', 'base64').toString('utf8')
@@ -137,7 +146,12 @@ export async function handler(event: TtsEvent) {
     }
   }
 
-  const openaiResponse = await requestSpeech(apiKey, voice, text)
+  const openaiResponse = await requestSpeech(
+    apiKey,
+    voice,
+    text,
+    payload.instructions,
+  )
 
   if (!openaiResponse.ok) {
     const data = (await openaiResponse.json()) as { error?: { message?: string } }
