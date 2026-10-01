@@ -603,9 +603,7 @@ export function WelcomePage() {
             </NavLink>
             <button
               type="button"
-              className={`method-screen__page-title method-screen__login${
-                authOpen === 'login' ? ' active' : ''
-              }`}
+              className="method-screen__page-title method-screen__login"
               onClick={openLogin}
             >
               Login
