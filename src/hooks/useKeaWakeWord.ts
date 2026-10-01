@@ -8,8 +8,10 @@ import {
 import {
   getSpeechRecognition,
   heardKeaWake,
+  oneShotSpeechRecognition,
   speechRecognitionAvailable,
   speechRecognitionPings,
+  type KeaSpeechRecognition,
 } from '../architecture/keaWakeWord'
 import { patchVoiceDiagnostics } from '../architecture/voiceDiagnostics'
 import { looksLikeWhisperHallucination } from '../architecture/whisperText'
@@ -22,17 +24,19 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_HOLD_MS = 80
-const SHOT_COOLDOWN_MS = 900
-const WAKE_SILENCE_MS = 380
+const SPEECH_HOLD_MS = 55
+const SHOT_COOLDOWN_MS = 650
+const WAKE_SILENCE_MS = 300
 /** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 180
-const MAX_UTTERANCE_MS = 2600
-const RING_SECONDS = 1.8
-const AMBIENT_CALIBRATE_MS = 650
+const MIN_SPEECH_BURST_MS = 110
+const MAX_UTTERANCE_MS = 2200
+const RING_SECONDS = 2.0
+const AMBIENT_CALIBRATE_MS = 480
+const WAKE_VAD_FLOOR = Math.min(SPEECH_RMS_FLOOR, 0.01)
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
+
 function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   const buffer = new ArrayBuffer(44 + samples.length * 2)
   const view = new DataView(buffer)
@@ -68,9 +72,8 @@ function logWake(event: string, detail?: unknown, extra?: unknown) {
 }
 
 /**
- * Energy gate → short SpeechRecognition shot when the browser supports it
- * (phones + Chrome/Edge desktop). Otherwise MediaRecorder clip → Whisper.
- * Whisper alone was inventing "Thank you" / "Done" for short "Hey Kea" clips.
+ * Energy gate → one-shot SpeechRecognition (phones) or continuous SR (desktop).
+ * Whisper is the fallback when the browser speech engine is unavailable.
  */
 export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
   const [armed, setArmed] = useState(false)
@@ -101,9 +104,11 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
 
   useEffect(() => {
     const Ctor = getSpeechRecognition()
-    // Phones: Energy gate + Whisper only. Browser SpeechRecognition pings and
-    // often fails / permanently disables wake on mobile.
-    const preferSpeech = Boolean(Ctor) && !speechRecognitionPings()
+    // Phones: do NOT run continuous SpeechRecognition (beeps / breaks).
+    // Use energy gate + one-shot SR (fast) with Whisper fallback.
+    const mobile = speechRecognitionPings()
+    const preferContinuousSpeech = Boolean(Ctor) && !mobile
+    const canOneShot = Boolean(Ctor)
     const canWhisper =
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia)
@@ -114,14 +119,14 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       abortRef.current = () => {}
       return
     }
-    if (!preferSpeech && !canWhisper) {
+    if (!preferContinuousSpeech && !canWhisper && !canOneShot) {
       setArmed(false)
       setWakeMic('')
       abortRef.current = () => {}
       return
     }
 
-    let recognition: InstanceType<NonNullable<typeof Ctor>> | null = null
+    let recognition: KeaSpeechRecognition | null = null
     let dead = false
     let waking = false
     let heard = ''
@@ -189,7 +194,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       logWake('matched — starting talk')
       stopRecognition()
       teardownMic()
-      window.setTimeout(() => onWakeRef.current(), 120)
+      window.setTimeout(() => onWakeRef.current(), 80)
     }
 
     const finishFromRing = async (reason: string) => {
@@ -210,12 +215,47 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       speechHold = 0
       silenceHold = 0
       speechBurstMs = 0
+
+      // Mobile / any one-shot path: try device ASR first (low latency).
+      // Release the wake mic briefly — Chrome often cannot SR while GUM holds it.
+      if (canOneShot && Ctor && (mobile || !preferContinuousSpeech)) {
+        const tracks = [
+          ...(stream?.getAudioTracks() ?? []),
+          ...(watchStream?.getAudioTracks() ?? []),
+        ]
+        for (const track of tracks) track.enabled = false
+        try {
+          logWake(`one-shot speech (${reason})`)
+          const said = await oneShotSpeechRecognition(2400, heardKeaWake)
+          logWake('one-shot transcript', said || '(empty)')
+          if (dead || waking || cancelled || !enabledRef.current) return
+          if (said && heardKeaWake(said)) {
+            logWake('wake matched', said)
+            fireWake()
+            return
+          }
+        } catch (caught) {
+          logWake(
+            'one-shot failed',
+            caught instanceof Error ? caught.message : 'speech failed',
+          )
+        } finally {
+          for (const track of tracks) {
+            try {
+              track.enabled = true
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
       const ordered = new Float32Array(ring.length)
       let index = 0
       for (let p = ringPos; p < ring.length; p++) ordered[index++] = ring[p]
       for (let p = 0; p < ringPos; p++) ordered[index++] = ring[p]
       const blob = encodeWav(ordered, audioContext.sampleRate)
-      logWake(`check (${reason})`, blob.size)
+      logWake(`whisper check (${reason})`, blob.size)
       try {
         const result = await transcribeWithWhisper(blob, {
           prompt: WAKE_PROMPT,
@@ -239,6 +279,9 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       if (dead || waking || cancelled || !enabledRef.current) return
       if (stream) return
       try {
+        // Brief settle after talk/stop released the previous mic tracks.
+        await new Promise((resolve) => window.setTimeout(resolve, 120))
+        if (cancelled || dead || waking || !enabledRef.current) return
         const opened = await openKeaMicrophone()
         if (cancelled || dead || waking || !enabledRef.current) {
           opened.stream.getTracks().forEach((track) => track.stop())
@@ -269,13 +312,14 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             ringPos = (ringPos + 1) % ring.length
           }
         }
-        const vad = createSpeechVad(SPEECH_RMS_FLOOR)
+        const vad = createSpeechVad(WAKE_VAD_FLOOR)
 
         const samples = new Uint8Array(analyser.fftSize)
         let last = performance.now()
         const calibrateUntil = performance.now() + AMBIENT_CALIBRATE_MS
         logWake('armed', {
-          preferSpeech,
+          mobile,
+          oneShot: canOneShot,
           mic: opened.info.label,
         })
         const tick = (now: number) => {
@@ -334,8 +378,8 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         patchVoiceDiagnostics({
           recognitionAvailable: true,
           recognitionRunning: true,
-          recognitionLanguage: preferSpeech
-            ? 'wake-speech'
+          recognitionLanguage: mobile
+            ? `wake-oneshot · ${opened.info.label}`
             : `wake-whisper · ${opened.info.label}`,
         })
       } catch (caught) {
@@ -408,7 +452,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
     }
 
-    if (preferSpeech) startContinuous()
+    if (preferContinuousSpeech) startContinuous()
     else void armEnergy()
 
     function onVisibility() {
@@ -422,14 +466,20 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         return
       }
       if (dead || waking || cancelled || !enabledRef.current) return
-      if (preferSpeech) startContinuous()
+      if (preferContinuousSpeech) startContinuous()
       else void armEnergy()
     }
+
+    function onPointerUnlock() {
+      if (audioContext?.state === 'suspended') void audioContext.resume()
+    }
     document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pointerdown', onPointerUnlock, { passive: true })
 
     return () => {
       cancelled = true
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pointerdown', onPointerUnlock)
       abortEngine()
       setArmed(false)
       setWakeMic('')

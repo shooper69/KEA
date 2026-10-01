@@ -1,4 +1,4 @@
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import { useRef, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { VoicePresenceState } from '../../types'
 
 const KEA_MIC_SRC = '/kea-04.png'
@@ -13,7 +13,8 @@ interface VoiceMicProps {
 
 /**
  * Kea talk control + the two chat-bubble hints.
- * Prefer pointerup (finger/mouse) so taps feel instant on phones.
+ * Phones: fire on pointerdown (finger-down) so a slight move still counts.
+ * Click is the mouse / accessibility fallback. Debounced so both cannot double-fire.
  */
 export function VoiceMic({
   live,
@@ -21,6 +22,7 @@ export function VoiceMic({
   wakePhrase = true,
   onToggle,
 }: VoiceMicProps) {
+  const lastFireAt = useRef(0)
   const waving = status === 'listening' || status === 'speaking'
   const actionLabel = live
     ? 'Stop conversation'
@@ -28,14 +30,34 @@ export function VoiceMic({
       ? "Tap to talk or stop me, or say 'Hey Kea' or 'Stop Kea'"
       : 'Tap to talk or stop me'
 
-  function handlePointerUp(event: ReactPointerEvent<HTMLElement>) {
-    // Only primary button / finger; ignore hover leftovers.
-    if (event.pointerType === 'mouse' && event.button !== 0) return
-    event.preventDefault()
+  function fireToggle() {
+    const now = Date.now()
+    // Absorb pointerdown + synthetic click, and accidental double taps.
+    if (now - lastFireAt.current < 320) return
+    lastFireAt.current = now
     onToggle()
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur()
     }
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+    // Mouse uses click below; touch/pen need immediate down so scroll-cancel
+    // cannot swallow the gesture.
+    if (event.pointerType === 'mouse') return
+    event.preventDefault()
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // ignore
+    }
+    fireToggle()
+  }
+
+  function handleClick(event: ReactMouseEvent<HTMLElement>) {
+    event.preventDefault()
+    fireToggle()
   }
 
   return (
@@ -44,7 +66,8 @@ export function VoiceMic({
         type="button"
         className="voice-mic__prompt voice-mic__prompt--left"
         aria-label={actionLabel}
-        onPointerUp={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onClick={handleClick}
       >
         Tap to talk
         <br />
@@ -60,7 +83,8 @@ export function VoiceMic({
           }`}
           aria-pressed={live}
           aria-label={actionLabel}
-          onPointerUp={handlePointerUp}
+          onPointerDown={handlePointerDown}
+          onClick={handleClick}
         >
           <span className="voice-mic__waves" aria-hidden="true">
             <span className="voice-mic__ring voice-mic__ring--1" />
@@ -78,7 +102,8 @@ export function VoiceMic({
             ? "Or say 'Hey Kea' or 'Stop Kea'"
             : "Or say 'Hey Kea' or 'Stop Kea' when available"
         }
-        onPointerUp={handlePointerUp}
+        onPointerDown={handlePointerDown}
+        onClick={handleClick}
       >
         or say &apos;Hey Kea&apos;
         <br />

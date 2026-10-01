@@ -64,7 +64,15 @@ export function heardKeaStop(text: string) {
   if (/^(stop|quit|end)(\s+(please|now))?$/.test(n)) {
     return true
   }
-  if (/^(stop|quit)\s+(listening|talking)$/.test(n)) {
+  if (/^(stop|quit)\s+(listening|talking|please|now)$/.test(n)) {
+    return true
+  }
+  // Compact / slurred phone ASR: "stopkea", "stoplisten"
+  const compact = n.replace(/\s+/g, '')
+  if (
+    /^(stop|quit|end)(kea|kia|kiah|keya|kee+a|key)$/.test(compact) ||
+    /^(kea|kia|kiah|keya|kee+a|key)(stop|quit|end)$/.test(compact)
+  ) {
     return true
   }
   return false
@@ -123,4 +131,66 @@ export function wakeRestartMs(): number {
 
 export function speechRecognitionAvailable(): boolean {
   return Boolean(getSpeechRecognition())
+}
+
+/**
+ * One short SpeechRecognition pass (not continuous).
+ * Used for mobile wake/stop so we avoid the continuous “ping” loop.
+ */
+export function oneShotSpeechRecognition(
+  timeoutMs = 2400,
+  match?: (text: string) => boolean,
+): Promise<string> {
+  const Ctor = getSpeechRecognition()
+  if (!Ctor) return Promise.reject(new Error('no-speech-recognition'))
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let heard = ''
+    let recognition: KeaSpeechRecognition | null = null
+    const finish = (text: string, err?: string) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      try {
+        recognition?.abort()
+      } catch {
+        // ignore
+      }
+      if (err && !text.trim()) reject(new Error(err))
+      else resolve(text.trim())
+    }
+    const timer = window.setTimeout(() => finish(heard, 'timeout'), timeoutMs)
+    try {
+      const next = new Ctor()
+      recognition = next
+      next.lang = 'en-US'
+      next.continuous = false
+      next.interimResults = true
+      next.maxAlternatives = 4
+      next.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const piece = event.results[i]
+          const count = Math.max(1, piece.length ?? 1)
+          for (let a = 0; a < count; a++) {
+            const said = piece?.[a]?.transcript ?? ''
+            if (!said) continue
+            heard = `${heard} ${said}`.replace(/\s+/g, ' ').trim()
+            if (match?.(said) || match?.(heard)) {
+              finish(said || heard)
+              return
+            }
+          }
+        }
+      }
+      next.onerror = (event) => {
+        finish(heard, event.error || 'speech-error')
+      }
+      next.onend = () => {
+        finish(heard)
+      }
+      next.start()
+    } catch (caught) {
+      finish('', caught instanceof Error ? caught.message : 'speech-start-failed')
+    }
+  })
 }

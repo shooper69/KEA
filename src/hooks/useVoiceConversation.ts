@@ -48,7 +48,7 @@ import {
   DEFAULT_LISTEN_IDLE_SECONDS,
   MIN_LISTEN_IDLE_SECONDS,
 } from '../data/keaListenIdle'
-import { heardKeaStop } from '../architecture/keaWakeWord'
+import { heardKeaStop, oneShotSpeechRecognition } from '../architecture/keaWakeWord'
 import {
   isKeaUiHeld,
   KEA_UI_HOLD,
@@ -166,6 +166,8 @@ export function useVoiceConversation({
   const stoppingRecordRef = useRef(false)
   const startListeningRef = useRef<() => void>(() => {})
   const startTalkRef = useRef<() => void>(() => {})
+  const hardStopFromPhraseRef = useRef<() => void>(() => {})
+  const watchStopWhileSpeakingRef = useRef<() => () => void>(() => () => {})
   const answerSilenceMsRef = useRef(DEFAULT_ANSWER_SILENCE_MS)
   answerSilenceMsRef.current = Math.round(
     Math.min(15, Math.max(1, answerAfterSilenceSeconds)) * 1000,
@@ -544,19 +546,7 @@ export function useVoiceConversation({
         return
       }
       if (heardKeaStop(result.text)) {
-        logSpeech('stop phrase', result.text)
-        busyRef.current = false
-        fatalListenRef.current = true
-        handsFreeRef.current = false
-        setHandsFree(false)
-        clearListenIdleTimer()
-        clearRestartTimer()
-        stoppingRecordRef.current = true
-        teardownAudio()
-        stopKeaSpeech()
-        setStatus('idle')
-        setMicLabel('')
-        patchVoiceDiagnostics({ recognitionRunning: false })
+        hardStopFromPhraseRef.current()
         return
       }
       patchVoiceDiagnostics({
@@ -575,7 +565,7 @@ export function useVoiceConversation({
       if (handsFreeRef.current) startListeningRef.current()
       else setStatus('idle')
     }
-  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
+  }, [clearListenIdleTimer])
 
   const startListening = useCallback(() => {
     if (busyRef.current || fatalListenRef.current || isKeaUiHeld()) return
@@ -732,12 +722,16 @@ export function useVoiceConversation({
       )
       patchVoiceDiagnostics({ lastSpeechOutput: spoken, recognitionRunning: false })
       logSpeech('speaking')
+      const cancelStopWatch = handsFreeRef.current
+        ? watchStopWhileSpeakingRef.current()
+        : () => {}
       let settled = false
       let safety = 0
       const finish = () => {
         if (settled) return
         settled = true
         window.clearTimeout(safety)
+        cancelStopWatch()
         busyRef.current = false
         sendingRef.current = false
         setMessages((current) =>
@@ -913,7 +907,64 @@ export function useVoiceConversation({
   }, [sendToKea])
 
   const startingRef = useRef(false)
+  const [starting, setStarting] = useState(false)
   const listenWhenMicReadyRef = useRef(false)
+  const stopWatchGen = useRef(0)
+
+  const hardStopFromPhrase = useCallback(() => {
+    logSpeech('stop phrase')
+    stopWatchGen.current += 1
+    busyRef.current = false
+    sendingRef.current = false
+    fatalListenRef.current = true
+    handsFreeRef.current = false
+    setHandsFree(false)
+    startingRef.current = false
+    setStarting(false)
+    clearListenIdleTimer()
+    clearRestartTimer()
+    stoppingRecordRef.current = true
+    teardownAudio()
+    stopKeaSpeech()
+    setStatus('idle')
+    setMicLabel('')
+    patchVoiceDiagnostics({ recognitionRunning: false })
+  }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
+
+  /** While Kea is talking, keep listening for “Stop Kea” so hands-free stop works. */
+  const watchStopWhileSpeaking = useCallback(() => {
+    const gen = ++stopWatchGen.current
+    const tick = async () => {
+      while (
+        stopWatchGen.current === gen &&
+        handsFreeRef.current &&
+        !fatalListenRef.current
+      ) {
+        try {
+          const said = await oneShotSpeechRecognition(2200, heardKeaStop)
+          if (stopWatchGen.current !== gen) return
+          if (said && heardKeaStop(said)) {
+            hardStopFromPhrase()
+            return
+          }
+        } catch {
+          // Engine busy / denied — brief pause then retry while still speaking.
+        }
+        if (stopWatchGen.current !== gen) return
+        if (statusRef.current !== 'speaking') return
+        await new Promise((resolve) => window.setTimeout(resolve, 280))
+      }
+    }
+    void tick()
+    return () => {
+      if (stopWatchGen.current === gen) stopWatchGen.current += 1
+    }
+  }, [hardStopFromPhrase])
+
+  useEffect(() => {
+    hardStopFromPhraseRef.current = hardStopFromPhrase
+    watchStopWhileSpeakingRef.current = watchStopWhileSpeaking
+  }, [hardStopFromPhrase, watchStopWhileSpeaking])
 
   const start = useCallback(async (
     greeting?: string,
@@ -930,6 +981,7 @@ export function useVoiceConversation({
   ) => {
     if (startingRef.current || handsFreeRef.current) return
     startingRef.current = true
+    setStarting(true)
     listenWhenMicReadyRef.current = false
     setError(null)
     fatalListenRef.current = false
@@ -975,11 +1027,13 @@ export function useVoiceConversation({
         }
       }
       startingRef.current = false
+      setStarting(false)
       return
     }
 
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       startingRef.current = false
+      setStarting(false)
       setError('This browser cannot record the microphone for Whisper.')
       patchVoiceDiagnostics({ recognitionAvailable: false })
       return
@@ -1075,6 +1129,7 @@ export function useVoiceConversation({
       })
     } finally {
       startingRef.current = false
+      setStarting(false)
     }
   }, [activateLiveWindow, speakReply, startListening, targetLanguage])
 
@@ -1085,7 +1140,9 @@ export function useVoiceConversation({
   }, [start])
 
   const stop = useCallback(() => {
+    stopWatchGen.current += 1
     startingRef.current = false
+    setStarting(false)
     fatalListenRef.current = true
     handsFreeRef.current = false
     setHandsFree(false)
@@ -1154,6 +1211,7 @@ export function useVoiceConversation({
     rate,
     setRate,
     handsFree,
+    starting,
     micLabel,
     toggle,
     start,

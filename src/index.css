@@ -5293,6 +5293,12 @@ button.memory-library__target--retry {
   user-select: none;
 }
 
+.voice-mic-wrap .voice-mic {
+  /* Larger finger target than the visible bird. */
+  min-width: 6.4rem;
+  min-height: 6.4rem;
+}
+
 .voice-mic__center {
   display: flex;
   flex-direction: column;

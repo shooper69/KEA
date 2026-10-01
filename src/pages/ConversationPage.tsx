@@ -144,7 +144,6 @@ export function ConversationPage() {
   const live = voice.handsFree || voice.status !== 'idle'
   const liveRef = useRef(live)
   liveRef.current = live
-  const lastTapAt = useRef(0)
   const sessionGreetedRef = useRef('')
   // Wake stays off until this visit's welcome has started, so "Hey Kea"
   // cannot grab the mic and cancel the greeting.
@@ -563,12 +562,9 @@ export function ConversationPage() {
         wakePhrase={!audioRouteOpen}
         onToggle={() => {
           if (audioRouteOpen || quizOpen) return
-          const now = Date.now()
-          // Short debounce only — was 450ms and felt unresponsive / missed taps.
-          if (now - lastTapAt.current < 160) return
-          lastTapAt.current = now
           wake.release()
-          if (live || voice.status !== 'idle') {
+          // Stop wins whenever talk is live OR still arming — never ignore a stop tap.
+          if (live || voice.handsFree || voice.starting || voice.status !== 'idle') {
             voice.stop()
             return
           }
