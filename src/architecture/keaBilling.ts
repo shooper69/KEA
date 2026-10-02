@@ -130,6 +130,15 @@ export function loadBilling(): BillingState {
   }
 }
 
+/** Paid plan on this device (does not start a trial). */
+export function hasActiveSubscription() {
+  const state = loadBilling()
+  return (
+    (state.status === 'active' || state.status === 'past_due') &&
+    Boolean(state.planId)
+  )
+}
+
 export function saveBilling(state: BillingState) {
   localStorage.setItem(BILLING_KEY, JSON.stringify(state))
   window.dispatchEvent(new Event('kea-billing-changed'))

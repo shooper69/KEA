@@ -3,8 +3,8 @@ import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/companion/Button'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { AuthPanel } from '../components/companion/AuthPanel'
-import { LeaveAccountPopup } from '../components/companion/LeaveAccountPopup'
-import { KeaOptionSheet } from '../components/companion/KeaOptionSheet'
+import { LeaveAccountPopup, preloadLeaveFunnelAssets } from '../components/companion/LeaveAccountPopup'
+import { KeaLanguageField } from '../components/companion/KeaLanguageField'
 import { OfferPopup } from '../components/companion/OfferPopup'
 import { PasswordField } from '../components/companion/PasswordField'
 import { StoreBadges } from '../components/companion/StoreBadges'
@@ -12,14 +12,19 @@ import { HomeCommentsStrip } from '../components/companion/HomeCommentsStrip'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
+import { hasActiveSubscription } from '../architecture/keaBilling'
+import { shouldPromptAudioRouteOnce } from '../architecture/keaAudioRoute'
 import { getMarketingIntroVoice } from '../architecture/voiceCatalog'
 import { welcomeScriptForLanguage, WELCOME_CLOSING_TTS_HINT } from '../architecture/welcomeMarketing'
+import { MobileAudioRoutePopup } from '../components/companion/MobileAudioRoutePopup'
+import { usePwaInstall } from '../components/companion/InstallAppButton'
 import {
   dismissHomeOffer,
   getOffer,
   shouldShowPopup1,
 } from '../data/keaOffers'
 import { getWelcomeTitle } from '../data/keaWelcomeTitle'
+import { loadLeaveFunnel } from '../data/keaLeaveFunnel'
 import { useSession } from '../context/SessionContext'
 import { isPasswordRecoveryLocation } from '../services/keaProfile'
 import { speakManagedVoice, speakKeaLine, stopKeaSpeech, prefetchManagedVoiceAudio } from '../services/keaSpeak'
@@ -89,15 +94,30 @@ export function WelcomePage() {
   const [visibleCopy, setVisibleCopy] = useState('')
   const [introBusy, setIntroBusy] = useState(false)
   const [introHeard, setIntroHeard] = useState(false)
+  const [audioRouteOpen, setAudioRouteOpen] = useState(false)
   const [homeOfferOpen, setHomeOfferOpen] = useState(false)
   const [leavePromptOpen, setLeavePromptOpen] = useState(false)
-  const [langSheet, setLangSheet] = useState<null | 'spoken' | 'learning'>(null)
   const introRunId = useRef(0)
+  const pendingIntroLang = useRef<LanguageCode | null>(null)
   const langMenuRef = useRef<HTMLDivElement>(null)
   const introScrollRef = useRef<HTMLDivElement>(null)
   const leaveArmedRef = useRef(false)
   const leaveAllowRef = useRef(false)
   const leaveShownRef = useRef(leavePromptAlreadyShown())
+  const leavePromptOpenRef = useRef(false)
+  leavePromptOpenRef.current = leavePromptOpen
+
+  const { installed: appInstalled } = usePwaInstall()
+  const [subscribed, setSubscribed] = useState(hasActiveSubscription)
+
+  useEffect(() => {
+    function refreshSub() {
+      setSubscribed(hasActiveSubscription())
+    }
+    refreshSub()
+    window.addEventListener('kea-billing-changed', refreshSub)
+    return () => window.removeEventListener('kea-billing-changed', refreshSub)
+  }, [])
 
   const needsAdminPassword = isAdminEmail(mail || email)
   const showCloudAuth = cloudAuth && !isSignedIn
@@ -166,11 +186,23 @@ export function WelcomePage() {
   }, [authReady, authOpen, isSignedIn])
 
   // Leave-without-account: back button (phone + PC) and exit-intent (PC).
+  // Skip once they have the app installed or an active subscription.
   useEffect(() => {
+    const skipLeave = isSignedIn || appInstalled || subscribed
     const canArm =
-      authReady && !isSignedIn && !authOpen && !leaveShownRef.current
+      authReady && !skipLeave && !authOpen && !leaveShownRef.current
     leaveArmedRef.current = canArm
-    if (!canArm) return
+    if (!canArm) {
+      if (leavePromptOpenRef.current && skipLeave) setLeavePromptOpen(false)
+      return
+    }
+
+    preloadLeaveFunnelAssets()
+    const leaveVoice = getMarketingIntroVoice()
+    const firstLeaveLine = loadLeaveFunnel().steps[0]?.spoken
+    if (leaveVoice && firstLeaveLine) {
+      void prefetchManagedVoiceAudio(leaveVoice, firstLeaveLine)
+    }
 
     const guardState = { keaLeaveGuard: 1 as const }
     if (history.state?.keaLeaveGuard !== 1) {
@@ -181,14 +213,31 @@ export function WelcomePage() {
       if (!leaveArmedRef.current || leaveAllowRef.current || leaveShownRef.current) {
         return
       }
+      // Cancel any in-flight welcome intro and restore marketing home under the funnel.
       introRunId.current += 1
       stopKeaSpeech()
+      setIntroBusy(false)
+      setVisibleCopy('')
+      setAudioRouteOpen(false)
+      pendingIntroLang.current = null
       setLeavePromptOpen(true)
       setHomeOfferOpen(false)
     }
 
     function onPopState() {
-      if (leaveAllowRef.current || leaveShownRef.current) return
+      if (leaveAllowRef.current) return
+      // Leave funnel already open → Back means stay / restore marketing home.
+      if (leavePromptOpenRef.current) {
+        leaveShownRef.current = true
+        leaveArmedRef.current = false
+        markLeavePromptShown()
+        setLeavePromptOpen(false)
+        setIntroBusy(false)
+        setVisibleCopy('')
+        history.pushState(guardState, '')
+        return
+      }
+      if (leaveShownRef.current) return
       if (!leaveArmedRef.current) return
       history.pushState(guardState, '')
       showLeavePrompt()
@@ -217,7 +266,7 @@ export function WelcomePage() {
       document.removeEventListener('mouseout', onMouseOut)
       window.removeEventListener('beforeunload', onBeforeUnload)
     }
-  }, [authReady, isSignedIn, authOpen])
+  }, [authReady, isSignedIn, authOpen, appInstalled, subscribed])
 
   useEffect(() => {
     if (!langMenuOpen) return
@@ -243,6 +292,19 @@ export function WelcomePage() {
       stopKeaSpeech()
     }
   }, [])
+
+  function startWelcomeIntro(code: LanguageCode) {
+    setLangMenuOpen(false)
+    setProspectLang(code)
+    setSpoken(code)
+    setNativeLanguage(code)
+    if (shouldPromptAudioRouteOnce()) {
+      pendingIntroLang.current = code
+      setAudioRouteOpen(true)
+      return
+    }
+    void playWelcomeIntro(code)
+  }
 
   async function playWelcomeIntro(code: LanguageCode) {
     const runId = ++introRunId.current
@@ -372,6 +434,10 @@ export function WelcomePage() {
     leaveShownRef.current = true
     leaveArmedRef.current = false
     markLeavePromptShown()
+    introRunId.current += 1
+    stopKeaSpeech()
+    setIntroBusy(false)
+    setVisibleCopy('')
     setLeavePromptOpen(false)
   }
 
@@ -380,6 +446,10 @@ export function WelcomePage() {
     leaveShownRef.current = true
     leaveArmedRef.current = false
     markLeavePromptShown()
+    introRunId.current += 1
+    stopKeaSpeech()
+    setIntroBusy(false)
+    setVisibleCopy('')
     setLeavePromptOpen(false)
     // Drop the guard entry, then leave to the previous page if there is one.
     history.back()
@@ -429,7 +499,7 @@ export function WelcomePage() {
         className="welcome-lang-picker__trigger"
         aria-expanded={langMenuOpen}
         aria-haspopup="listbox"
-        disabled={introBusy}
+        disabled={introBusy || audioRouteOpen}
         onClick={() => setLangMenuOpen((open) => !open)}
       >
         <span>Choose to chat with Kea</span>
@@ -451,7 +521,7 @@ export function WelcomePage() {
                 className={
                   prospectLang === language.code ? 'is-selected' : undefined
                 }
-                onClick={() => void playWelcomeIntro(language.code)}
+                onClick={() => startWelcomeIntro(language.code)}
               >
                 {language.name} · {language.nativeName}
               </button>
@@ -532,30 +602,26 @@ export function WelcomePage() {
         </label>
       )}
       <div className="welcome-languages">
-        <div className="welcome-field">
-          <span>I speak</span>
-          <button
-            type="button"
-            className="settings-picker"
-            onClick={() => setLangSheet('spoken')}
-          >
-            {spoken
-              ? `${getLanguage(spoken).name} · ${getLanguage(spoken).nativeName}`
-              : 'Choose language'}
-          </button>
-        </div>
-        <div className="welcome-field">
-          <span>I am learning</span>
-          <button
-            type="button"
-            className="settings-picker"
-            onClick={() => setLangSheet('learning')}
-          >
-            {learning
-              ? `${getLanguage(learning).name} · ${getLanguage(learning).nativeName}`
-              : 'Choose language'}
-          </button>
-        </div>
+        <KeaLanguageField
+          label="I speak"
+          tone="onboarding"
+          value={spoken}
+          placeholder="Choose language"
+          onChange={(code) => {
+            setSpoken(code)
+            if (learning === code) setLearning('')
+          }}
+        />
+        <KeaLanguageField
+          label="I am learning"
+          tone="onboarding"
+          value={learning}
+          placeholder="Choose language"
+          onChange={(code) => {
+            setLearning(code)
+            if (spoken === code) setSpoken('')
+          }}
+        />
       </div>
       {needsAdminPassword && !adminUnlocked && !needsProfileFinish ? (
         <PasswordField
@@ -687,12 +753,7 @@ export function WelcomePage() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="auth-modal__mascot" aria-hidden="true">
-              <div className="auth-modal__bird-wrap auth-modal__bird-wrap--waving">
-                <span className="auth-modal__mic-waves">
-                  <span className="auth-modal__mic-ring auth-modal__mic-ring--1" />
-                  <span className="auth-modal__mic-ring auth-modal__mic-ring--2" />
-                  <span className="auth-modal__mic-ring auth-modal__mic-ring--3" />
-                </span>
+              <div className="auth-modal__bird-wrap">
                 <img
                   className="auth-modal__bird"
                   src="/kea-04.png"
@@ -729,27 +790,6 @@ export function WelcomePage() {
           </div>
         </div>
       ) : null}
-      {langSheet ? (
-        <KeaOptionSheet
-          title={langSheet === 'spoken' ? 'I speak' : 'I am learning'}
-          options={SUPPORTED_LANGUAGES.map((language) => ({
-            value: language.code,
-            label: `${language.name} · ${language.nativeName}`,
-          }))}
-          value={langSheet === 'spoken' ? spoken : learning}
-          onChange={(next) => {
-            const code = next as LanguageCode
-            if (langSheet === 'spoken') {
-              setSpoken(code)
-              if (learning === code) setLearning('')
-            } else {
-              setLearning(code)
-              if (spoken === code) setSpoken('')
-            }
-          }}
-          onClose={() => setLangSheet(null)}
-        />
-      ) : null}
       {homeOfferOpen && !authOpen && !leavePromptOpen ? (
         <OfferPopup
           offer={getOffer('home')}
@@ -765,6 +805,16 @@ export function WelcomePage() {
           onCreateAccount={openRegister}
           onStay={dismissLeavePrompt}
           onLeave={confirmLeaveAnyway}
+        />
+      ) : null}
+      {audioRouteOpen ? (
+        <MobileAudioRoutePopup
+          onDone={() => {
+            setAudioRouteOpen(false)
+            const code = pendingIntroLang.current
+            pendingIntroLang.current = null
+            if (code) void playWelcomeIntro(code)
+          }}
         />
       ) : null}
     </main>

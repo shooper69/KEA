@@ -13,8 +13,8 @@ interface MobileAudioRoutePopupProps {
 }
 
 /**
- * After login on mobile: let the user pick phone speaker, headphones, or
- * Bluetooth/car so Kea uses the matching microphone.
+ * After the first speak request on mobile: let the user pick phone speaker,
+ * headphones, or Bluetooth/car so Kea uses the matching microphone.
  */
 export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
   const [saving, setSaving] = useState(false)

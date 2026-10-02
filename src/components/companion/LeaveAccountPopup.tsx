@@ -5,7 +5,12 @@ import {
   type LeaveFunnelStep,
 } from '../../data/keaLeaveFunnel'
 import { getMarketingIntroVoice } from '../../architecture/voiceCatalog'
-import { speakManagedVoice, speakKeaLine, stopKeaSpeech } from '../../services/keaSpeak'
+import {
+  prefetchManagedVoiceAudio,
+  speakManagedVoice,
+  speakKeaLine,
+  stopKeaSpeech,
+} from '../../services/keaSpeak'
 
 const KEA_MIC_SRC = '/kea-04.png'
 const KEA_MARK_SRC = '/kea-05.png'
@@ -23,13 +28,21 @@ const KEA_BY_SCENE = [
   KEA_MIC_SRC,
 ] as const
 
+/** Warm the bird assets so the first leave scene is never blank. */
+export function preloadLeaveFunnelAssets() {
+  for (const src of [KEA_FLY_SRC, KEA_MIC_SRC, KEA_MARK_SRC]) {
+    const img = new Image()
+    img.src = src
+  }
+}
+
 interface LeaveAccountPopupProps {
   onCreateAccount: () => void
   onStay: () => void
   onLeave: () => void
 }
 
-/** Conversational leave funnel — Kea speaks and shows each line in turn. */
+/** Conversational leave funnel — full line + CTAs paint immediately; speech follows. */
 export function LeaveAccountPopup({
   onCreateAccount,
   onStay,
@@ -39,9 +52,9 @@ export function LeaveAccountPopup({
   const [index, setIndex] = useState(0)
   const [declineLine, setDeclineLine] = useState('')
   const [busy, setBusy] = useState(false)
-  const [awaiting, setAwaiting] = useState(false)
   const [declining, setDeclining] = useState(false)
   const runId = useRef(0)
+  const prefetchRef = useRef<Promise<string | null> | null>(null)
 
   const step: LeaveFunnelStep | undefined = steps[index]
   const visibleLine = declining ? declineLine : (step?.spoken ?? '')
@@ -49,6 +62,7 @@ export function LeaveAccountPopup({
   const keaSrc = KEA_BY_SCENE[scene] ?? KEA_FLY_SRC
 
   useEffect(() => {
+    preloadLeaveFunnelAssets()
     return () => {
       runId.current += 1
       stopKeaSpeech()
@@ -60,29 +74,49 @@ export function LeaveAccountPopup({
     const id = ++runId.current
     const text = step.spoken
     setBusy(true)
-    setAwaiting(false)
     stopKeaSpeech()
     const voice = getMarketingIntroVoice()
     const finish = () => {
       if (id !== runId.current) return
       setBusy(false)
-      setAwaiting(true)
     }
     const opts = {
       onend: finish,
       onerror: finish,
     }
-    // One path only — never fall through to a second speak.
-    if (voice) void speakManagedVoice(voice, text, opts)
-    else void speakKeaLine(text, opts)
-  }, [index, declining, step?.id, step?.spoken])
+    const pendingPrefetch = prefetchRef.current
+    prefetchRef.current = null
+    void (async () => {
+      let prefetchedUrl: string | null = null
+      if (pendingPrefetch) {
+        try {
+          prefetchedUrl = await pendingPrefetch
+        } catch {
+          prefetchedUrl = null
+        }
+      }
+      if (id !== runId.current) return
+      if (voice) {
+        await speakManagedVoice(voice, text, { ...opts, prefetchedUrl })
+      } else {
+        await speakKeaLine(text, opts)
+      }
+    })()
+
+    // Prefetch the next step while this one speaks.
+    const next = steps[index + 1]
+    if (next && voice) {
+      prefetchRef.current = prefetchManagedVoiceAudio(voice, next.spoken).catch(
+        () => null,
+      )
+    }
+  }, [index, declining, step?.id, step?.spoken, steps])
 
   async function speakDeclineThenLeave() {
     const decline =
       step?.declineSpoken?.trim() ||
       "OK see you, but I think you'll be back."
     setDeclining(true)
-    setAwaiting(false)
     setBusy(true)
     setDeclineLine(decline)
     const id = ++runId.current
@@ -149,19 +183,14 @@ export function LeaveAccountPopup({
           <span className="leave-funnel__blob leave-funnel__blob--b" />
           <span className="leave-funnel__blob leave-funnel__blob--c" />
           <div className="leave-funnel__who">
-            <img src={keaSrc} alt="" />
+            <img src={keaSrc} alt="" decoding="async" />
           </div>
         </div>
         <div className="leave-funnel__copy">
-          <p
-            id="leave-funnel-line"
-            className="leave-funnel__line"
-            aria-live="polite"
-            aria-busy={busy}
-          >
+          <p id="leave-funnel-line" className="leave-funnel__line">
             {visibleLine}
           </p>
-          {awaiting && !declining ? (
+          {!declining ? (
             <div className="leave-funnel__actions">
               {step.advance === 'any' ? (
                 <>

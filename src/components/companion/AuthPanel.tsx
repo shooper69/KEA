@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from './Button'
-import { KeaOptionSheet } from './KeaOptionSheet'
+import { KeaLanguageField } from './KeaLanguageField'
 import { PasswordField } from './PasswordField'
-import { getLanguage, SUPPORTED_LANGUAGES } from '../../config/languages'
 import { isAdminEmail } from '../../architecture/adminAuth'
 import { markAudioRoutePromptPending } from '../../architecture/keaAudioRoute'
 import { markFreshChatScreen } from '../../architecture/keaTalkMemory'
@@ -44,7 +43,6 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   const [confirm, setConfirm] = useState('')
   const [spoken, setSpoken] = useState<LanguageCode | ''>('')
   const [learning, setLearning] = useState<LanguageCode | ''>('')
-  const [langSheet, setLangSheet] = useState<null | 'spoken' | 'learning'>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const registerReady = Boolean(
@@ -312,52 +310,27 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             onChange={setConfirm}
           />
           <div className="welcome-languages">
-            <div className="welcome-field">
-              <span className="visually-hidden">I speak</span>
-              <button
-                type="button"
-                className="settings-picker"
-                onClick={() => setLangSheet('spoken')}
-              >
-                {spoken
-                  ? `${getLanguage(spoken).name} · ${getLanguage(spoken).nativeName}`
-                  : 'I speak'}
-              </button>
-            </div>
-            <div className="welcome-field">
-              <span className="visually-hidden">I am learning</span>
-              <button
-                type="button"
-                className="settings-picker"
-                onClick={() => setLangSheet('learning')}
-              >
-                {learning
-                  ? `${getLanguage(learning).name} · ${getLanguage(learning).nativeName}`
-                  : 'I am learning'}
-              </button>
-            </div>
-          </div>
-          {langSheet ? (
-            <KeaOptionSheet
-              title={langSheet === 'spoken' ? 'I speak' : 'I am learning'}
-              options={SUPPORTED_LANGUAGES.map((language) => ({
-                value: language.code,
-                label: `${language.name} · ${language.nativeName}`,
-              }))}
-              value={langSheet === 'spoken' ? spoken : learning}
-              onChange={(next) => {
-                const code = next as LanguageCode
-                if (langSheet === 'spoken') {
-                  setSpoken(code)
-                  if (learning === code) setLearning('')
-                } else {
-                  setLearning(code)
-                  if (spoken === code) setSpoken('')
-                }
+            <KeaLanguageField
+              label="I speak"
+              tone="onboarding"
+              value={spoken}
+              placeholder="Choose language"
+              onChange={(code) => {
+                setSpoken(code)
+                if (learning === code) setLearning('')
               }}
-              onClose={() => setLangSheet(null)}
             />
-          ) : null}
+            <KeaLanguageField
+              label="I am learning"
+              tone="onboarding"
+              value={learning}
+              placeholder="Choose language"
+              onChange={(code) => {
+                setLearning(code)
+                if (spoken === code) setSpoken('')
+              }}
+            />
+          </div>
           <div className="welcome-screen__actions auth-login-actions">
             <Button
               type="submit"

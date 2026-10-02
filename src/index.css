@@ -2179,7 +2179,7 @@ body:has(.welcome-screen),
   position: relative;
   flex: 0 0 auto;
   margin: clamp(0.55rem, 1.5vh, 0.9rem) auto 0;
-  width: min(22rem, 100%);
+  width: min(15.5rem, 100%);
   z-index: 5;
 }
 
@@ -2201,13 +2201,11 @@ body:has(.welcome-screen),
   align-items: center;
   width: 100%;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 1cm auto 0;
   padding: 0;
 }
 
 .welcome-stage__glow,
-.welcome-stage__eyebrow,
-.welcome-stage__support,
 .welcome-stage__aura,
 .welcome-stage__perch {
   display: none;
@@ -2220,7 +2218,98 @@ body:has(.welcome-screen),
   flex-direction: column;
   align-items: center;
   order: 1;
+  width: min(30rem, 100%);
+  margin-left: auto;
+  margin-right: auto;
+  padding: clamp(1.25rem, 3.2vh, 2.1rem) clamp(1.1rem, 3.5vw, 2.2rem)
+    clamp(1.15rem, 2.8vh, 1.9rem);
+  border-radius: 1.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background:
+    linear-gradient(
+      155deg,
+      rgba(92, 48, 168, 0.72) 0%,
+      rgba(148, 58, 150, 0.62) 42%,
+      rgba(210, 120, 70, 0.48) 100%
+    );
+  box-shadow:
+    0 24px 48px rgba(24, 10, 48, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.welcome-stage__eyebrow {
+  display: block;
+  margin: 0 0 0.55rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 244, 230, 0.82);
+}
+
+.welcome-stage__panel h1 {
+  margin: 0;
+  max-width: 18ch;
+  margin-inline: auto;
+  font-family: var(--sans);
+  font-size: clamp(1.55rem, 5.5vw + 0.4rem, 2.65rem);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: #fffaf4;
+  text-shadow: 0 2px 18px rgba(30, 12, 60, 0.28);
+}
+
+.welcome-stage__support {
+  display: block;
+  margin: 0.75rem auto 0;
+  max-width: 34ch;
+  font-family: var(--sans);
+  font-size: clamp(0.9rem, 0.4vw + 0.82rem, 1.08rem);
+  font-weight: 450;
+  line-height: 1.45;
+  color: rgba(255, 246, 236, 0.9);
+}
+
+.welcome-stage__panel .welcome-lang-picker {
+  width: min(15.5rem, 100%);
+  margin-top: clamp(0.95rem, 2.8vh, 1.45rem);
+}
+
+.welcome-stage__panel .welcome-lang-picker__trigger {
+  min-height: 2.35rem;
+  padding: 0.28rem 0.85rem;
+  border: 0;
+  background: rgba(255, 250, 244, 0.92);
+  color: #2a2038;
+  font-family: var(--sans);
+  font-weight: 560;
+  box-shadow: 0 6px 16px rgba(24, 10, 40, 0.16);
+}
+
+.welcome-stage__panel .welcome-screen__actions.welcome-screen__actions--home {
+  width: min(15.5rem, 100%);
+  margin-top: clamp(0.85rem, 2.4vh, 1.1rem);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.welcome-stage__panel
+  .welcome-screen__actions--home
+  .welcome-screen__auth-pair
+  .kea-button {
   width: 100%;
+  min-height: 2.65rem;
+  height: 2.65rem;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-weight: 650;
+  letter-spacing: 0.03em;
 }
 
 .welcome-stage__mascot {
@@ -2297,20 +2386,6 @@ body:has(.welcome-screen),
   margin-top: clamp(0.55rem, 2vh, 1rem);
 }
 
-.welcome-stage__panel h1 {
-  margin: clamp(0.35rem, 1.6vh, 0.85rem) 0 0;
-}
-
-.welcome-stage__panel .welcome-lang-picker {
-  margin-top: clamp(0.75rem, 2.8vh, 1.25rem);
-}
-
-.welcome-stage__panel .welcome-screen__actions.welcome-screen__actions--home {
-  margin-top: clamp(0.75rem, 2.8vh, 1.25rem);
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
 @media (min-width: 960px) {
   .welcome-screen__shell:not(.welcome-screen__shell--intro) {
     width: min(72rem, calc(100% - 1rem));
@@ -2339,7 +2414,7 @@ body:has(.welcome-screen),
     gap: 0;
     width: 100%;
     max-width: min(44rem, 100%);
-    margin: 0 auto;
+    margin: 1cm auto 0;
     min-height: min(28rem, 58vh);
     padding: clamp(0.5rem, 1.5vh, 1rem) 0;
     padding-left: 0;
@@ -2395,8 +2470,6 @@ body:has(.welcome-screen),
   }
 
   .welcome-stage__panel {
-    position: relative;
-    z-index: 2;
     order: unset;
     grid-column: 1;
     grid-row: 1;
@@ -2404,25 +2477,8 @@ body:has(.welcome-screen),
     align-self: center;
     width: 100%;
     max-width: 30rem;
-    margin-left: auto;
-    margin-right: auto;
     padding: clamp(1.6rem, 3.2vh, 2.35rem) clamp(1.5rem, 2.8vw, 2.4rem)
       clamp(1.5rem, 2.8vh, 2.1rem);
-    border-radius: 1.65rem;
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    background:
-      linear-gradient(
-        155deg,
-        rgba(92, 48, 168, 0.72) 0%,
-        rgba(148, 58, 150, 0.62) 42%,
-        rgba(210, 120, 70, 0.48) 100%
-      );
-    box-shadow:
-      0 24px 48px rgba(24, 10, 48, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.28);
-    backdrop-filter: blur(16px) saturate(1.15);
-    -webkit-backdrop-filter: blur(16px) saturate(1.15);
-    text-align: center;
     animation: welcome-panel-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
   }
 
@@ -2450,70 +2506,25 @@ body:has(.welcome-screen),
   }
 
   .welcome-stage__eyebrow {
-    display: block;
     margin: 0 0 0.65rem;
-    font-family: var(--sans);
     font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: rgba(255, 244, 230, 0.82);
   }
 
   .welcome-stage__panel h1 {
-    margin: 0;
-    max-width: 18ch;
-    margin-inline: auto;
-    font-family: var(--sans);
     font-size: clamp(1.85rem, 2.4vw + 0.6rem, 2.65rem);
-    font-weight: 650;
-    line-height: 1.12;
-    letter-spacing: -0.02em;
-    color: #fffaf4;
-    text-shadow: 0 2px 18px rgba(30, 12, 60, 0.28);
   }
 
   .welcome-stage__support {
-    display: block;
     margin: 0.85rem auto 0;
-    max-width: 34ch;
-    font-family: var(--sans);
     font-size: clamp(0.95rem, 0.3vw + 0.85rem, 1.08rem);
-    font-weight: 450;
-    line-height: 1.45;
-    color: rgba(255, 246, 236, 0.9);
   }
 
   .welcome-stage__panel .welcome-lang-picker {
-    width: min(20rem, 100%);
     margin-top: 1.45rem;
   }
 
-  .welcome-stage__panel .welcome-lang-picker__trigger {
-    min-height: 2.85rem;
-    border: 0;
-    background: rgba(255, 250, 244, 0.92);
-    color: #2a2038;
-    font-family: var(--sans);
-    font-weight: 560;
-    box-shadow: 0 6px 16px rgba(24, 10, 40, 0.16);
-  }
-
   .welcome-stage__panel .welcome-screen__actions.welcome-screen__actions--home {
-    width: min(20rem, 100%);
     margin-top: 1.1rem;
-  }
-
-  .welcome-stage__panel
-    .welcome-screen__actions--home
-    .welcome-screen__auth-pair
-    .kea-button {
-    width: 100%;
-    min-height: 3.15rem;
-    border-radius: 999px;
-    font-family: var(--sans);
-    font-weight: 650;
-    letter-spacing: 0.03em;
   }
 }
 
@@ -2570,13 +2581,14 @@ body:has(.welcome-screen),
   gap: 0.45rem;
   width: 100%;
   margin: 0;
-  padding: 0.45rem 0.85rem;
+  min-height: 2.35rem;
+  padding: 0.32rem 0.85rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.55);
   color: var(--ink);
   font: inherit;
-  font-size: clamp(0.88rem, 1.4vh + 0.5rem, 1.05rem);
+  font-size: clamp(0.84rem, 1.2vh + 0.48rem, 0.95rem);
   cursor: pointer;
 }
 
@@ -2680,7 +2692,7 @@ body:has(.welcome-screen),
   justify-content: center;
   align-items: center;
   gap: 0.75rem;
-  width: min(36rem, 100%);
+  width: min(15.5rem, 100%);
 }
 
 .welcome-screen__auth-pair {
@@ -2699,10 +2711,10 @@ body:has(.welcome-screen),
   justify-content: center;
   width: auto;
   min-width: 0;
-  min-height: 3.15rem;
-  height: 3.15rem;
-  padding: 0 1.45rem;
-  font-size: 0.98rem;
+  min-height: 2.65rem;
+  height: 2.65rem;
+  padding: 0 1.15rem;
+  font-size: 0.9rem;
   line-height: 1.15;
   letter-spacing: 0.05em;
   font-weight: 600;
@@ -3565,8 +3577,8 @@ body:has(.welcome-screen),
 .auth-modal__mascot {
   position: relative;
   z-index: 3;
-  margin-bottom: clamp(-2.85rem, -7vw, -2.1rem);
-  transform: translateY(-1mm);
+  margin-bottom: clamp(-3.55rem, -9vw, -2.75rem);
+  transform: translateY(-0.35rem);
   pointer-events: none;
 }
 
@@ -3672,8 +3684,9 @@ body:has(.welcome-screen),
 
 .auth-modal .welcome-languages {
   grid-template-columns: 1fr;
-  gap: 0.45rem;
-  margin: 0.45rem 0 0.35rem;
+  gap: 0.65rem;
+  margin: 0.55rem 0 0.15rem;
+  width: 100%;
 }
 
 .auth-modal .welcome-languages .welcome-field {
@@ -3733,10 +3746,36 @@ body:has(.welcome-screen),
 }
 
 .auth-login-actions {
-  margin-top: 0.85rem;
+  margin-top: 1.35rem;
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.auth-modal .auth-profile-form .welcome-screen__actions {
+  margin-top: 1.35rem;
+}
+
+.auth-modal .kea-language-field__label {
+  color: rgba(255, 244, 232, 0.88);
+  text-align: left;
+}
+
+.auth-modal .kea-language-field__trigger {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 250, 244, 0.94);
+  color: #1c1830;
+  box-shadow: none;
+}
+
+.auth-modal .kea-language-field__text em,
+.auth-modal .kea-language-field__placeholder,
+.auth-modal .kea-language-field__chevron {
+  color: rgba(74, 52, 46, 0.55);
+}
+
+.auth-modal .kea-language-field__text strong {
+  color: #1c1830;
 }
 
 .auth-modal .welcome-screen__actions {
@@ -4900,6 +4939,25 @@ button.memory-library__target--retry {
   overflow: hidden;
 }
 
+.kea-language-sheet__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.15rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.kea-language-sheet__list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .kea-language-sheet__head {
   display: flex;
   align-items: center;
@@ -4923,16 +4981,6 @@ button.memory-library__target--retry {
   font-size: 1.4rem;
   line-height: 1;
   cursor: pointer;
-}
-
-.kea-language-sheet__list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0.15rem;
-  -webkit-overflow-scrolling: touch;
 }
 
 .kea-language-sheet__choice {
@@ -6882,27 +6930,27 @@ button.memory-library__target--retry {
   }
 
   .welcome-screen__actions--home .welcome-screen__auth-pair .kea-button {
-    min-height: 3.35rem;
-    height: 3.35rem;
-    padding: 0 1.35rem;
-    font-size: 1.02rem;
+    min-height: 2.75rem;
+    height: 2.75rem;
+    padding: 0 1.15rem;
+    font-size: 0.92rem;
     letter-spacing: 0.045em;
   }
 
   .welcome-screen__actions--home
     .welcome-screen__auth-pair
     .kea-button--ghost {
-    min-height: 3.35rem;
-    height: 3.35rem;
-    padding: 0 1.35rem;
-    font-size: 1.02rem;
+    min-height: 2.75rem;
+    height: 2.75rem;
+    padding: 0 1.15rem;
+    font-size: 0.92rem;
     letter-spacing: 0.045em;
   }
 
   .welcome-lang-picker__trigger {
-    min-height: 2.85rem;
-    font-size: 0.95rem;
-    padding: 0.65rem 0.9rem;
+    min-height: 2.35rem;
+    font-size: 0.9rem;
+    padding: 0.32rem 0.85rem;
   }
 
   .welcome-lang-picker__menu button {
@@ -7067,7 +7115,7 @@ button.memory-library__target--retry {
   }
 
   .auth-modal__mascot {
-    margin-bottom: clamp(-2.2rem, -7vw, -1.55rem);
+    margin-bottom: clamp(-3.1rem, -9vw, -2.35rem);
   }
 }
 
@@ -7571,7 +7619,7 @@ button.memory-library__target--retry {
   text-align: left;
   color: #fffaf4;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  animation: leave-funnel-scene-in 0.48s ease both;
+  animation: leave-funnel-scene-in 0.28s ease both;
 }
 
 .leave-account__card--funnel .leave-account__close {
@@ -7769,8 +7817,8 @@ button.memory-library__target--retry {
 
 @keyframes leave-funnel-scene-in {
   from {
-    opacity: 0;
-    transform: translateY(0.55rem) scale(0.97);
+    opacity: 1;
+    transform: translateY(0.35rem) scale(0.985);
   }
   to {
     opacity: 1;
@@ -7780,8 +7828,8 @@ button.memory-library__target--retry {
 
 @keyframes leave-funnel-kea-in {
   from {
-    opacity: 0;
-    transform: scale(0.72);
+    opacity: 1;
+    transform: scale(0.92);
   }
   to {
     opacity: 1;
@@ -8853,57 +8901,71 @@ button.memory-library__target--retry {
   justify-content: flex-start;
   align-items: stretch;
   padding: 0;
-  /* Kill the heavy companion blur wash — Method uses a light CSS sky instead */
+  /* Same base wash as marketing home (CloudAtmosphere paints over this). */
   background-color: #4ec4d4;
 }
 
 .method-screen::before {
-  display: none !important;
+  /* Use the shared companion colour flow — same as welcome / marketing home. */
+  display: block;
 }
 
-/*
-  Colour-shifting sky without canvas, wisps, or CSS blur filters —
-  those were the main cause of jerky scroll on this long page.
-*/
-.method-screen__sky {
+.method-screen .cloud-atmosphere {
+  z-index: 0;
   position: fixed;
   inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
+}
+
+.method-screen .cloud-atmosphere__wash {
   background: linear-gradient(
-    165deg,
-    #7ecee6 0%,
-    #6aa8d8 48%,
-    #5a8ec4 100%
+    105deg,
+    rgba(196, 24, 26, 0.55) 0%,
+    rgba(122, 45, 255, 0.5) 7%,
+    rgba(45, 110, 255, 0.5) 15%,
+    rgba(20, 150, 80, 0.46) 23%,
+    rgba(255, 160, 40, 0.44) 31%,
+    rgba(255, 45, 45, 0.42) 39%,
+    rgba(115, 41, 130, 0.5) 46%,
+    rgba(196, 24, 26, 0.55) 50%,
+    rgba(122, 45, 255, 0.5) 57%,
+    rgba(45, 110, 255, 0.5) 65%,
+    rgba(20, 150, 80, 0.46) 73%,
+    rgba(255, 160, 40, 0.44) 81%,
+    rgba(255, 45, 45, 0.42) 89%,
+    rgba(115, 41, 130, 0.5) 96%,
+    rgba(196, 24, 26, 0.55) 100%
+  );
+  filter: blur(26px);
+  opacity: 0.35;
+  animation: kea-color-flow 96s linear infinite;
+}
+
+.method-screen .cloud-atmosphere--sunrise {
+  --drift: 48s;
+  --billow: 48s;
+  --tint: 7s;
+  --flow: 1;
+}
+
+.method-screen .cloud-atmosphere__vignette {
+  background: radial-gradient(
+    ellipse 50% 46% at 50% 46%,
+    transparent 0%,
+    rgba(90, 70, 180, 0.14) 38%,
+    rgba(40, 70, 160, 0.28) 62%,
+    rgba(90, 20, 80, 0.38) 100%
   );
 }
 
+@media (min-width: 721px) {
+  .method-screen .cloud-atmosphere--sunrise {
+    --tint: 34s;
+  }
+}
+
+.method-screen__sky,
 .method-screen__sky-wash {
-  position: absolute;
-  top: -10%;
-  left: 0;
-  width: 200%;
-  height: 120%;
-  background: linear-gradient(
-    100deg,
-    #24408e 0%,
-    #3d9dff 10%,
-    #008026 20%,
-    #e8c14a 30%,
-    #ff8c00 40%,
-    #732982 50%,
-    #24408e 50%,
-    #3d9dff 60%,
-    #008026 70%,
-    #e8c14a 80%,
-    #ff8c00 90%,
-    #732982 100%
-  );
-  opacity: 0.46;
-  filter: blur(26px);
-  animation: kea-color-flow 110s linear infinite;
-  will-change: transform;
+  display: none;
 }
 
 .method-screen__content {
@@ -9187,68 +9249,31 @@ button.method-screen__login.active {
   gap: 0;
   margin: 0;
   overflow: hidden;
-  border-radius: 1.15rem;
-  border: 0;
+  border-radius: 1.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow:
-    0 10px 28px rgba(18, 48, 70, 0.12),
-    0 1px 0 rgba(255, 255, 255, 0.28) inset;
+    0 24px 48px rgba(24, 10, 48, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
   content-visibility: auto;
   contain-intrinsic-size: auto 12.5rem;
 }
 
-/* Soft sky-palette tints — gently graded siblings of the home wash */
-.method-row:nth-child(6n + 1) {
-  background: linear-gradient(
-    135deg,
-    rgba(120, 220, 230, 0.62) 0%,
-    rgba(78, 196, 212, 0.5) 48%,
-    rgba(56, 170, 190, 0.58) 100%
-  );
-}
-
-.method-row:nth-child(6n + 2) {
-  background: linear-gradient(
-    145deg,
-    rgba(160, 130, 235, 0.58) 0%,
-    rgba(122, 90, 220, 0.48) 50%,
-    rgba(95, 70, 190, 0.55) 100%
-  );
-}
-
-.method-row:nth-child(6n + 3) {
-  background: linear-gradient(
-    140deg,
-    rgba(130, 180, 255, 0.6) 0%,
-    rgba(90, 150, 255, 0.48) 52%,
-    rgba(70, 120, 230, 0.56) 100%
-  );
-}
-
-.method-row:nth-child(6n + 4) {
-  background: linear-gradient(
-    150deg,
-    rgba(255, 175, 150, 0.58) 0%,
-    rgba(255, 140, 120, 0.48) 50%,
-    rgba(230, 110, 100, 0.55) 100%
-  );
-}
-
-.method-row:nth-child(6n + 5) {
-  background: linear-gradient(
-    135deg,
-    rgba(120, 210, 175, 0.6) 0%,
-    rgba(80, 190, 150, 0.48) 50%,
-    rgba(55, 165, 130, 0.56) 100%
-  );
-}
-
+/* Match marketing home / login glass cards on the shared home atmosphere */
+.method-row:nth-child(6n + 1),
+.method-row:nth-child(6n + 2),
+.method-row:nth-child(6n + 3),
+.method-row:nth-child(6n + 4),
+.method-row:nth-child(6n + 5),
 .method-row:nth-child(6n + 6) {
-  background: linear-gradient(
-    145deg,
-    rgba(225, 145, 210, 0.58) 0%,
-    rgba(200, 110, 190, 0.48) 50%,
-    rgba(175, 85, 170, 0.55) 100%
-  );
+  background:
+    linear-gradient(
+      155deg,
+      rgba(92, 48, 168, 0.72) 0%,
+      rgba(148, 58, 150, 0.62) 42%,
+      rgba(210, 120, 70, 0.48) 100%
+    );
 }
 
 @media (min-width: 720px) {

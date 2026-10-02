@@ -1,0 +1,10 @@
+---
+description: JJ jumps standing instructions — always flag Play Store AAB need
+alwaysApply: true
+---
+
+# JJ jumps
+
+Follow [`docs/jj-jumps.md`](docs/jj-jumps.md).
+
+**Always** tell the user whether finished or proposed work needs a **new Play Store AAB** (`New AAB required` or `No new AAB`, with one-line why). The Capacitor app bundles Vite `dist` (see `docs/play-aab.md`).

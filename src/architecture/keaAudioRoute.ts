@@ -91,6 +91,20 @@ export function markAudioRouteSessionDone() {
 }
 
 /**
+ * True on mobile until the user finishes the speaker / headphones / Bluetooth
+ * check once this tab/PWA session.
+ */
+export function shouldPromptAudioRouteOnce(): boolean {
+  if (!isKeaMobileDevice()) return false
+  try {
+    if (sessionStorage.getItem(SESSION_DONE_KEY) === '1') return false
+  } catch {
+    // ignore
+  }
+  return true
+}
+
+/**
  * Open the audio check before talk on mobile (including installed PWA).
  * Once per tab/PWA session after they choose; also after login flag.
  */
@@ -100,12 +114,7 @@ export function shouldOpenAudioRouteCheck(options?: {
   if (options?.restartListen) return false
   if (!isKeaMobileDevice()) return false
   if (consumeAudioRoutePromptPending()) return true
-  try {
-    if (sessionStorage.getItem(SESSION_DONE_KEY) === '1') return false
-  } catch {
-    // ignore
-  }
-  return true
+  return shouldPromptAudioRouteOnce()
 }
 
 export function shouldOfferAudioRoutePrompt(): boolean {

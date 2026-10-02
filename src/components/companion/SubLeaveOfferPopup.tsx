@@ -16,21 +16,13 @@ interface SubLeaveOfferPopupProps {
   onGrab?: () => void
 }
 
-function snapToWordEnd(text: string, charIndex: number) {
-  if (charIndex <= 0) return ''
-  if (charIndex >= text.length) return text
-  let end = charIndex
-  while (end < text.length && !/\s/.test(text[end]!)) end += 1
-  return text.slice(0, end)
-}
-
 /** Spoken special offer when leaving Subscriptions without signing up. */
 export function SubLeaveOfferPopup({
   offer,
   onClose,
   onGrab,
 }: SubLeaveOfferPopupProps) {
-  const [line, setLine] = useState('')
+  const [line, setLine] = useState(() => offer.body)
   const runId = useRef(0)
   const customBg = offerBackgroundSrc(offer)
   const code = offer.discountCode?.trim() || 'Superlearner'
@@ -38,18 +30,15 @@ export function SubLeaveOfferPopup({
   useEffect(() => {
     const id = ++runId.current
     stopKeaSpeech()
-    setLine('')
     const voice = getMarketingIntroVoice()
     const text = offer.body
+    // Full copy on first paint — never wait on TTS / charIndex.
+    setLine(text)
     const finish = () => {
       if (id !== runId.current) return
       setLine(text)
     }
     const opts = {
-      onCharIndex: (charIndex: number) => {
-        if (id !== runId.current) return
-        setLine(snapToWordEnd(text, charIndex))
-      },
       onend: finish,
       onerror: finish,
     }
@@ -118,7 +107,7 @@ export function SubLeaveOfferPopup({
             {offer.title}
           </h2>
           <p className="sub-leave-offer__body" aria-live="off">
-            {line || '…'}
+            {line}
           </p>
           <p className="sub-leave-offer__code">
             Code: <strong>{code}</strong>

@@ -1,15 +1,34 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import { isKeaNativeApp } from '../../lib/keaNative'
 
 export type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
+const PWA_INSTALLED_KEY = 'kea-pwa-installed-v1'
+
 /** Survives React Strict Mode remounts — beforeinstallprompt only fires once. */
 let sharedDeferred: BeforeInstallPromptEvent | null = null
 let sharedInstalled =
-  typeof window !== 'undefined' ? readStandalone() : false
+  typeof window !== 'undefined' ? readInstalled() : false
 const installListeners = new Set<() => void>()
+
+function readPersistedInstall() {
+  try {
+    return localStorage.getItem(PWA_INSTALLED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistInstall() {
+  try {
+    localStorage.setItem(PWA_INSTALLED_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
 
 function readStandalone() {
   if (typeof window === 'undefined') return false
@@ -18,6 +37,16 @@ function readStandalone() {
     'standalone' in navigator &&
     Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
   return mq || iosStandalone
+}
+
+function readInstalled() {
+  return isKeaNativeApp() || readStandalone() || readPersistedInstall()
+}
+
+function markInstalled() {
+  persistInstall()
+  sharedInstalled = true
+  notifyInstallListeners()
 }
 
 function notifyInstallListeners() {
@@ -35,28 +64,36 @@ let bridgeReady = false
 function ensureInstallBridge() {
   if (bridgeReady || typeof window === 'undefined') return
   bridgeReady = true
-  sharedInstalled = readStandalone()
+  if (readInstalled()) markInstalled()
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault()
     sharedDeferred = event as BeforeInstallPromptEvent
     notifyInstallListeners()
   })
   window.addEventListener('appinstalled', () => {
-    sharedInstalled = true
     sharedDeferred = null
-    notifyInstallListeners()
+    markInstalled()
   })
   window
     .matchMedia('(display-mode: standalone)')
     .addEventListener('change', () => {
-      sharedInstalled = readStandalone()
-      notifyInstallListeners()
+      if (readStandalone()) markInstalled()
+      else {
+        sharedInstalled = readInstalled()
+        notifyInstallListeners()
+      }
     })
+}
+
+/** True in Capacitor, standalone PWA, or after a successful install on this device. */
+export function hasInstalledKeaApp() {
+  ensureInstallBridge()
+  return readInstalled()
 }
 
 export function isStandaloneDisplay() {
   ensureInstallBridge()
-  return sharedInstalled || readStandalone()
+  return sharedInstalled || readInstalled()
 }
 
 export function isIosSafari() {
@@ -86,20 +123,20 @@ export function usePwaInstall() {
   )
   const installed = useSyncExternalStore(
     subscribeInstall,
-    () => sharedInstalled || readStandalone(),
+    () => sharedInstalled || readInstalled(),
     () => false,
   )
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     ensureInstallBridge()
-    sharedInstalled = readStandalone()
-    notifyInstallListeners()
+    if (readInstalled()) markInstalled()
+    else notifyInstallListeners()
   }, [])
 
   async function promptInstall(): Promise<'accepted' | 'dismissed' | 'manual'> {
-    if (installed || sharedInstalled || readStandalone()) {
-      sharedInstalled = true
+    if (installed || sharedInstalled || readInstalled()) {
+      markInstalled()
       return 'accepted'
     }
     const event = sharedDeferred || deferred
@@ -110,9 +147,8 @@ export function usePwaInstall() {
         await event.prompt()
         const choice = await event.userChoice
         if (choice.outcome === 'accepted') {
-          sharedInstalled = true
           sharedDeferred = null
-          notifyInstallListeners()
+          markInstalled()
         } else {
           // Chrome invalidates the event after one prompt(); keep listening for a new one.
           sharedDeferred = null

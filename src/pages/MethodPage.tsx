@@ -1,4 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
+import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { StoreBadges } from '../components/companion/StoreBadges'
 
@@ -13,7 +14,7 @@ const METHOD_CARDS = [
     alt: 'A young man and a kea sharing a table outdoors, with coffee and a sandwich on unused papers and a book',
   },
   {
-    title: 'Learn like a child',
+    title: 'Learn naturally',
     body: [
       'Listening, repetition, observation, emotion, and personalised conversation. Understanding comes first. Speech emerges naturally.',
       'Language is never isolated words. It’s a process. The desire to learn, pleasure in the experience, meaning recognised. Language follows, the way it did when you learned to speak the first time.',
@@ -62,9 +63,7 @@ const METHOD_CARDS = [
 export function MethodPage() {
   return (
     <main className="companion-screen method-screen">
-      <div className="method-screen__sky" aria-hidden="true">
-        <span className="method-screen__sky-wash" />
-      </div>
+      <CloudAtmosphere presence="idle" tempo="sunrise" />
       <div className="method-screen__content">
         <header className="method-screen__top">
           <Link to="/" className="method-screen__brand" aria-label="Kea home">
