@@ -1,4 +1,5 @@
 import { speechRecognitionPings } from './keaWakeWord'
+import { isKeaNativeApp } from '../lib/keaNative'
 
 const ROUTE_KEY = 'kea-audio-route-v1'
 const PROMPT_KEY = 'kea-audio-route-prompt'
@@ -28,7 +29,30 @@ export interface KeaAudioEnvironment {
 }
 
 export function isKeaMobileDevice() {
-  return speechRecognitionPings()
+  if (typeof window === 'undefined') return false
+  if (isKeaNativeApp()) return true
+  if (speechRecognitionPings()) return true
+  try {
+    const nav = navigator as Navigator & { standalone?: boolean }
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      Boolean(nav.standalone)
+    if (standalone && navigator.maxTouchPoints > 0) return true
+  } catch {
+    // ignore
+  }
+  try {
+    // Touch phones that fail the UA ping (some WebViews / PWAs).
+    if (
+      window.matchMedia('(hover: none) and (pointer: coarse)').matches &&
+      Math.min(window.screen.width, window.screen.height) < 920
+    ) {
+      return true
+    }
+  } catch {
+    // ignore
+  }
+  return false
 }
 
 export function readAudioRoute(): KeaAudioRoute | null {
@@ -97,7 +121,10 @@ export function markAudioRouteSessionDone() {
 export function shouldPromptAudioRouteOnce(): boolean {
   if (!isKeaMobileDevice()) return false
   try {
-    if (sessionStorage.getItem(SESSION_DONE_KEY) === '1') return false
+    if (sessionStorage.getItem(SESSION_DONE_KEY) === '1') {
+      // Still prompt if no route was ever saved (stale session flag).
+      return readAudioRoute() == null
+    }
   } catch {
     // ignore
   }

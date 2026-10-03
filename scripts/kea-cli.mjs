@@ -205,12 +205,56 @@ function assertSupabaseIdentity() {
   }
 }
 
+function keaNetlifySiteId() {
+  const result = capture('netlify', ['sites:list', '--json'])
+  const raw = result.stdout || ''
+  const start = raw.indexOf('[')
+  let sites = []
+  try {
+    sites = JSON.parse(start >= 0 ? raw.slice(start) : '[]')
+  } catch {
+    sites = []
+  }
+  const kea = (Array.isArray(sites) ? sites : []).find((item) => {
+    const name = (item && item.name ? String(item.name) : '').toLowerCase()
+    const url = `${item?.ssl_url || ''} ${item?.custom_domain || ''} ${item?.url || ''}`.toLowerCase()
+    return name === allow.netlify.siteName.toLowerCase() || url.includes(allow.netlify.domain.toLowerCase())
+  })
+  return kea?.id || kea?.site_id || allow.netlify.siteName
+}
+
+function pinnedNetlifyArgs(list) {
+  const rest = [...list]
+  if (
+    rest.length &&
+    !rest.includes('--site') &&
+    !rest.includes('--id') &&
+    ['deploy', 'status', 'env', 'open'].includes(rest[0])
+  ) {
+    rest.splice(1, 0, '--site', keaNetlifySiteId())
+  }
+  return rest
+}
+
 function assertNetlifyIdentity() {
-  const result = capture('netlify', ['status'])
-  const text = `${result.stdout || ''}\n${result.stderr || ''}`
-  const lowered = text.toLowerCase()
-  if (allow.forbidden.names.some((name) => lowered.includes(name))) {
-    console.error('Refused: Netlify CLI identity is a non-Kea team or user. Use .kea/netlify-auth-token from the Kea team.')
+  const result = capture('netlify', ['sites:list', '--json'])
+  const raw = result.stdout || ''
+  const start = raw.indexOf('[')
+  let sites = []
+  try {
+    sites = JSON.parse(start >= 0 ? raw.slice(start) : '[]')
+  } catch {
+    sites = []
+  }
+  const seesKea = (Array.isArray(sites) ? sites : []).some((item) => {
+    const name = (item && item.name ? String(item.name) : '').toLowerCase()
+    const url = `${item?.ssl_url || ''} ${item?.custom_domain || ''} ${item?.url || ''}`.toLowerCase()
+    return name === allow.netlify.siteName.toLowerCase() || url.includes(allow.netlify.domain.toLowerCase())
+  })
+  if (!seesKea) {
+    console.error(
+      `Refused: Netlify token cannot see Kea site ${allow.netlify.siteName} (${allow.netlify.domain}). Use .kea/netlify-auth-token from the Kea team.`,
+    )
     process.exit(1)
   }
 }
@@ -260,14 +304,14 @@ if (tool === 'netlify') {
   requireNetlifyToken()
   assertNetlifyIdentity()
   if (args[0] === 'link' && !args.includes('--name') && !args.includes('--id')) {
-    run('netlify', ['link', '--name', allow.netlify.siteName, ...args.slice(1)])
+    run('netlify', pinnedNetlifyArgs(['link', '--name', allow.netlify.siteName, ...args.slice(1)]))
   }
   const nameIdx = args.indexOf('--name')
   if (nameIdx !== -1 && args[nameIdx + 1] && args[nameIdx + 1] !== allow.netlify.siteName) {
     console.error(`Refused: Netlify site must be ${allow.netlify.siteName}`)
     process.exit(1)
   }
-  run('netlify', args.length ? args : ['status'])
+  run('netlify', pinnedNetlifyArgs(args.length ? args : ['status']))
 }
 
 if (tool === 'github') {

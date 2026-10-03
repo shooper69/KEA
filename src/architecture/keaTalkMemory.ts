@@ -302,10 +302,6 @@ export function keaRestartUrl() {
   return url.toString()
 }
 
-/**
- * Clear the chat and reload Kea without signing out.
- * The new URL forces a real navigation so stuck mic, speech, and paint state cannot linger.
- */
 const RESTART_LISTEN_KEY = 'kea-restart-listen'
 let restartListenLatched: boolean | null = null
 
@@ -329,6 +325,10 @@ export function releaseRestartListen() {
   restartListenLatched = false
 }
 
+/**
+ * Clear the chat and reload Kea without signing out.
+ * The new URL forces a real navigation so stuck mic, speech, and paint state cannot linger.
+ */
 export function requestClearTalkAndSoftReset() {
   try {
     sessionStorage.removeItem(HOLD_GREETING_KEY)
@@ -336,7 +336,9 @@ export function requestClearTalkAndSoftReset() {
     // ignore
   }
   abandonSpokenTourEverywhere()
-  clearTalkTranscript()
+  // Wipe talk, blank the live UI, then mark the next open as a fresh welcome.
+  requestClearTalkTranscript()
+  markFreshChatScreen()
   try {
     sessionStorage.setItem(RESTART_LISTEN_KEY, '1')
     window.speechSynthesis?.cancel()
@@ -344,11 +346,16 @@ export function requestClearTalkAndSoftReset() {
     // ignore
   }
   const url = keaRestartUrl()
-  // Prefer href over replace — some Android PWAs ignore replace in a gesture.
+  // Must stay inside the user gesture on mobile/PWA — do not defer.
+  // Prefer href: some Android WebViews ignore assign after a confirm dialog.
   try {
-    window.location.assign(url)
-  } catch {
     window.location.href = url
+  } catch {
+    try {
+      window.location.assign(url)
+    } catch {
+      window.location.reload()
+    }
   }
   // If the service worker soft-routes and never leaves, force a real reload.
   window.setTimeout(() => {

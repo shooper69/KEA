@@ -147,14 +147,14 @@ export function MethodPage() {
             Create free account
           </Link>
         </div>
-      </div>
 
-      <footer className="welcome-screen__store-footer method-screen__store-footer">
-        <div className="welcome-screen__store-footer-bar">
-          <StoreBadges />
-          <SiteFooter tone="marketing" />
-        </div>
-      </footer>
+        <footer className="welcome-screen__store-footer method-screen__store-footer">
+          <div className="welcome-screen__store-footer-bar">
+            <StoreBadges />
+            <SiteFooter tone="marketing" />
+          </div>
+        </footer>
+      </div>
     </main>
   )
 }

@@ -1,3 +1,9 @@
+import {
+  DISCOVERY_PATH,
+  discoveryDefinedTermJsonLd,
+  discoveryFaqJsonLd,
+} from './keaDiscovery'
+
 export const KEA_ORIGIN = 'https://kea.chat'
 
 export const KEA_NAME = 'Kea'
@@ -35,6 +41,16 @@ const pages: Array<[string, KeaPageSeo]> = [
     },
   ],
   [
+    '/what-is-kea',
+    {
+      title: 'What is Kea · Kea',
+      description:
+        'Kea is a hands-free conversational companion for language. Not a course or tutor — a friend you talk with.',
+      path: '/what-is-kea',
+      index: true,
+    },
+  ],
+  [
     '/home',
     {
       title: 'Talk · Kea',
@@ -50,7 +66,7 @@ const pages: Array<[string, KeaPageSeo]> = [
       description:
         'Talk with Kea in your chosen language. Hands-free conversation with a companion, not a lesson plan.',
       path: '/conversation',
-      index: true,
+      index: false,
     },
   ],
   [
@@ -60,7 +76,7 @@ const pages: Array<[string, KeaPageSeo]> = [
       description:
         'Words and phrases Kea noticed you struggling with. They leave when you start using them well.',
       path: '/learn',
-      index: true,
+      index: false,
     },
   ],
   [
@@ -181,7 +197,12 @@ export function seoForPath(pathname: string): KeaPageSeo {
       index: false,
     }
   }
-  return pages[0][1]
+  return {
+    title: 'Kea',
+    description: KEA_DESCRIPTION,
+    path: pathname,
+    index: false,
+  }
 }
 
 export function canonicalUrl(path: string) {
@@ -199,6 +220,13 @@ export const KEA_JSON_LD = {
       url: KEA_ORIGIN,
       logo: `${KEA_ORIGIN}/favicon-512.png`,
       description: KEA_DESCRIPTION,
+      email: 'team@kea.chat',
+      contactPoint: {
+        '@type': 'ContactPoint',
+        email: 'team@kea.chat',
+        contactType: 'customer support',
+        url: `${KEA_ORIGIN}/support`,
+      },
     },
     {
       '@type': 'WebSite',
@@ -216,7 +244,7 @@ export const KEA_JSON_LD = {
       url: KEA_ORIGIN,
       description: KEA_DESCRIPTION,
       applicationCategory: 'LifestyleApplication',
-      operatingSystem: 'Web',
+      operatingSystem: 'Web, Android',
       offers: {
         '@type': 'Offer',
         price: '0',
@@ -225,4 +253,15 @@ export const KEA_JSON_LD = {
       inLanguage: ['en', 'es', 'fr', 'de', 'ru'],
     },
   ],
+}
+
+export function jsonLdForPath(pathname: string) {
+  const graph: unknown[] = [...KEA_JSON_LD['@graph']]
+  if (pathname === DISCOVERY_PATH) {
+    graph.push(discoveryDefinedTermJsonLd(KEA_ORIGIN), discoveryFaqJsonLd(KEA_ORIGIN))
+  }
+  return {
+    '@context': 'https://schema.org',
+    '@graph': graph,
+  }
 }

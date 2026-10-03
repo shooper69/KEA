@@ -2439,8 +2439,9 @@ body:has(.welcome-screen),
     place-items: end center;
     position: absolute;
     left: 50%;
-    bottom: calc(clamp(-0.35rem, -1vh, 0.25rem) - 1cm);
-    z-index: 4;
+    /* Sit on the branch above the customer quotes; head may overlap the card. */
+    bottom: calc(clamp(2.4rem, 5.5vh, 3.6rem) + 0.35cm);
+    z-index: 5;
     order: unset;
     grid-column: unset;
     grid-row: unset;
@@ -3353,6 +3354,14 @@ body:has(.welcome-screen),
   color: #fff;
 }
 
+.legal-screen .legal-doc--discovery,
+.legal-screen .legal-doc--discovery h2,
+.legal-screen .legal-doc--discovery p,
+.legal-screen .legal-doc--discovery li,
+.legal-screen .legal-doc--discovery strong {
+  text-align: left;
+}
+
 .legal-doc h2 {
   margin: 1.25rem 0 0.45rem;
   font-size: 1.05rem;
@@ -3577,8 +3586,8 @@ body:has(.welcome-screen),
 .auth-modal__mascot {
   position: relative;
   z-index: 3;
-  margin-bottom: clamp(-3.55rem, -9vw, -2.75rem);
-  transform: translateY(-0.35rem);
+  margin-bottom: clamp(-4.15rem, -10.5vw, -3.25rem);
+  transform: translateY(-1.05rem);
   pointer-events: none;
 }
 
@@ -3960,10 +3969,20 @@ body:has(.welcome-screen),
   z-index: 25;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   width: 100%;
   gap: 0.5rem;
   flex: 0 0 auto;
+}
+
+.memory-library__header .companion-nav {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.memory-library__header .learn-list__exit--header {
+  margin: 0.35rem 0.15rem 0 0;
+  margin-left: 0;
 }
 
 .memory-library__content {
@@ -4001,19 +4020,27 @@ body:has(.welcome-screen),
 
 .learn-list__exit {
   appearance: none;
+  -webkit-appearance: none;
   text-decoration: none;
+  position: relative;
+  z-index: 40;
   flex: 0 0 auto;
   margin-left: auto;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   border-radius: 999px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  background: rgba(20, 24, 48, 0.35);
+  background: rgba(20, 24, 48, 0.55);
   color: #fff;
   font-size: 1.55rem;
   line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
 }
 
 .learn-list__exit:focus-visible {
@@ -7115,7 +7142,8 @@ button.memory-library__target--retry {
   }
 
   .auth-modal__mascot {
-    margin-bottom: clamp(-3.1rem, -9vw, -2.35rem);
+    margin-bottom: clamp(-3.7rem, -10.5vw, -2.85rem);
+    transform: translateY(-1.15rem);
   }
 }
 
@@ -8974,7 +9002,7 @@ button.memory-library__target--retry {
   width: min(56rem, calc(100% - 1.5rem));
   margin: 0 auto;
   padding: max(1rem, env(safe-area-inset-top)) 0.35rem
-    max(6.5rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    max(1.25rem, calc(env(safe-area-inset-bottom) + 0.75rem));
   overflow: visible;
   max-height: none;
 }
@@ -8997,14 +9025,15 @@ body:has(.method-screen)::-webkit-scrollbar {
 }
 
 .method-screen__store-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: max(0.55rem, env(safe-area-inset-bottom));
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
   z-index: 3;
-  margin: 0;
-  padding: 0.5rem max(1rem, env(safe-area-inset-right), 4vw)
-    0 max(1rem, env(safe-area-inset-left), 4vw);
+  margin: 0.35rem 0 0;
+  padding: 0.35rem max(1rem, env(safe-area-inset-right), 4vw)
+    max(0.65rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left), 4vw);
   pointer-events: none;
 }
 
@@ -9353,7 +9382,7 @@ button.method-screen__login.active {
   flex-direction: column;
   align-items: center;
   gap: 0.85rem;
-  margin: 0.5rem 0 1.35rem;
+  margin: 0.5rem 0 0.65rem;
 }
 
 .method-screen__invite {

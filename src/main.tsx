@@ -21,7 +21,13 @@ window.addEventListener('pageshow', (event) => {
 
 // Service workers fight Capacitor's local asset host — keep PWA on the website only.
 if (!isKeaNativeApp()) {
-  registerSW({ immediate: true })
+  // Auto-activate new builds so the installed PWA does not keep a stale Method/CSS cache.
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh() {
+      void updateSW(true)
+    },
+  })
 }
 
 createRoot(document.getElementById('root')!).render(

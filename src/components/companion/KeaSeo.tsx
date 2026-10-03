@@ -4,6 +4,7 @@ import {
   KEA_NAME,
   KEA_ORIGIN,
   canonicalUrl,
+  jsonLdForPath,
   seoForPath,
 } from '../../seo/keaSeo'
 
@@ -58,6 +59,14 @@ export function KeaSeo() {
     upsertMeta('name', 'twitter:title', seo.title)
     upsertMeta('name', 'twitter:description', seo.description)
     upsertMeta('name', 'twitter:image', image)
+    let jsonLd = document.getElementById('kea-json-ld')
+    if (!jsonLd) {
+      jsonLd = document.createElement('script')
+      jsonLd.id = 'kea-json-ld'
+      jsonLd.setAttribute('type', 'application/ld+json')
+      document.head.appendChild(jsonLd)
+    }
+    jsonLd.textContent = JSON.stringify(jsonLdForPath(pathname))
   }, [pathname])
 
   return null

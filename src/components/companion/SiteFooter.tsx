@@ -10,7 +10,8 @@ export function SiteFooter({
     <footer
       className={`site-footer${tone === 'plain' ? ' site-footer--plain' : ''}`}
     >
-      <nav className="site-footer__nav" aria-label="Legal">
+      <nav className="site-footer__nav" aria-label="Site">
+        <Link to="/what-is-kea">What is Kea</Link>
         <Link to="/method">The Method</Link>
         <Link to="/privacy-policy">Privacy</Link>
         <Link to="/terms-of-service">Terms of Service</Link>

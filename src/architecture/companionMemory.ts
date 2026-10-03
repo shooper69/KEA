@@ -26,7 +26,7 @@ const OPEN_TOPIC_LOCAL_KEY = 'kea-open-topic-id-v1'
 const CHANGE_EVENT = 'kea-learn-memory'
 
 const LEARN_REQUEST =
-  /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say/i
+  /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say|\b(add|put|save|stick)\b.+\b(learn\s*list|my list|the list)\b|\bremember (the )?(word|phrase)\b|\badd .+ to (my )?list\b/i
 
 const LEARN_LIST_QUIZ =
   /\b(test|quiz|practi[sc]e|drill|examine)\s+me\b|\b(test|quiz|practi[sc]e)\s+(my\s+)?(words|vocabulary|vocab|list)\b|\blearn\s*list\b.*\b(test|quiz|practi[sc]e|drill|review)\b|\b(test|quiz|practi[sc]e|drill|review)\b.*\blearn\s*list\b|\bgo through (my )?(words|list)\b|\bhelp me (review|practi[sc]e)\b|\bexam[ií]name\b|\bponme a prueba\b|\brepasemos\b/i
@@ -47,6 +47,13 @@ const LEARN_QUIZ_ACTIVE_KEY = 'kea-learn-quiz-active-v1'
 
 const ASK_TERM =
   /(?:how (?:do (?:you|i)|to) say|what does|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать)\s+["«“']?([^?"»”']+)/i
+
+/** “Add rain to my Learn List” / “save the word sky on the list”. */
+const ADD_TO_LEARN_LIST =
+  /\b(?:add|put|save|stick)\s+(?:the\s+(?:word|phrase)\s+)?["«“']?(.+?)["»”']?\s+(?:to|on|onto|in)\s+(?:my\s+)?(?:the\s+)?(?:learn\s*)?list\b/i
+
+const ADD_WORD_REMEMBER =
+  /\b(?:remember|save)\s+(?:the\s+)?(?:word|phrase)\s+["«“']?([^?"»”'.!,;:]+)["»”']?/i
 
 const MEMORY_BLOCK =
   /(?:\n|^)\s*<<<KEA_MEMORY\s*([\s\S]*?)\s*(?:>>>|KEA_MEMORY>>>)\s*$/i
@@ -362,6 +369,26 @@ function askedTerm(userText: string) {
     return isLearnWordPhrase(term) ? term : ''
   }
   return ''
+}
+
+function requestedLearnListTerms(userText: string): string[] {
+  const found: string[] = []
+  const seen = new Set<string>()
+  const push = (raw: string) => {
+    const term = normalizeTerm(raw.replace(/^["«“']+|["»”']+$/g, ''))
+    if (!isLearnWordPhrase(term)) return
+    const key = termKey(term)
+    if (seen.has(key)) return
+    seen.add(key)
+    found.push(term)
+  }
+  const asked = askedTerm(userText)
+  if (asked) push(asked)
+  const addHit = userText.match(ADD_TO_LEARN_LIST)
+  if (addHit?.[1]) push(addHit[1])
+  const rememberHit = userText.match(ADD_WORD_REMEMBER)
+  if (rememberHit?.[1]) push(rememberHit[1])
+  return found
 }
 
 const OPEN_QUOTE = /["“‘'«]$/
@@ -741,15 +768,14 @@ export function applyLearnTurn(options: {
   const seenAdd = new Set<string>()
 
   const additions = [...(options.signals?.add ?? [])]
-  const asked = askedTerm(options.userText)
-  if (asked) {
-    // Prefer a short target-language gloss from Kea's memory signal later;
-    // never dump the whole reply sentence onto the Learn List.
+  for (const term of requestedLearnListTerms(options.userText)) {
     const signalMatch = additions.find(
-      (item) => termKey(item.term) === termKey(asked) || termKey(item.translation) === termKey(asked),
+      (item) =>
+        termKey(item.term) === termKey(term) ||
+        termKey(item.translation) === termKey(term),
     )
     additions.push({
-      term: asked,
+      term,
       translation: signalMatch?.translation || '',
     })
   }
@@ -996,7 +1022,7 @@ After your spoken reply, write this hidden block on its own (never speak it, nev
 <<<KEA_MEMORY
 {"add":[{"term":"native-language word","translation":"target-language word"}],"used":["target-language word already on the list"]}
 >>>
-Use add when they drop a native-language word into a target-language sentence, or ask how to say a word. Only single words or very short phrases. Use used every time they say a Learn List target word correctly in a real sentence (put the target-language form, or the native form if you are unsure). This is how words leave the list after ${need} good uses — do not skip used when they got it right. Use empty arrays if nothing happened.
+Use add when they drop a native-language word into a target-language sentence, ask how to say a word, or clearly ask to add/save/put a word on the Learn List. Only single words or very short phrases. Use used every time they say a Learn List target word correctly in a real sentence (put the target-language form, or the native form if you are unsure). This is how words leave the list after ${need} good uses — do not skip used when they got it right. Use empty arrays if nothing happened.
 ${
   quiz
     ? `

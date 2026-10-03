@@ -136,11 +136,8 @@ export function CompanionNav({
     const userKey = email.trim().toLowerCase() || firstName.trim().toLowerCase()
     dismissSpokenTour(userKey)
     setClearOpen(false)
-    // Navigate on the next frame so the dialog tear-down cannot cancel the
-    // mobile/PWA gesture that must own the reload.
-    window.setTimeout(() => {
-      requestClearTalkAndSoftReset()
-    }, 0)
+    // Stay inside the tap gesture — deferring breaks location changes on mobile/PWA.
+    requestClearTalkAndSoftReset()
   }
 
   const trendLabel = formatTrendPercent(trend)

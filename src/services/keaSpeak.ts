@@ -68,7 +68,7 @@ type SpeakOptions = {
 }
 
 const TTS_CACHE = 'kea-tts-v2'
-const TTS_STYLE_REV = 'soft-charm-v3'
+const TTS_STYLE_REV = 'soft-charm-v5'
 const ttsBlobs = new Map<string, Blob>()
 const ttsInflight = new Map<string, Promise<Blob | null>>()
 
@@ -177,7 +177,10 @@ function playBlobUrl(
     options.onCharIndex?.(text.length)
     if (revoke) URL.revokeObjectURL(url)
     if (currentAudio === audio) currentAudio = null
-    if (gen === speakGeneration) options.onend?.()
+    // Brief tail so the last syllable is not cut by mic restart / UI unlock.
+    window.setTimeout(() => {
+      if (gen === speakGeneration) options.onend?.()
+    }, 320)
   }
   audio.onerror = () => {
     clearAudioProgress()

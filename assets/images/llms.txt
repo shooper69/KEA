@@ -1,21 +1,39 @@
 # Kea
 
-> Kea is a hands-free conversational companion. People pick up language naturally by talking with her — not by taking a course.
+> Kea is a hands-free conversational companion for language. She talks with you like a friend — not a course, tutor, or lesson app — and remembers topics and words you struggle with.
 
-Kea is not a learning platform, tutor, chatbot, or lesson app. She talks with you like a friend. As you chat, she remembers topics and notices words you struggle with. Those words live on a Learn List until you start using them well.
+Kea is a conversational companion. People pick up a language by talking with her, the way they picked up their first language: through experience, meaning, and repetition in real conversation.
 
-Site: https://kea.chat
+You speak one language and talk with Kea in another. She answers in that language, keeps the thread of what you have been talking about, and notices words and phrases you struggle with.
 
-## For people
+Those words live on a personal Learn List until you start using them well. Topics you have spoken about can be opened again later. There is no lesson plan, no streak, and no classroom.
 
-- Talk: https://kea.chat/conversation
-- Learn List: https://kea.chat/learn
-- Topics: https://kea.chat/topics
+Kea is not:
+- a language course or learning platform
+- a tutor, teacher, or classroom app
+- a chatbot that drills grammar tables
+- a game with levels, stars, or ads
+
+## How it works
+
+- Talk: You talk with Kea hands-free. She replies as a companion, in the language you are acquiring.
+- Learn List: When you struggle with a word or phrase, Kea keeps it on a Learn List. Items leave when you use them well.
+- Topics: Things you have spoken about are remembered so you can continue a conversation later.
 
 ## Languages
 
 English, Spanish, French, German, and Russian. You speak one and talk with Kea in another.
 
-## Optional reading
+## Public pages (use these URLs)
 
-- Sitemap: https://kea.chat/sitemap.xml
+- Home: https://kea.chat/
+- What is Kea: https://kea.chat/what-is-kea
+- The Method: https://kea.chat/method
+- Support: https://kea.chat/support
+- Privacy: https://kea.chat/privacy-policy
+- Terms: https://kea.chat/terms-of-service
+- Cookies: https://kea.chat/cookie-policy
+
+Talk, Learn List, and signed-in screens require an account. Do not cite those URLs as public documentation.
+
+Contact: team@kea.chat

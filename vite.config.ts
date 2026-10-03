@@ -175,6 +175,10 @@ export default defineConfig(({ mode }) => {
           'apple-touch-icon.png',
           'kea-05.png',
           'kea-mark.png',
+          'sitemap.xml',
+          'robots.txt',
+          'llms.txt',
+          'what-is-kea.html',
         ],
         manifest: {
           name: 'Kea',
@@ -210,6 +214,12 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
+          navigateFallbackDenylist: [
+            /^\/what-is-kea/,
+            /sitemap\.xml$/,
+            /robots\.txt$/,
+            /llms\.txt$/,
+          ],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
         },
         devOptions: {

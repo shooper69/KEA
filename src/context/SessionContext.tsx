@@ -23,6 +23,10 @@ import {
   normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
 import {
+  DEFAULT_ANSWER_SILENCE_SECONDS,
+  getAnswerSilenceSeconds,
+} from '../data/keaAnswerSilence'
+import {
   DEFAULT_ADMIN_SESSION_TIMEOUT_MINUTES,
   DEFAULT_SESSION_TIMEOUT_MINUTES,
   defaultSessionTimeoutMinutes,
@@ -106,7 +110,7 @@ const DEFAULT_PROFILE: StoredProfile = {
   saveTranscripts: true,
   listenIdleSeconds: DEFAULT_LISTEN_IDLE_SECONDS,
   sessionTimeoutMinutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
-  answerAfterSilenceSeconds: 3,
+  answerAfterSilenceSeconds: DEFAULT_ANSWER_SILENCE_SECONDS,
   skyTheme: 'clouds',
   chatKeep: 'device',
 }
@@ -147,11 +151,21 @@ function readProfile(): StoredProfile {
         sessionTimeoutMinutes,
         defaultSessionTimeoutMinutes(isAdminEmail(String(parsed.email ?? ''))),
       ),
-      answerAfterSilenceSeconds:
-        Number.isFinite(answerAfterSilenceSeconds) &&
-        answerAfterSilenceSeconds >= 1
-          ? Math.min(15, Math.round(answerAfterSilenceSeconds))
-          : 5,
+      answerAfterSilenceSeconds: (() => {
+        const migrated = getAnswerSilenceSeconds()
+        if (
+          Number.isFinite(answerAfterSilenceSeconds) &&
+          answerAfterSilenceSeconds >= 1
+        ) {
+          const n = Math.min(15, Math.round(answerAfterSilenceSeconds))
+          // Old shipped default was 3s; after the v2 silence migration, prefer 2s.
+          if (n === 3 && migrated === DEFAULT_ANSWER_SILENCE_SECONDS) {
+            return DEFAULT_ANSWER_SILENCE_SECONDS
+          }
+          return n
+        }
+        return migrated
+      })(),
       skyTheme,
       chatKeep,
     }

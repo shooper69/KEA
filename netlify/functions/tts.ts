@@ -29,7 +29,8 @@ const OPENAI_VOICES = new Set([
 const KEA_TTS_STYLE =
   'Speak softly and charmingly, like a warm close friend leaning in. Gentle, intimate, and lightly playful — never sharp, clipped, stern, or instructor-like. Soft smile in the voice, easy unhurried pacing, cozy and a little alluring. Keep intensity low and inviting.'
 
-const KEA_TTS_SPEED = 0.92
+/** Keep in sync with src/server/handleKeaTts.ts */
+const KEA_TTS_SPEED = 1.05
 
 async function requestSpeech(
   apiKey: string,

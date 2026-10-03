@@ -34,6 +34,18 @@
   [headers.values]
     Cache-Control = "public, max-age=86400"
 
+[[headers]]
+  for = "/sitemap.xml"
+  [headers.values]
+    Content-Type = "application/xml; charset=utf-8"
+    Cache-Control = "public, max-age=300"
+
+[[headers]]
+  for = "/robots.txt"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "public, max-age=300"
+
 [[redirects]]
   from = "/api/chat"
   to = "/.netlify/functions/chat"
@@ -76,7 +88,27 @@
   status = 200
   force = true
 
+# Serve crawl files from functions so the SPA fallback cannot swallow them.
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/sitemap"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/robots.txt"
+  to = "/.netlify/functions/robots"
+  status = 200
+  force = true
+
 # Existing files in dist/ (favicons, assets) are served first.
+# Crawler HTML for the public definition page (no JavaScript required).
+[[redirects]]
+  from = "/what-is-kea"
+  to = "/what-is-kea.html"
+  status = 200
+  force = true
+
 # This SPA fallback must not use force=true or it would hide them.
 [[redirects]]
   from = "/*"

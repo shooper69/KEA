@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   getLearnList,
   getLearnListStats,
@@ -49,6 +49,7 @@ function RedBinIcon() {
 }
 
 export function LearnListPage() {
+  const navigate = useNavigate()
   const { languageCode } = useSession()
   const [query, setQuery] = useState('')
   const [items, setItems] = useState(() => getLearnList())
@@ -152,17 +153,18 @@ export function LearnListPage() {
       <CloudAtmosphere presence="idle" />
       <header className="memory-library__header">
         <CompanionNav />
+        <button
+          type="button"
+          className="learn-list__exit learn-list__exit--header"
+          aria-label="Close Learn List"
+          onClick={() => navigate('/conversation')}
+        >
+          ×
+        </button>
       </header>
       <div className="memory-library__content">
         <div className="learn-list__title-row">
           <h1>Learn List</h1>
-          <Link
-            to="/conversation"
-            className="learn-list__exit"
-            aria-label="Close Learn List"
-          >
-            ×
-          </Link>
         </div>
         <p className="learn-list-stats" aria-live="polite">
           <span>

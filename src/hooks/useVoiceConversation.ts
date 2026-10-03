@@ -64,11 +64,11 @@ import type {
 } from '../types'
 
 const CHARACTER_KEY = 'kea-voice-character'
-const RESTART_LISTEN_MS = 80
+const RESTART_LISTEN_MS = 280
 const MIN_SPEECH_MS = 420
 const MAX_RECORD_MS = 22000
 const AMBIENT_CALIBRATE_MS = 450
-const DEFAULT_ANSWER_SILENCE_MS = 3000
+const DEFAULT_ANSWER_SILENCE_MS = 2000
 /** If TTS never fires onend (common on mobile), unlock the turn anyway. */
 const SPEAK_SAFETY_MS = 28_000
 
@@ -126,7 +126,7 @@ export function useVoiceConversation({
   level,
   firstName = '',
   listenIdleSeconds = DEFAULT_LISTEN_IDLE_SECONDS,
-  answerAfterSilenceSeconds = 3,
+  answerAfterSilenceSeconds = 2,
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
   const [messages, setMessages] = useState<TranscriptMessage[]>(() =>
@@ -764,7 +764,8 @@ export function useVoiceConversation({
           }
           finish()
         },
-        Math.min(SPEAK_SAFETY_MS, Math.max(5_500, 3_200 + spoken.length * 90)),
+        // Generous budget so soft TTS is never truncated mid-word by the watchdog.
+        Math.min(SPEAK_SAFETY_MS, Math.max(12_000, 5_500 + spoken.length * 140)),
       )
       void speakKeaLine(spoken, {
         lang: getLanguage(targetLanguage).speechLocale,
@@ -772,7 +773,7 @@ export function useVoiceConversation({
         onerror: finish,
         prefetchedUrl: speechOpts?.prefetchedUrl,
         prefetchPromise: speechOpts?.prefetchPromise,
-      })
+      }).catch(() => finish())
     },
     [targetLanguage],
   )

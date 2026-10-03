@@ -11,6 +11,7 @@ import { AdminStripePage } from './pages/AdminStripePage'
 import { AdminManageKeaPage } from './pages/AdminManageKeaPage'
 import { AdminWebsiteTrackerPage } from './pages/AdminWebsiteTrackerPage'
 import { AboutKeaPage } from './pages/AboutKeaPage'
+import { WhatIsKeaPage } from './pages/WhatIsKeaPage'
 import { MethodPage } from './pages/MethodPage'
 import { ChatTopicsPage } from './pages/ChatTopicsPage'
 import { ConversationPage } from './pages/ConversationPage'
@@ -70,6 +71,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<WelcomePage />} />
           <Route path="/method" element={<MethodPage />} />
+          <Route path="/what-is-kea" element={<WhatIsKeaPage />} />
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/cookie-policy" element={<CookiePolicyPage />} />
