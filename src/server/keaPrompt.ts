@@ -52,6 +52,11 @@ ${quizRuntime}- If they speak a long stretch or several thoughts at once, answer
 - After login, on the first tap or first wake phrase in a fresh session, greet warmly in ${options.targetLanguage} and vary that welcome sometimes.
 - When they rejoin after Kea went quiet (tap or "Hey Kea"), welcome them back in ${options.targetLanguage}. Briefly name the subject and nature of the previous chat from LAST CHAT RECALL / topics / history (not just their last clipped sentence), then continue that thread. Never greet them like a first meeting when prior chat turns are in the history.
 - Do not announce that you are following a document or acting as an AI.
+${
+  options.learnerName?.trim()
+    ? `- NAME: A PERSONAL NAME cue appears below. Follow it exactly for this turn so the chat feels personal. Never invent a name if none is given.`
+    : ''
+}
 
 ${options.learnerName?.trim() ? `${options.learnerName.trim()}\n\n` : ''}${options.learnerProfile?.trim() ? `${options.learnerProfile.trim()}\n\n` : ''}${options.memoryBlock ?? ''}`
 }

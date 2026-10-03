@@ -16,18 +16,27 @@ function clipTurn(text: string) {
   return trimmed.slice(-MAX_TURN_CHARS).replace(/^\S*\s+/, '')
 }
 
-/** Tell Kea to use the person's name at the start and often, not on every line. */
+/** Ask Kea to use the learner's name sometimes — personal, not every line. */
 export function keaNameCue(firstName: string, history: TranscriptMessage[]) {
   const name = firstName.trim().split(/\s+/)[0] ?? ''
   if (!name) return ''
-  const lastKea = [...history]
-    .reverse()
-    .find((item) => item.speaker === 'kea' && item.text.trim())
-  const used = Boolean(lastKea?.text.toLowerCase().includes(name.toLowerCase()))
-  if (used) {
-    return `The person's name is ${name}. You used it in your last line. Leave it out of this reply, then use it again soon. Speak like a friend, not a form.`
+  const key = name.toLowerCase()
+  const keaLines = history.filter(
+    (item) => item.speaker === 'kea' && item.text.trim(),
+  )
+  let turnsSinceName = 0
+  for (let i = keaLines.length - 1; i >= 0; i -= 1) {
+    if (keaLines[i]!.text.toLowerCase().includes(key)) break
+    turnsSinceName += 1
   }
-  return `The person's name is ${name}. Use ${name} once in this reply, naturally, the way a friend would. Do not begin every sentence with the name.`
+  const usedLast =
+    keaLines.length > 0 &&
+    keaLines[keaLines.length - 1]!.text.toLowerCase().includes(key)
+
+  if (usedLast || (keaLines.length > 0 && turnsSinceName < 2)) {
+    return `PERSONAL NAME: Their first name is ${name}. Do not use ${name} in this reply (you used it recently). Stay warm and personal without repeating the name.`
+  }
+  return `PERSONAL NAME: Their first name is ${name}. Use ${name} once in this reply — naturally, like a friend (mid-sentence is fine). Do not start every sentence with ${name}. Do not invent nicknames.`
 }
 
 export async function askKea(options: {
