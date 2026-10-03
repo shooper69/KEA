@@ -6,7 +6,26 @@ import { isKeaNativeApp } from './lib/keaNative'
 import App from './App.tsx'
 import './index.css'
 
-startKeaAnimationEngine()
+const CRAWL_FILES = new Set(['/sitemap.xml', '/robots.txt', '/llms.txt'])
+const isCrawlDocument = CRAWL_FILES.has(window.location.pathname)
+
+async function releaseCrawlDocuments() {
+  if (!isCrawlDocument) return false
+  if (sessionStorage.getItem('kea-crawl-sw-cleared') === '1') return false
+  sessionStorage.setItem('kea-crawl-sw-cleared', '1')
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(registrations.map((registration) => registration.unregister()))
+  }
+  if ('caches' in window) {
+    const keys = await caches.keys()
+    await Promise.all(keys.map((key) => caches.delete(key)))
+  }
+  window.location.replace(window.location.pathname)
+  return true
+}
+
+if (!isCrawlDocument) startKeaAnimationEngine()
 
 const bootUrl = new URL(window.location.href)
 if (bootUrl.searchParams.has('restart')) {
@@ -19,19 +38,22 @@ window.addEventListener('pageshow', (event) => {
   if (event.persisted) window.location.reload()
 })
 
-// Service workers fight Capacitor's local asset host — keep PWA on the website only.
-if (!isKeaNativeApp()) {
-  // Auto-activate new builds so the installed PWA does not keep a stale Method/CSS cache.
-  const updateSW = registerSW({
-    immediate: true,
-    onNeedRefresh() {
-      void updateSW(true)
-    },
-  })
-}
+void releaseCrawlDocuments().then((reloading) => {
+  if (reloading || isCrawlDocument) return
+  if (!isKeaNativeApp()) {
+    const updateSW = registerSW({
+      immediate: true,
+      onNeedRefresh() {
+        void updateSW(true)
+      },
+    })
+  }
+})
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+if (!isCrawlDocument) {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}

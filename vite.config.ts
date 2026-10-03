@@ -168,6 +168,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: [
           'favicon.ico',
+          'favicon.svg',
+          'favicon-32.png',
           'favicon-48.png',
           'favicon-96.png',
           'favicon-192.png',
@@ -178,13 +180,14 @@ export default defineConfig(({ mode }) => {
           'sitemap.xml',
           'robots.txt',
           'llms.txt',
+          'og-image.png',
           'what-is-kea.html',
         ],
         manifest: {
           name: 'Kea',
           short_name: 'Kea',
           description:
-            'A conversational companion for language. Talk naturally, remember topics, keep a Learn List.',
+            'Language learning chatty companion. Talk naturally, remember topics, keep a Learn List.',
           start_url: '/',
           scope: '/',
           display: 'standalone',
@@ -193,19 +196,19 @@ export default defineConfig(({ mode }) => {
           lang: 'en',
           icons: [
             {
-              src: '/favicon-192.png?v=4',
+              src: '/favicon-192.png?v=5',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png?v=4',
+              src: '/favicon-512.png?v=5',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png?v=4',
+              src: '/favicon-512.png?v=5',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
@@ -213,12 +216,13 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [
-            /^\/what-is-kea/,
-            /sitemap\.xml$/,
-            /robots\.txt$/,
-            /llms\.txt$/,
+            /^\/api\//,
+            /^\/(what-is-kea|method|support|contact|delete-account|privacy-policy|terms-of-service|cookie-policy)(\.html)?\/?$/,
+            /\/[^/?#]+\.[a-z0-9]+$/i,
           ],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
         },

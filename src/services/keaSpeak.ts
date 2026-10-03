@@ -59,6 +59,8 @@ type SpeakOptions = {
   onerror?: () => void
   /** Character offset into `text` as speech progresses (for reveal-as-spoken). */
   onCharIndex?: (charIndex: number) => void
+  /** Fired when OpenAI audio duration is known (ms). */
+  onDuration?: (durationMs: number) => void
   /** Optional pre-fetched OpenAI TTS object URL (from prefetchManagedVoiceAudio). */
   prefetchedUrl?: string | null
   /** In-flight prefetch — awaited before play so canned lines can start fetch earlier. */
@@ -67,10 +69,28 @@ type SpeakOptions = {
   ttsInstructions?: string
 }
 
+/** Soft, unhurried Kea lines need a long fetch window — 16s was cutting them off. */
+const TTS_FETCH_MS = 45_000
+
 const TTS_CACHE = 'kea-tts-v2'
 const TTS_STYLE_REV = 'soft-charm-v5'
 const ttsBlobs = new Map<string, Blob>()
 const ttsInflight = new Map<string, Promise<Blob | null>>()
+
+export function isKeaSpeaking() {
+  return Boolean(
+    currentAudio && !currentAudio.paused && !currentAudio.ended,
+  )
+}
+
+/** Remaining play time for the current OpenAI clip (ms), or 0. */
+export function keaSpeechRemainingMs() {
+  const audio = currentAudio
+  if (!audio || audio.paused || audio.ended) return 0
+  const duration = audio.duration
+  if (!Number.isFinite(duration) || duration <= 0) return 0
+  return Math.max(0, Math.round((duration - audio.currentTime) * 1000))
+}
 
 function ttsCacheKey(voice: ManagedVoice, text: string, instructions = '') {
   return `${TTS_STYLE_REV}:${voice.id}:${voice.openaiVoice ?? ''}:${instructions}:${text.trim()}`
@@ -171,7 +191,20 @@ function playBlobUrl(
   const audio = new Audio(url)
   currentAudio = audio
   options.onCharIndex?.(0)
-  audio.onplay = () => trackAudioProgress(audio, text, options.onCharIndex)
+  const reportDuration = () => {
+    if (gen !== speakGeneration) return
+    const duration = audio.duration
+    if (Number.isFinite(duration) && duration > 0) {
+      options.onDuration?.(Math.ceil(duration * 1000))
+    }
+  }
+  audio.preload = 'auto'
+  audio.onloadedmetadata = reportDuration
+  audio.ondurationchange = reportDuration
+  audio.onplay = () => {
+    reportDuration()
+    trackAudioProgress(audio, text, options.onCharIndex)
+  }
   audio.onended = () => {
     clearAudioProgress()
     options.onCharIndex?.(text.length)
@@ -180,7 +213,7 @@ function playBlobUrl(
     // Brief tail so the last syllable is not cut by mic restart / UI unlock.
     window.setTimeout(() => {
       if (gen === speakGeneration) options.onend?.()
-    }, 320)
+    }, 420)
   }
   audio.onerror = () => {
     clearAudioProgress()
@@ -233,8 +266,16 @@ export async function speakManagedVoice(
 ) {
   stopKeaSpeech()
   const gen = speakGeneration
-  const bail = () => {
-    if (gen === speakGeneration) options.onerror?.()
+  const fallbackBrowser = () => {
+    if (gen !== speakGeneration) return
+    speakText(text, {
+      lang: options.lang || voice.lang || 'en-GB',
+      rate: 1,
+      voiceURI: voice.voiceURI,
+      onend: options.onend,
+      onerror: options.onerror,
+      onCharIndex: options.onCharIndex,
+    })
   }
   if (voice.provider === 'openai' && voice.openaiVoice) {
     try {
@@ -245,7 +286,7 @@ export async function speakManagedVoice(
       const blob = await Promise.race([
         loadManagedVoiceAudio(voice, text, options.ttsInstructions),
         new Promise<Blob | null>((resolve) => {
-          window.setTimeout(() => resolve(null), 16_000)
+          window.setTimeout(() => resolve(null), TTS_FETCH_MS)
         }),
       ])
       if (gen !== speakGeneration) {
@@ -254,7 +295,8 @@ export async function speakManagedVoice(
         return
       }
       if (!blob) {
-        bail()
+        // OpenAI took too long or failed — keep talking with the browser voice.
+        fallbackBrowser()
         return
       }
       const url = URL.createObjectURL(blob)
@@ -265,20 +307,13 @@ export async function speakManagedVoice(
       }
       await playBlobUrl(url, text, gen, options, true)
     } catch {
-      bail()
+      fallbackBrowser()
     }
     return
   }
 
   if (gen !== speakGeneration) return
-  speakText(text, {
-    lang: options.lang || voice.lang || 'en-GB',
-    rate: 1,
-    voiceURI: voice.voiceURI,
-    onend: options.onend,
-    onerror: options.onerror,
-    onCharIndex: options.onCharIndex,
-  })
+  fallbackBrowser()
 }
 
 export async function speakKeaLine(
@@ -286,25 +321,63 @@ export async function speakKeaLine(
   options: SpeakOptions = {},
 ) {
   const voice = getSpeakVoice()
-  if (!voice) {
-    speakText(text, {
-      lang: options.lang || 'en-GB',
-      rate: 1,
-      onend: options.onend,
-      onerror: options.onerror,
-      onCharIndex: options.onCharIndex,
-    })
+  const parts = text
+    .trim()
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const lines = parts.length ? parts : [text.trim()].filter(Boolean)
+  if (!lines.length) {
+    options.onend?.()
     return
   }
+
   let prefetchedUrl = options.prefetchedUrl ?? null
-  if (!prefetchedUrl && options.prefetchPromise) {
+  if (!prefetchedUrl && options.prefetchPromise && lines.length === 1) {
     try {
       prefetchedUrl = await options.prefetchPromise
     } catch {
       prefetchedUrl = null
     }
   }
-  await speakManagedVoice(voice, text, { ...options, prefetchedUrl })
+
+  // One paragraph: keep prefetch. Several: speak each clip in order so a long
+  // reply is not one giant blob that safety timers or phones cut mid-sentence.
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const isLast = index === lines.length - 1
+    await new Promise<void>((resolve) => {
+      const done = () => resolve()
+      const opts: SpeakOptions = {
+        ...options,
+        prefetchedUrl: index === 0 && lines.length === 1 ? prefetchedUrl : null,
+        prefetchPromise: null,
+        onend: () => {
+          if (isLast) options.onend?.()
+          done()
+        },
+        onerror: () => {
+          if (isLast) options.onerror?.()
+          done()
+        },
+      }
+      if (!voice) {
+        speakText(line, {
+          lang: options.lang || 'en-GB',
+          rate: 1,
+          onend: opts.onend,
+          onerror: opts.onerror,
+          onCharIndex: options.onCharIndex,
+        })
+        return
+      }
+      void speakManagedVoice(voice, line, opts).catch(() => {
+        opts.onerror?.()
+        done()
+      })
+    })
+  }
 }
 
 /**

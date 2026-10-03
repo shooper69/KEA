@@ -21,6 +21,7 @@ import { PerformancePage } from './pages/PerformancePage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SubscriptionPage } from './pages/SubscriptionPage'
 import { SupportPage } from './pages/SupportPage'
+import { ContactPage } from './pages/ContactPage'
 import { UsagePage } from './pages/UsagePage'
 import {
   CookiePolicyPage,
@@ -77,6 +78,7 @@ export default function App() {
           <Route path="/cookie-policy" element={<CookiePolicyPage />} />
           <Route path="/delete-account" element={<DeleteAccountPage />} />
           <Route path="/support" element={<SupportPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route
             path="/home"
             element={

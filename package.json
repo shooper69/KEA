@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "guard": "node scripts/assert-kea-isolation.mjs",
-    "build": "npm run guard && npm run seo:files && tsc -b && vite build",
+    "build": "npm run guard && npm run seo:files && tsc -b && vite build && npm run seo:routes",
     "seo:files": "node --experimental-strip-types scripts/write-kea-seo-files.mjs",
+    "seo:routes": "node --experimental-strip-types scripts/write-kea-route-html.mjs",
     "lint": "oxlint",
     "test:e2e": "playwright test",
     "preview": "vite preview",

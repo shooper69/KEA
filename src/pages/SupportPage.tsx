@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
 import { SiteFooter } from '../components/companion/SiteFooter'
+import { useSession } from '../context/SessionContext'
 
 const SUPPORT_EMAIL = 'team@kea.chat'
 
@@ -9,6 +10,8 @@ const SUPPORT_EMAIL = 'team@kea.chat'
  * https://kea.chat/support
  */
 export function SupportPage() {
+  const { isSignedIn } = useSession()
+
   return (
     <main className="companion-screen legal-screen">
       <CloudAtmosphere presence="idle" />
@@ -49,9 +52,15 @@ export function SupportPage() {
             Customer Support, or from Settings.
           </p>
           <p>
-            <Link className="support-doc__chat" to="/conversation">
-              Back to chat
-            </Link>
+            {isSignedIn ? (
+              <Link className="support-doc__chat" to="/conversation">
+                Back to chat
+              </Link>
+            ) : (
+              <Link className="support-doc__chat" to="/">
+                Back to Kea
+              </Link>
+            )}
           </p>
         </article>
       </div>

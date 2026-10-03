@@ -661,9 +661,11 @@ body:has(.welcome-screen),
   color: #ffe14a;
 }
 
-/* Night bird: blue English captions → yellow for readability on dark sky. */
-.companion-screen:has(.cloud-atmosphere--night) .rising-words__english,
-.companion-screen:has(.cloud-atmosphere--night) .rising-words__english--welcome {
+/* Chat English captions: yellow on every sky (night + green clouds). */
+.companion-screen .rising-words__english,
+.companion-screen .rising-words__english--welcome,
+.companion-screen .rising-words__line--user .rising-words__english,
+.companion-screen .rising-words__line--kea .rising-words__english {
   color: #ffe14a;
 }
 
@@ -758,11 +760,11 @@ body:has(.welcome-screen),
   background: transparent;
 }
 
-/* Idle home: room under shared Method-style header + comments/footer */
+/* Idle home: room under shared Method-style header; footer lives in scroll */
 .welcome-screen__shell:not(.welcome-screen__shell--intro) {
   justify-content: flex-start;
   padding-top: clamp(3.6rem, 9vh, 5.25rem);
-  padding-bottom: clamp(9.5rem, 32vh, 16rem);
+  padding-bottom: 0;
 }
 
 .welcome-screen__shell:not(.welcome-screen__shell--intro) .welcome-screen__scroll {
@@ -793,7 +795,7 @@ body:has(.welcome-screen),
 
 .welcome-screen__shell:not(.welcome-screen__shell--intro)
   .welcome-screen__actions.welcome-screen__actions--home {
-  margin-top: clamp(3rem, 14vh, 7rem);
+  margin-top: clamp(1rem, 3.5vh, 1.75rem);
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -890,7 +892,7 @@ body:has(.welcome-screen),
   padding:
     max(1.1rem, env(safe-area-inset-top))
     max(1.5rem, env(safe-area-inset-right), 6.5vw)
-    max(6.4rem, calc(env(safe-area-inset-bottom) + 5.2rem))
+    max(0.75rem, env(safe-area-inset-bottom))
     max(1.5rem, env(safe-area-inset-left), 6.5vw);
   background-color: #4a3aad;
   background-image: radial-gradient(
@@ -2394,7 +2396,7 @@ body:has(.welcome-screen),
     margin-left: auto;
     margin-right: auto;
     padding-top: clamp(4.2rem, 8vh, 5.8rem);
-    padding-bottom: clamp(8rem, 18vh, 12rem);
+    padding-bottom: 0;
     padding-inline: clamp(0.75rem, 2vw, 1.5rem);
   }
 
@@ -2912,18 +2914,29 @@ body:has(.welcome-screen),
 }
 
 .welcome-screen__store-footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: max(0.55rem, env(safe-area-inset-bottom));
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.45rem;
-  padding: 0 max(0.75rem, env(safe-area-inset-right), 3vw)
-    0 max(0.75rem, env(safe-area-inset-left), 3vw);
-  pointer-events: none;
+  width: 100%;
+  margin-top: 1rem;
+  margin-bottom: 0;
+  padding: 0.85rem max(0.75rem, env(safe-area-inset-right), 3vw)
+    max(0.85rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left), 3vw);
+  pointer-events: auto;
+  border-radius: 1.1rem 1.1rem 0 0;
+  background: #2a1c4e;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-sizing: border-box;
 }
 
 .welcome-screen__store-footer-bar {
@@ -3145,7 +3158,6 @@ body:has(.welcome-screen),
     flex-direction: column;
     align-items: stretch;
     gap: 0.65rem;
-    bottom: max(0.75rem, env(safe-area-inset-bottom));
     padding-inline: max(1.25rem, env(safe-area-inset-left), 3vw)
       max(1.25rem, env(safe-area-inset-right), 3vw);
   }
@@ -3188,16 +3200,16 @@ body:has(.welcome-screen),
     min-height: 1.85rem;
     padding: 0.28rem 0.85rem 0.28rem 1rem;
     border-radius: 0.65rem;
-    background: rgba(42, 28, 78, 0.42);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    backdrop-filter: blur(10px) saturate(1.05);
-    -webkit-backdrop-filter: blur(10px) saturate(1.05);
+    background: transparent;
+    border: 0;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     text-align: right;
     box-sizing: border-box;
   }
 
   .welcome-screen__store-footer .site-footer:not(.site-footer--plain) .site-footer__nav {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.55rem 0.9rem;
   }
@@ -3587,7 +3599,8 @@ body:has(.welcome-screen),
   position: relative;
   z-index: 3;
   margin-bottom: clamp(-4.15rem, -10.5vw, -3.25rem);
-  transform: translateY(-1.05rem);
+  /* Lift claws onto the card top edge (~2mm above prior perch). */
+  transform: translateY(calc(-1.05rem - 2mm));
   pointer-events: none;
 }
 
@@ -3648,8 +3661,9 @@ body:has(.welcome-screen),
   z-index: 1;
   width: 100%;
   max-height: min(78dvh, 42rem);
+  height: fit-content;
   overflow: auto;
-  padding: 1.55rem 1.25rem 1.2rem;
+  padding: 1.55rem 1.25rem 0.7rem;
   border-radius: 1.35rem;
   color: #fff8f0;
   text-align: center;
@@ -3672,7 +3686,8 @@ body:has(.welcome-screen),
 .auth-modal__card--compact {
   width: 100%;
   max-height: min(72dvh, 34rem);
-  padding: 1.45rem 1.15rem 1.2rem;
+  height: fit-content;
+  padding: 1.45rem 1.15rem 0.7rem;
   border-radius: 1.3rem;
 }
 
@@ -3761,6 +3776,11 @@ body:has(.welcome-screen),
   align-items: center;
 }
 
+.auth-modal .auth-login-actions {
+  margin-top: 0.45rem;
+  margin-bottom: 0;
+}
+
 .auth-modal .auth-profile-form .welcome-screen__actions {
   margin-top: 1.35rem;
 }
@@ -3789,8 +3809,11 @@ body:has(.welcome-screen),
 
 .auth-modal .welcome-screen__actions {
   width: 100%;
-  gap: 0.45rem;
+  gap: 0.35rem;
   align-items: center;
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  padding-bottom: 0;
 }
 
 .auth-modal .auth-login-submit {
@@ -5700,8 +5723,8 @@ button.memory-library__target--retry {
   align-items: flex-start;
   gap: 0.65rem;
   font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
-  font-size: clamp(1.45rem, 3.4vw, 2.05rem);
-  font-weight: 500;
+  font-size: clamp(1.5rem, 4.2vw, 2.15rem);
+  font-weight: 600;
   line-height: 1.24;
   text-align: left;
   color: #fff;
@@ -5780,17 +5803,17 @@ button.memory-library__target--retry {
 
 .rising-words__english {
   margin: 0;
-  font-size: 0.82em;
-  font-weight: 400;
+  font-size: 0.92em;
+  font-weight: 500;
   font-style: normal;
   line-height: 1.24;
-  color: #0a2d7a;
+  color: #ffe14a;
   opacity: 1;
-  text-shadow: none;
+  text-shadow: 0 1px 8px rgba(12, 24, 40, 0.35);
 }
 
 .rising-words__english--welcome {
-  color: #1a4fc4;
+  color: #ffe14a;
   text-decoration: none;
 }
 
@@ -5801,7 +5824,7 @@ button.memory-library__target--retry {
 
 .rising-words__line--user .rising-words__english,
 .rising-words__line--kea .rising-words__english {
-  color: #0a2d7a;
+  color: #ffe14a;
 }
 
 .rising-words__rule {
@@ -7134,7 +7157,7 @@ button.memory-library__target--retry {
   }
 
   .auth-modal__card--compact {
-    padding: 1.35rem 1.1rem 1.15rem;
+    padding: 1.35rem 1.1rem 0.65rem;
   }
 
   .auth-modal__bird {
@@ -7143,7 +7166,7 @@ button.memory-library__target--retry {
 
   .auth-modal__mascot {
     margin-bottom: clamp(-3.7rem, -10.5vw, -2.85rem);
-    transform: translateY(-1.15rem);
+    transform: translateY(calc(-1.15rem - 2mm));
   }
 }
 
@@ -9030,17 +9053,38 @@ body:has(.method-screen)::-webkit-scrollbar {
   right: auto;
   bottom: auto;
   z-index: 3;
-  margin: 0.35rem 0 0;
-  padding: 0.35rem max(1rem, env(safe-area-inset-right), 4vw)
-    max(0.65rem, env(safe-area-inset-bottom))
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  width: 100%;
+  margin: 0.55rem 0 0;
+  padding: 0.85rem max(1rem, env(safe-area-inset-right), 4vw)
+    max(0.85rem, env(safe-area-inset-bottom))
     max(1rem, env(safe-area-inset-left), 4vw);
-  pointer-events: none;
+  pointer-events: auto;
+  border-radius: 1.1rem 1.1rem 0 0;
+  background: #2a1c4e;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  box-sizing: border-box;
 }
 
 .method-screen__store-footer .store-badges,
 .method-screen__store-footer .site-footer,
 .method-screen__store-footer a {
   pointer-events: auto;
+}
+
+.method-screen__store-footer .site-footer:not(.site-footer--plain) {
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
 }
 
 .method-screen__top {
@@ -9100,6 +9144,7 @@ body:has(.method-screen)::-webkit-scrollbar {
   justify-content: flex-end;
   gap: 0.85rem;
   flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 
 .method-screen__nav a,
@@ -9247,7 +9292,7 @@ button.method-screen__login.active {
 }
 
 .method-set {
-  margin-bottom: 2.75rem;
+  margin-bottom: 0.85rem;
 }
 
 .method-set h2 {
@@ -9343,6 +9388,11 @@ button.method-screen__login.active {
   content-visibility: auto;
 }
 
+/* Rewards card: perch claws on the glass top (~2mm higher). */
+.method-row:last-child .method-row__media img {
+  object-position: center calc(50% - 2mm);
+}
+
 @media (min-width: 720px) {
   .method-row__media,
   .method-row__media img {
@@ -9382,7 +9432,7 @@ button.method-screen__login.active {
   flex-direction: column;
   align-items: center;
   gap: 0.85rem;
-  margin: 0.5rem 0 0.65rem;
+  margin: 0.35rem 0 0;
 }
 
 .method-screen__invite {

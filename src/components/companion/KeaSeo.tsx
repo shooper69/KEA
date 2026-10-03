@@ -2,11 +2,13 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   KEA_NAME,
-  KEA_ORIGIN,
+  OG_IMAGE,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
   canonicalUrl,
   jsonLdForPath,
   seoForPath,
-} from '../../seo/keaSeo'
+} from '../../seo/keaSeo.ts'
 
 function upsertMeta(attr: 'name' | 'property', key: string, content: string) {
   const selector = `meta[${attr}="${key}"]`
@@ -35,7 +37,6 @@ export function KeaSeo() {
   useEffect(() => {
     const seo = seoForPath(pathname)
     const url = canonicalUrl(seo.path)
-    const image = `${KEA_ORIGIN}/kea-mark.png`
     document.title = seo.title
     upsertMeta('name', 'description', seo.description)
     upsertMeta(
@@ -53,12 +54,33 @@ export function KeaSeo() {
     upsertMeta('property', 'og:title', seo.title)
     upsertMeta('property', 'og:description', seo.description)
     upsertMeta('property', 'og:url', url)
-    upsertMeta('property', 'og:image', image)
+    upsertMeta('property', 'og:image', OG_IMAGE)
+    upsertMeta('property', 'og:image:secure_url', OG_IMAGE)
+    upsertMeta('property', 'og:image:type', 'image/png')
+    upsertMeta('property', 'og:image:width', String(OG_IMAGE_WIDTH))
+    upsertMeta('property', 'og:image:height', String(OG_IMAGE_HEIGHT))
     upsertMeta('property', 'og:image:alt', 'Kea')
     upsertMeta('name', 'twitter:card', 'summary_large_image')
     upsertMeta('name', 'twitter:title', seo.title)
     upsertMeta('name', 'twitter:description', seo.description)
-    upsertMeta('name', 'twitter:image', image)
+    upsertMeta('name', 'twitter:image', OG_IMAGE)
+    upsertMeta('name', 'twitter:image:alt', 'Kea')
+    const alternate = document.head.querySelector(
+      'link[rel="alternate"][type="text/plain"]',
+    )
+    if (seo.index) {
+      let node = alternate
+      if (!node) {
+        node = document.createElement('link')
+        node.setAttribute('rel', 'alternate')
+        node.setAttribute('type', 'text/plain')
+        node.setAttribute('title', 'LLM brief')
+        document.head.appendChild(node)
+      }
+      node.setAttribute('href', 'https://kea.chat/llms.txt')
+    } else if (alternate) {
+      alternate.remove()
+    }
     let jsonLd = document.getElementById('kea-json-ld')
     if (!jsonLd) {
       jsonLd = document.createElement('script')

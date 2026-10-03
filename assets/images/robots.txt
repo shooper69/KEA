@@ -3,6 +3,8 @@ Allow: /
 
 Sitemap: https://kea.chat/sitemap.xml
 
+# Brief for people and AI systems: https://kea.chat/llms.txt
+
 Disallow: /admin
 Disallow: /admin/
 Disallow: /settings

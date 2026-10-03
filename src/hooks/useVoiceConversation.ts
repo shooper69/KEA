@@ -3,6 +3,7 @@ import {
   applyLearnTurn,
   extractNativeIntrusions,
   getLearnList,
+  isPrimarilyNativeEnglish,
   rememberLearnGloss,
   splitKeaReply,
   touchChatTopic,
@@ -40,7 +41,7 @@ import {
 } from '../lib/speech'
 import { askKea, glossLearnWord, keaNameCue, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
-import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, KEA_REPLAY_START, KEA_REPLAY_END, prefetchManagedVoiceAudio } from '../services/keaSpeak'
+import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, isKeaSpeaking, keaSpeechRemainingMs, KEA_REPLAY_START, KEA_REPLAY_END, prefetchManagedVoiceAudio } from '../services/keaSpeak'
 import { getSpeakVoice } from '../architecture/voiceCatalog'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
 import { learnerProfilePrompt } from '../data/keaLearnerProfile'
@@ -69,8 +70,14 @@ const MIN_SPEECH_MS = 420
 const MAX_RECORD_MS = 22000
 const AMBIENT_CALIBRATE_MS = 450
 const DEFAULT_ANSWER_SILENCE_MS = 2000
-/** If TTS never fires onend (common on mobile), unlock the turn anyway. */
-const SPEAK_SAFETY_MS = 28_000
+/** Absolute ceiling — soft Kea lines can run long; never cut while audio remains. */
+const SPEAK_SAFETY_MS = 120_000
+
+/** Soft / unhurried TTS needs ~200–240ms per character worst case. */
+function estimateSpeakBudgetMs(text: string) {
+  const chars = Math.max(1, text.trim().length)
+  return Math.min(SPEAK_SAFETY_MS, Math.max(18_000, 10_000 + chars * 240))
+}
 
 function readCharacter(): VoicePersonalityId {
   migrateCharmMoodDefault()
@@ -753,24 +760,36 @@ export function useVoiceConversation({
           setStatus('idle')
         }
       }
-      safety = window.setTimeout(
-        () => {
+      const armSafety = (ms: number) => {
+        window.clearTimeout(safety)
+        const wait = Math.min(SPEAK_SAFETY_MS, Math.max(2_000, ms))
+        safety = window.setTimeout(() => {
+          // Still playing — extend instead of chopping the last words.
+          const left = keaSpeechRemainingMs()
+          if (isKeaSpeaking() && left > 350) {
+            logSpeech('speak safety extend', left)
+            armSafety(left + 4_000)
+            return
+          }
           logSpeech('speak safety unlock')
-          // Cut any leftover TTS so the mic does not hear Kea as the next answer.
           try {
             stopKeaSpeech()
           } catch {
             // ignore
           }
           finish()
-        },
-        // Generous budget so soft TTS is never truncated mid-word by the watchdog.
-        Math.min(SPEAK_SAFETY_MS, Math.max(12_000, 5_500 + spoken.length * 140)),
-      )
+        }, wait)
+      }
+      armSafety(estimateSpeakBudgetMs(spoken))
       void speakKeaLine(spoken, {
         lang: getLanguage(targetLanguage).speechLocale,
         onend: finish,
         onerror: finish,
+        onDuration: (durationMs) => {
+          if (settled) return
+          // Real clip length + cushion so soft tails are not cut.
+          armSafety(durationMs + 5_000)
+        },
         prefetchedUrl: speechOpts?.prefetchedUrl,
         prefetchPromise: speechOpts?.prefetchPromise,
       }).catch(() => finish())
@@ -786,16 +805,52 @@ export function useVoiceConversation({
       busyRef.current = true
       armListenIdle(true)
       setStatus('thinking')
-      const userHighlights = extractNativeIntrusions(userText)
+      const nativeUtterance =
+        targetLanguage === 'es' &&
+        nativeLanguage === 'en' &&
+        isPrimarilyNativeEnglish(userText)
+      // Orange only for native slips inside a learn-language sentence — never on
+      // a whole native-language line (that used to paint random English words).
+      const userHighlights = nativeUtterance
+        ? []
+        : extractNativeIntrusions(userText)
+      const userMessageId = crypto.randomUUID()
       const userMessage: TranscriptMessage = {
-        id: crypto.randomUUID(),
+        id: userMessageId,
         speaker: 'user',
         text: userText,
         highlights: userHighlights.length ? userHighlights : undefined,
       }
       historyRef.current = [...historyRef.current, userMessage]
       setMessages((current) => [...current, userMessage])
-      captionSpanish(userMessage.id, userText)
+      if (!nativeUtterance) {
+        captionSpanish(userMessageId, userText)
+      } else {
+        // Promote learn language to the top line; keep native as yellow caption.
+        const targetName = getLanguage(targetLanguage).name
+        void glossLearnWord(userText, targetName)
+          .then((inTarget) => {
+            const spokenTarget = inTarget.trim()
+            if (!spokenTarget || spokenTarget === userText.trim()) return
+            const slips = extractNativeIntrusions(spokenTarget)
+            const patch = {
+              text: spokenTarget,
+              english: userText,
+              highlights: slips.length ? slips : undefined,
+            }
+            setMessages((current) =>
+              current.map((item) =>
+                item.id === userMessageId ? { ...item, ...patch } : item,
+              ),
+            )
+            historyRef.current = historyRef.current.map((item) =>
+              item.id === userMessageId ? { ...item, ...patch } : item,
+            )
+          })
+          .catch(() => {
+            // Keep the native line visible if translation fails.
+          })
+      }
       try {
         logAi('request', userText)
         const raw = await askKea({
@@ -817,19 +872,8 @@ export function useVoiceConversation({
           else setStatus('idle')
           return
         }
-        const fromModel = (signals?.add ?? [])
-          .map((item) => item.term)
-          .filter((term) => term && userText.toLowerCase().includes(term.toLowerCase()))
-        const mergedHighlights = [...new Set([...userHighlights, ...fromModel])]
-        if (mergedHighlights.length) {
-          setMessages((current) =>
-            current.map((item) =>
-              item.id === userMessage.id
-                ? { ...item, highlights: mergedHighlights }
-                : item,
-            ),
-          )
-        }
+        // Do not merge model "add" terms into orange highlights — that painted
+        // English words orange when the learner spoke a full native sentence.
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',

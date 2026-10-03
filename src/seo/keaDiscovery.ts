@@ -3,10 +3,10 @@ export const DISCOVERY_PATH = '/what-is-kea'
 export const DISCOVERY_TITLE = 'What is Kea'
 
 export const DISCOVERY_DESCRIPTION =
-  'Kea is a hands-free conversational companion for language. She talks with you like a friend — not a course, tutor, or lesson app — and remembers topics and words you struggle with.'
+  'Kea is a language learning chatty companion. She talks with you like a friend — not a course, tutor, or lesson app — and remembers topics and words you struggle with.'
 
 export const DISCOVERY_DEFINITION = [
-  'Kea is a conversational companion. People pick up a language by talking with her, the way they picked up their first language: through experience, meaning, and repetition in real conversation.',
+  'Kea is a language learning chatty companion. People pick up a language by talking with her, the way they picked up their first language: through experience, meaning, and repetition in real conversation.',
   'You speak one language and talk with Kea in another. She answers in that language, keeps the thread of what you have been talking about, and notices words and phrases you struggle with.',
   'Those words live on a personal Learn List until you start using them well. Topics you have spoken about can be opened again later. There is no lesson plan, no streak, and no classroom.',
 ]
@@ -43,6 +43,7 @@ export const PUBLIC_SITEMAP_PATHS = [
   DISCOVERY_PATH,
   '/method',
   '/support',
+  '/contact',
   '/delete-account',
   '/privacy-policy',
   '/terms-of-service',
@@ -90,6 +91,8 @@ Allow: /
 
 Sitemap: ${origin}/sitemap.xml
 
+# Brief for people and AI systems: ${origin}/llms.txt
+
 ${disallows}
 
 User-agent: GPTBot
@@ -119,7 +122,7 @@ export const DISCOVERY_FAQS: Array<{ question: string; answer: string }> = [
   {
     question: 'What is Kea?',
     answer:
-      'Kea is a hands-free conversational companion for language. She talks with you like a friend so you acquire language through conversation, not through a course.',
+      'Kea is a language learning chatty companion. She talks with you like a friend so you acquire language through conversation, not through a course.',
   },
   {
     question: 'Is Kea a language learning app or tutor?',
@@ -194,6 +197,7 @@ export function keaLlmsTxt(origin: string) {
     `- What is Kea: ${origin}${DISCOVERY_PATH}`,
     `- The Method: ${origin}/method`,
     `- Support: ${origin}/support`,
+    `- Contact: ${origin}/contact`,
     `- Privacy: ${origin}/privacy-policy`,
     `- Terms: ${origin}/terms-of-service`,
     `- Cookies: ${origin}/cookie-policy`,
@@ -253,8 +257,19 @@ export function keaWhatIsKeaHtml(origin: string) {
     <meta property="og:url" content="${canonical}" />
     <meta property="og:title" content="${escapeHtml(DISCOVERY_TITLE)} · Kea" />
     <meta property="og:description" content="${escapeHtml(DISCOVERY_DESCRIPTION)}" />
-    <meta property="og:image" content="${origin}/kea-mark.png" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <meta property="og:image" content="${origin}/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Kea" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(DISCOVERY_TITLE)} · Kea" />
+    <meta name="twitter:description" content="${escapeHtml(DISCOVERY_DESCRIPTION)}" />
+    <meta name="twitter:image" content="${origin}/og-image.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=5" />
+    <link rel="icon" href="/favicon.ico?v=5" sizes="any" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=5" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=5" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png?v=5" />
     <script type="application/ld+json">
 ${JSON.stringify(faqLd, null, 2)}
     </script>
@@ -285,6 +300,7 @@ ${faqs}
         <a href="${origin}/">Home</a>
         <a href="${origin}/method">The Method</a>
         <a href="${origin}/support">Support</a>
+        <a href="${origin}/contact">Contact</a>
         <a href="${origin}/privacy-policy">Privacy</a>
       </nav>
     </main>

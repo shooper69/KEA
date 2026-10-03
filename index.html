@@ -2,97 +2,71 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico?v=4" sizes="any" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=4" />
-    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png?v=4" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=4" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=4" />
-    <link rel="manifest" href="/site.webmanifest?v=4" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=5" />
+    <link rel="icon" href="/favicon.ico?v=5" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=5" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png?v=5" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png?v=5" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png?v=5" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png?v=5" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=5" />
+    <link rel="manifest" href="/site.webmanifest?v=5" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#4ec4d4" />
-    <meta
-      name="description"
-      content="Kea is a hands-free conversational companion that helps you learn languages naturally through real conversation, remembered topics, and a personalised Learn List. Not a course, not a tutor — a friend you talk with."
-    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Kea" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msvalidate.01" content="6D5B3412639D2E1C27E6D93F3FD3255E" />
+    <meta name="description" content="Kea is a language learning chatty companion. Talk hands-free in English, Spanish, French, German or Russian. Remembered topics and a Learn List — not a course or tutor." />
     <meta name="author" content="Kea" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="application-name" content="Kea" />
     <link rel="canonical" href="https://kea.chat/" />
+    <link rel="alternate" type="text/plain" title="LLM brief" href="https://kea.chat/llms.txt" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Kea" />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:url" content="https://kea.chat/" />
-    <meta property="og:title" content="Kea — a conversational companion for language" />
-    <meta
-      property="og:description"
-      content="Kea is a hands-free conversational companion. Talk naturally, remember topics, and grow a Learn List — without a lesson plan."
-    />
-    <meta property="og:image" content="https://kea.chat/kea-mark.png" />
+    <meta property="og:title" content="Kea — language learning chatty companion" />
+    <meta property="og:description" content="Kea is a language learning chatty companion. Talk hands-free in English, Spanish, French, German or Russian. Remembered topics and a Learn List — not a course or tutor." />
+    <meta property="og:image" content="https://kea.chat/og-image.png" />
+    <meta property="og:image:secure_url" content="https://kea.chat/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Kea" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Kea — a conversational companion for language" />
-    <meta
-      name="twitter:description"
-      content="Hands-free conversation with Kea. A companion, not a classroom."
-    />
-    <meta name="twitter:image" content="https://kea.chat/kea-mark.png" />
-    <title>Kea — a conversational companion for language</title>
+    <meta name="twitter:title" content="Kea — language learning chatty companion" />
+    <meta name="twitter:description" content="Kea is a language learning chatty companion. Talk hands-free in English, Spanish, French, German or Russian. Remembered topics and a Learn List — not a course or tutor." />
+    <meta name="twitter:image" content="https://kea.chat/og-image.png" />
+    <meta name="twitter:image:alt" content="Kea" />
+    <title>Kea — language learning chatty companion</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="image" href="/kea-mark.png" fetchpriority="high" />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@300;400;500;600&display=swap"
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@400;500;600;700&display=swap"
+    />
+    <link
       rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@400;500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
     />
     <script id="kea-json-ld" type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@graph": [
-          {
-            "@type": "Organization",
-            "@id": "https://kea.chat/#organization",
-            "name": "Kea",
-            "url": "https://kea.chat",
-            "logo": "https://kea.chat/favicon-512.png",
-            "description": "Kea is a hands-free conversational companion that helps people learn languages naturally through real conversation.",
-            "email": "team@kea.chat",
-            "contactPoint": {
-              "@type": "ContactPoint",
-              "email": "team@kea.chat",
-              "contactType": "customer support",
-              "url": "https://kea.chat/support"
-            }
-          },
-          {
-            "@type": "WebSite",
-            "@id": "https://kea.chat/#website",
-            "url": "https://kea.chat",
-            "name": "Kea",
-            "inLanguage": "en",
-            "publisher": { "@id": "https://kea.chat/#organization" }
-          },
-          {
-            "@type": "WebApplication",
-            "@id": "https://kea.chat/#app",
-            "name": "Kea",
-            "url": "https://kea.chat",
-            "description": "A conversational companion for language. Talk, remember topics, and keep a Learn List — without a course or tutor.",
-            "applicationCategory": "LifestyleApplication",
-            "operatingSystem": "Web",
-            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
-          }
-        ]
-      }
+      {"@context":"https://schema.org","@graph":[]}
     </script>
   </head>
   <body>
     <div id="root"></div>
     <noscript>
-      <h1>Chat with Kea</h1>
+      <h1>Kea — language learning chatty companion</h1>
       <p>
-        Kea is a hands-free conversational companion that helps you learn
-        languages naturally through real conversation, remembered topics, and a
-        personalised Learn List. She behaves like a friend, not a teacher. She
-        is not a course, tutor, or classroom app.
+        Kea is a language learning chatty companion. Talk hands-free in English, Spanish,
+        French, German or Russian. Remembered topics and a Learn List — not a course or tutor.
       </p>
       <p>
         Languages: English, Spanish, French, German, and Russian. You speak one
@@ -102,6 +76,8 @@
         <a href="https://kea.chat/what-is-kea">What is Kea</a>
         ·
         <a href="https://kea.chat/method">The Method</a>
+        ·
+        <a href="https://kea.chat/contact">Contact</a>
         ·
         <a href="https://kea.chat/">Open Kea</a>
       </p>

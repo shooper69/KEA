@@ -12,7 +12,7 @@ export const WELCOME_CLOSING_TTS_HINT =
   'Emphasize the word "love" (or the equivalent affection word if translated) with warm sincerity — linger on it slightly so it feels heartfelt.'
 
 export const WELCOME_FIRST_PERSON_EN = [
-  "I'm a hands-free conversational companion that helps you learn languages naturally through real conversation, remembered topics, and a personalised Learn List.",
+  "I'm a language learning chatty companion. I help you learn languages naturally through real conversation, remembered topics, and a personalised Learn List.",
   'I behave like a friend, not a teacher. As you chat, you impact my personality, and change my mood, just as you do with a friend.',
   "I'm there for you whenever you've got a few spare minutes; in your car, walking the dog, doing the dishes.",
   'Just an anything-goes hands-free chatty companion, speaking in the languages of your choice and helping you when you make mistakes.',

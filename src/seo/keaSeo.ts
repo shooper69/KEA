@@ -2,16 +2,24 @@ import {
   DISCOVERY_PATH,
   discoveryDefinedTermJsonLd,
   discoveryFaqJsonLd,
-} from './keaDiscovery'
+} from './keaDiscovery.ts'
 
 export const KEA_ORIGIN = 'https://kea.chat'
 
 export const KEA_NAME = 'Kea'
 
-export const KEA_TAGLINE = 'Chat with Kea & learn a language'
+export const KEA_TAGLINE = 'language learning chatty companion'
+
+export const OG_IMAGE_PATH = '/og-image.png'
+
+export const OG_IMAGE = `${KEA_ORIGIN}${OG_IMAGE_PATH}`
+
+export const OG_IMAGE_WIDTH = 1200
+
+export const OG_IMAGE_HEIGHT = 630
 
 export const KEA_DESCRIPTION =
-  'Kea is a hands-free conversational companion that helps you learn languages naturally through real conversation, remembered topics, and a personalised Learn List. Not a course, not a tutor — a friend you talk with.'
+  'Kea is a language learning chatty companion. Talk hands-free in English, Spanish, French, German or Russian. Remembered topics and a Learn List — not a course or tutor.'
 
 export interface KeaPageSeo {
   title: string
@@ -24,7 +32,7 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/',
     {
-      title: 'Kea — a conversational companion for language',
+      title: 'Kea — language learning chatty companion',
       description: KEA_DESCRIPTION,
       path: '/',
       index: true,
@@ -33,9 +41,9 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/method',
     {
-      title: 'The Method · Kea',
+      title: 'The Method | How Kea acquires language',
       description:
-        'How Kea acquires language like a child — unstructured talk, familiar companions, growth without lessons, and TAPs for talk time.',
+        'How Kea, a language learning chatty companion, works: unstructured talk, meaning first, a Learn List for hard words, and progress from conversation — not lessons or streaks.',
       path: '/method',
       index: true,
     },
@@ -43,9 +51,9 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/what-is-kea',
     {
-      title: 'What is Kea · Kea',
+      title: 'What is Kea? A language learning chatty companion',
       description:
-        'Kea is a hands-free conversational companion for language. Not a course or tutor — a friend you talk with.',
+        'Kea is a language learning chatty companion. She talks with you like a friend — not a course or tutor — and remembers topics and words you struggle with.',
       path: '/what-is-kea',
       index: true,
     },
@@ -129,19 +137,29 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/support',
     {
-      title: 'Customer Support · Kea',
+      title: 'Kea Support — help with your account',
       description:
-        'Get help with Kea. Contact the team at team@kea.chat for account, subscription, or product questions.',
+        'Get help with Kea at team@kea.chat. Account, subscription, product questions, and how to delete your data at kea.chat/delete-account.',
       path: '/support',
+      index: true,
+    },
+  ],
+  [
+    '/contact',
+    {
+      title: 'Contact Kea — team@kea.chat',
+      description:
+        'Email Kea at team@kea.chat for product, account, or partnership questions. Public pages: What is Kea, The Method, Support, and legal policies.',
+      path: '/contact',
       index: true,
     },
   ],
   [
     '/delete-account',
     {
-      title: 'Delete my Kea data · Kea',
+      title: 'Delete your Kea account and stored data',
       description:
-        'Permanently delete your Kea account, Learn List, topics, and data stored on this device.',
+        'Permanently delete your Kea account, Learn List, topics, and data stored for kea.chat. Use this page or Settings → Security in the app.',
       path: '/delete-account',
       index: true,
     },
@@ -149,9 +167,9 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/privacy-policy',
     {
-      title: 'Privacy Policy · Kea',
+      title: 'Privacy Policy | How Kea uses your data',
       description:
-        'How Kea collects, uses, and protects your information at kea.chat.',
+        'How Kea collects, uses, and protects account, conversation, and billing information at kea.chat, and how to delete your data.',
       path: '/privacy-policy',
       index: true,
     },
@@ -159,8 +177,9 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/terms-of-service',
     {
-      title: 'Terms of Service · Kea',
-      description: 'Terms that govern your use of Kea at kea.chat.',
+      title: 'Terms of Service | Using Kea at kea.chat',
+      description:
+        'Terms that govern your use of Kea at kea.chat, including accounts, subscriptions, acceptable use, and contact at team@kea.chat.',
       path: '/terms-of-service',
       index: true,
     },
@@ -168,9 +187,9 @@ const pages: Array<[string, KeaPageSeo]> = [
   [
     '/cookie-policy',
     {
-      title: 'Cookie Policy · Kea',
+      title: 'Cookie Policy | Kea cookies and your choice',
       description:
-        'How Kea uses necessary and analytics cookies, and how to manage your choice.',
+        'How Kea uses necessary cookies and optional analytics on kea.chat, and how to accept, reject, or reset that choice.',
       path: '/cookie-policy',
       index: true,
     },
@@ -186,10 +205,23 @@ const pages: Array<[string, KeaPageSeo]> = [
   ],
 ]
 
+export function normalizePathname(pathname: string) {
+  const path = pathname.split(/[?#]/)[0] || '/'
+  if (path === '/') return '/'
+  return path.replace(/\/+$/, '') || '/'
+}
+
+export function htmlFileForPath(path: string) {
+  const normalised = normalizePathname(path)
+  if (normalised === '/') return 'index.html'
+  return `${normalised.slice(1)}.html`
+}
+
 export function seoForPath(pathname: string): KeaPageSeo {
-  const exact = pages.find(([path]) => path === pathname)
+  const normalised = normalizePathname(pathname)
+  const exact = pages.find(([path]) => path === normalised)
   if (exact) return exact[1]
-  if (pathname.startsWith('/admin')) {
+  if (normalised.startsWith('/admin')) {
     return {
       title: 'Admin · Kea',
       description: 'Kea administration.',
@@ -200,14 +232,15 @@ export function seoForPath(pathname: string): KeaPageSeo {
   return {
     title: 'Kea',
     description: KEA_DESCRIPTION,
-    path: pathname,
+    path: normalised,
     index: false,
   }
 }
 
 export function canonicalUrl(path: string) {
-  if (path === '/') return `${KEA_ORIGIN}/`
-  return `${KEA_ORIGIN}${path}`
+  const normalised = normalizePathname(path)
+  if (normalised === '/') return `${KEA_ORIGIN}/`
+  return `${KEA_ORIGIN}${normalised}`
 }
 
 export const KEA_JSON_LD = {
@@ -218,7 +251,14 @@ export const KEA_JSON_LD = {
       '@id': `${KEA_ORIGIN}/#organization`,
       name: KEA_NAME,
       url: KEA_ORIGIN,
-      logo: `${KEA_ORIGIN}/favicon-512.png`,
+      slogan: KEA_TAGLINE,
+      logo: {
+        '@type': 'ImageObject',
+        url: `${KEA_ORIGIN}/favicon-512.png`,
+        width: 512,
+        height: 512,
+      },
+      image: OG_IMAGE,
       description: KEA_DESCRIPTION,
       email: 'team@kea.chat',
       contactPoint: {
@@ -226,6 +266,7 @@ export const KEA_JSON_LD = {
         email: 'team@kea.chat',
         contactType: 'customer support',
         url: `${KEA_ORIGIN}/support`,
+        availableLanguage: ['English'],
       },
     },
     {
@@ -234,6 +275,7 @@ export const KEA_JSON_LD = {
       url: KEA_ORIGIN,
       name: KEA_NAME,
       description: KEA_DESCRIPTION,
+      slogan: KEA_TAGLINE,
       inLanguage: 'en',
       publisher: { '@id': `${KEA_ORIGIN}/#organization` },
     },
@@ -243,21 +285,83 @@ export const KEA_JSON_LD = {
       name: KEA_NAME,
       url: KEA_ORIGIN,
       description: KEA_DESCRIPTION,
+      slogan: KEA_TAGLINE,
       applicationCategory: 'LifestyleApplication',
       operatingSystem: 'Web, Android',
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
-      },
+      image: OG_IMAGE,
       inLanguage: ['en', 'es', 'fr', 'de', 'ru'],
+      isAccessibleForFree: true,
+      publisher: { '@id': `${KEA_ORIGIN}/#organization` },
     },
   ],
 }
 
+function pageType(pathname: string) {
+  if (pathname === '/contact' || pathname === '/support') return 'ContactPage'
+  if (pathname === DISCOVERY_PATH) return 'AboutPage'
+  return 'WebPage'
+}
+
+function breadcrumbJsonLd(pathname: string, seo: KeaPageSeo) {
+  const url = canonicalUrl(seo.path)
+  if (pathname === '/') {
+    return {
+      '@type': 'BreadcrumbList',
+      '@id': `${url}#breadcrumb`,
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: KEA_NAME,
+          item: `${KEA_ORIGIN}/`,
+        },
+      ],
+    }
+  }
+  return {
+    '@type': 'BreadcrumbList',
+    '@id': `${url}#breadcrumb`,
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: KEA_NAME,
+        item: `${KEA_ORIGIN}/`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: seo.title,
+        item: url,
+      },
+    ],
+  }
+}
+
 export function jsonLdForPath(pathname: string) {
-  const graph: unknown[] = [...KEA_JSON_LD['@graph']]
-  if (pathname === DISCOVERY_PATH) {
+  const seo = seoForPath(pathname)
+  const url = canonicalUrl(seo.path)
+  const graph: unknown[] = [
+    ...KEA_JSON_LD['@graph'],
+    {
+      '@type': pageType(seo.path),
+      '@id': `${url}#webpage`,
+      url,
+      name: seo.title,
+      description: seo.description,
+      isPartOf: { '@id': `${KEA_ORIGIN}/#website` },
+      about: { '@id': `${KEA_ORIGIN}/#app` },
+      inLanguage: 'en',
+      primaryImageOfPage: {
+        '@type': 'ImageObject',
+        url: OG_IMAGE,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+      },
+    },
+    breadcrumbJsonLd(seo.path, seo),
+  ]
+  if (seo.path === DISCOVERY_PATH) {
     graph.push(discoveryDefinedTermJsonLd(KEA_ORIGIN), discoveryFaqJsonLd(KEA_ORIGIN))
   }
   return {

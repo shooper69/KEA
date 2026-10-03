@@ -102,10 +102,53 @@
   force = true
 
 # Existing files in dist/ (favicons, assets) are served first.
-# Crawler HTML for the public definition page (no JavaScript required).
+# Crawler HTML for public pages (unique title, description, canonical).
+# These files still boot the React app so people get the full page.
 [[redirects]]
   from = "/what-is-kea"
   to = "/what-is-kea.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/method"
+  to = "/method.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/support"
+  to = "/support.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contact"
+  to = "/contact.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/delete-account"
+  to = "/delete-account.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/privacy-policy"
+  to = "/privacy-policy.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/terms-of-service"
+  to = "/terms-of-service.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/cookie-policy"
+  to = "/cookie-policy.html"
   status = 200
   force = true
 

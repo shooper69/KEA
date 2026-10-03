@@ -263,10 +263,17 @@ function looksLikeEnglishToken(token: string) {
 /**
  * Native-language (English) words dropped into a target-language sentence.
  * These are highlighted in orange and auto-saved onto the Learn List.
+ * Pure native-language lines return nothing — orange is only for mid-sentence slips.
  */
 export function extractNativeIntrusions(text: string): string[] {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   if (!cleaned || looksLikeSystemText(cleaned)) return []
+  // Must look like a learning-language utterance first (Spanish markers).
+  if (!hasSpanishContext(cleaned) && !/[áéíóúñü¿¡]/i.test(cleaned)) {
+    return []
+  }
+  if (isPrimarilyNativeEnglish(cleaned)) return []
+
   const tokens = cleaned.match(/[A-Za-zÀ-ÿ']+/g) ?? []
   const english = tokens.filter(looksLikeEnglishToken)
   const quoted = [
@@ -274,12 +281,7 @@ export function extractNativeIntrusions(text: string): string[] {
   ].map((m) => m[1]).filter(looksLikeEnglishToken)
   const candidates = [...english, ...quoted]
   if (!candidates.length) return []
-  const hasOtherLanguage = tokens.some(
-    (token) => token.length >= 2 && !looksLikeEnglishToken(token),
-  )
-  if (!hasOtherLanguage && !hasSpanishContext(cleaned) && !looksLikeLearnRequest(cleaned)) {
-    return []
-  }
+
   const found: string[] = []
   const seen = new Set<string>()
   for (const token of candidates) {
@@ -289,6 +291,47 @@ export function extractNativeIntrusions(text: string): string[] {
     found.push(normalizeTerm(token))
   }
   return found
+}
+
+const ENGLISH_SHORT = new Set(
+  [
+    'i', 'a', 'to', 'we', 'me', 'my', 'am', 'is', 'be', 'or', 'of', 'in', 'on',
+    'at', 'it', 'do', 'an', 'as', 'so', 'if', 'ok', 'for', 'you', 'the', 'and',
+    'but', 'not', 'can', 'was', 'are', 'our', 'all', 'too', 'yes', 'hi', 'hey',
+    'okay', 'im', "i'm", 'ive', "i've", 'ill', "i'll", 'id', "i'd", 'dont',
+    "don't", 'did', 'had', 'has', 'have', 'its', "it's", 'lets', "let's",
+  ].map((w) => w.toLowerCase()),
+)
+
+/**
+ * True when the line is mostly English / native, not a Spanish sentence with
+ * a few borrowed words. Used to flip display: translate into the learn language
+ * first, keep the original as the yellow caption.
+ */
+export function isPrimarilyNativeEnglish(text: string): boolean {
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return false
+  if (/[áéíóúñü¿¡]/i.test(cleaned)) return false
+  const tokens = cleaned.toLowerCase().match(/[a-z']+/g) ?? []
+  if (tokens.length < 2) return false
+  let spanish = 0
+  let english = 0
+  for (const token of tokens) {
+    if (SPANISH_COMMON.has(token)) {
+      spanish += 1
+      continue
+    }
+    if (
+      looksLikeEnglishToken(token) ||
+      ENGLISH_FALLBACK.has(token) ||
+      ENGLISH_SHORT.has(token)
+    ) {
+      english += 1
+    }
+  }
+  if (spanish >= 2) return false
+  if (spanish >= 1 && english <= spanish + 1) return false
+  return english >= Math.max(2, Math.ceil(tokens.length * 0.55))
 }
 
 export function looksLikeLearnRequest(text: string) {

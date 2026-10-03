@@ -25,7 +25,7 @@ const METHOD_CARDS = [
   {
     title: 'Unstructured talk',
     body: [
-      'With Kea you don’t follow a lesson plan, you just talk to a friend about everyday moments — greetings, meals, curiosity, stories, work and play.',
+      'With Kea, you don’t follow a lesson path, you just chat with a companion, about everyday moments — greetings, meals, curiosity, stories, work and play.',
       'There’s no gamification, so when you fail to answer correctly, you don’t get sent back to the beginning, to yet again discuss ‘coffee or greetings’ for the umpteenth time.',
     ],
     image: '/method/method-unstructured-talk.webp',
@@ -78,6 +78,9 @@ export function MethodPage() {
           <nav className="method-screen__nav" aria-label="Site">
             <NavLink to="/" end className="method-screen__home">
               Home
+            </NavLink>
+            <NavLink to="/what-is-kea" className="method-screen__page-title">
+              What is Kea
             </NavLink>
             <NavLink to="/method" className="method-screen__page-title">
               The Method
@@ -148,7 +151,7 @@ export function MethodPage() {
           </Link>
         </div>
 
-        <footer className="welcome-screen__store-footer method-screen__store-footer">
+        <footer className="method-screen__store-footer">
           <div className="welcome-screen__store-footer-bar">
             <StoreBadges />
             <SiteFooter tone="marketing" />

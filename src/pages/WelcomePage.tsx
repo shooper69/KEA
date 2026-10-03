@@ -658,11 +658,15 @@ export function WelcomePage() {
               alt="Kea"
               width={180}
               height={90}
+              fetchPriority="high"
             />
           </Link>
           <nav className="method-screen__nav" aria-label="Site">
             <NavLink to="/" end className="method-screen__home">
               Home
+            </NavLink>
+            <NavLink to="/what-is-kea" className="method-screen__page-title">
+              What is Kea
             </NavLink>
             <NavLink to="/method" className="method-screen__page-title">
               The Method
@@ -700,6 +704,8 @@ export function WelcomePage() {
                       className="welcome-stage__bird"
                       src="/kea-branch.png"
                       alt=""
+                      width={432}
+                      height={512}
                     />
                   </div>
                 </div>
@@ -719,21 +725,21 @@ export function WelcomePage() {
             ) : null}
 
             {spokenBlock}
+
+            {!authOpen ? (
+              <footer className="welcome-screen__store-footer">
+                {!introMode ? <HomeCommentsStrip /> : null}
+                <div className="welcome-screen__store-footer-bar">
+                  <StoreBadges />
+                  <SiteFooter tone="marketing" />
+                </div>
+              </footer>
+            ) : null}
           </div>
           {introMode ? (
             <div className="welcome-screen__dock">{homeActions}</div>
           ) : null}
         </div>
-      ) : null}
-
-      {!authOpen ? (
-        <footer className="welcome-screen__store-footer">
-          {!introMode ? <HomeCommentsStrip /> : null}
-          <div className="welcome-screen__store-footer-bar">
-            <StoreBadges />
-            <SiteFooter tone="marketing" />
-          </div>
-        </footer>
       ) : null}
 
       {authOpen ? (

@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'kea-welcome-title'
 
-export const DEFAULT_WELCOME_TITLE = 'Chat with Kea & learn a language'
+export const DEFAULT_WELCOME_TITLE = 'Language learning chatty companion'
 
 export function getWelcomeTitle(): string {
   try {
