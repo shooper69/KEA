@@ -144,7 +144,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     let recordingUtterance = false
     let ring: Float32Array | null = null
     let ringPos = 0
-    let floatScratch: Float32Array | null = null
+    let floatScratch: Float32Array<ArrayBuffer> | null = null
 
     const stopRecognition = () => {
       try {
@@ -261,10 +261,14 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         ring = new Float32Array(Math.floor(audioContext.sampleRate * RING_SECONDS))
         ringPos = 0
         // Analyser ring — avoids deprecated ScriptProcessor crashes on modern WebViews.
-        floatScratch = new Float32Array(analyser.fftSize)
+        floatScratch = new Float32Array(
+          new ArrayBuffer(analyser.fftSize * Float32Array.BYTES_PER_ELEMENT),
+        )
         const vad = createSpeechVad(WAKE_VAD_FLOOR)
 
-        const samples = new Uint8Array(analyser.fftSize)
+        const samples: Uint8Array<ArrayBuffer> = new Uint8Array(
+          new ArrayBuffer(analyser.fftSize),
+        )
         let last = performance.now()
         const calibrateUntil = performance.now() + AMBIENT_CALIBRATE_MS
         logWake('armed', {

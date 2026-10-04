@@ -654,7 +654,9 @@ export function useVoiceConversation({
       sourceRef.current = linked.source
       analyserRef.current = linked.analyser
       const analyser = linked.analyser
-      const samples = new Uint8Array(analyser.fftSize)
+      const samples: Uint8Array<ArrayBuffer> = new Uint8Array(
+        new ArrayBuffer(analyser.fftSize),
+      )
       let last = performance.now()
       const ambientUntil = performance.now() + AMBIENT_CALIBRATE_MS
       const vad = createSpeechVad(SPEECH_RMS_FLOOR)
