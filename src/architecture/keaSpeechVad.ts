@@ -4,10 +4,10 @@
  * when ambient sound is loud.
  */
 
-/** Absolute floor — quiet speech in a quiet room. */
-export const SPEECH_RMS_FLOOR = 0.012
+/** Absolute floor — ignore soft room hiss / HVAC as “speech”. */
+export const SPEECH_RMS_FLOOR = 0.02
 /** Cap so a loud room does not silence the user entirely. */
-export const SPEECH_RMS_CAP = 0.045
+export const SPEECH_RMS_CAP = 0.055
 
 export interface KeaSpeechVad {
   threshold: number
@@ -21,14 +21,14 @@ export interface KeaSpeechVad {
 
 export function createSpeechVad(initialFloor = SPEECH_RMS_FLOOR): KeaSpeechVad {
   let noiseFloor = initialFloor
-  let threshold = Math.max(SPEECH_RMS_FLOOR, initialFloor * 1.55 + 0.005)
+  let threshold = Math.max(SPEECH_RMS_FLOOR, initialFloor * 1.85 + 0.008)
   let calibSum = 0
   let calibN = 0
 
   function adaptThreshold() {
     threshold = Math.max(
       SPEECH_RMS_FLOOR,
-      Math.min(SPEECH_RMS_CAP, noiseFloor * 1.55 + 0.005),
+      Math.min(SPEECH_RMS_CAP, noiseFloor * 1.85 + 0.008),
     )
   }
 
@@ -43,25 +43,26 @@ export function createSpeechVad(initialFloor = SPEECH_RMS_FLOOR): KeaSpeechVad {
       if (opts?.calibrating) {
         calibSum += rms
         calibN += 1
-        if (calibN >= 4) {
-          noiseFloor = calibSum / calibN
+        if (calibN >= 8) {
+          // Bias the floor slightly above measured ambient so chatter stays out.
+          noiseFloor = (calibSum / calibN) * 1.12
           adaptThreshold()
         }
         return
       }
       // Quiet frames gently pull the noise floor toward current ambient.
-      if (rms < threshold * 0.92) {
-        noiseFloor = noiseFloor * 0.92 + rms * 0.08
+      if (rms < threshold * 0.88) {
+        noiseFloor = noiseFloor * 0.9 + rms * 0.1
         adaptThreshold()
       }
     },
     isSpeech(rms) {
-      const snrOk = rms > noiseFloor * 1.4 + 0.0035
-      return rms > threshold || (snrOk && rms > SPEECH_RMS_FLOOR * 1.15)
+      const snrOk = rms > noiseFloor * 1.75 + 0.006
+      return rms > threshold || (snrOk && rms > SPEECH_RMS_FLOOR * 1.25)
     },
     reset() {
       noiseFloor = initialFloor
-      threshold = Math.max(SPEECH_RMS_FLOOR, initialFloor * 1.55 + 0.005)
+      threshold = Math.max(SPEECH_RMS_FLOOR, initialFloor * 1.85 + 0.008)
       calibSum = 0
       calibN = 0
     },
@@ -76,11 +77,11 @@ export function connectSpeechAnalyser(
   const source = context.createMediaStreamSource(stream)
   const highpass = context.createBiquadFilter()
   highpass.type = 'highpass'
-  highpass.frequency.value = 90
-  highpass.Q.value = 0.7
+  highpass.frequency.value = 140
+  highpass.Q.value = 0.85
   const analyser = context.createAnalyser()
   analyser.fftSize = 2048
-  analyser.smoothingTimeConstant = 0.35
+  analyser.smoothingTimeConstant = 0.4
   source.connect(highpass)
   highpass.connect(analyser)
   return { source, analyser, highpass }

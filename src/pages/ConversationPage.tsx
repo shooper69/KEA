@@ -53,6 +53,7 @@ import { useVoiceConversation } from '../hooks/useVoiceConversation'
 import { useKeaWakeWord } from '../hooks/useKeaWakeWord'
 import { useSpokenOnboarding } from '../hooks/useSpokenOnboarding'
 import { getAnswerSilenceSeconds } from '../data/keaAnswerSilence'
+import { consumeParkedTalkSession } from '../architecture/keaTalkPark'
 import { setScreenWakeLock } from '../architecture/keaScreenWakeLock'
 import { useHoldKeaListening } from '../architecture/keaUiHold'
 import { getSpeakVoice } from '../architecture/voiceCatalog'
@@ -100,6 +101,8 @@ export function ConversationPage() {
     }
     return restarting
   })
+  /** Returning from another page while Kea was live — resume listen, no wake. */
+  const [parkResume] = useState(() => consumeParkedTalkSession())
   useEffect(() => {
     const timer = window.setTimeout(() => releaseRestartListen(), 400)
     return () => window.clearTimeout(timer)
@@ -278,7 +281,13 @@ export function ConversationPage() {
   // On login / Talk ready: one short welcome in the learning language.
   // A returning name is already on this device, so do not wait for the cloud profile.
   // Stay quiet while the audio check popup is on screen.
+  // Parked return: skip greeting — just resume listening and reset the idle window.
   useEffect(() => {
+    if (parkResume) {
+      sessionGreetedRef.current = 'parked'
+      setOpeningDone(true)
+      return
+    }
     const returning = Boolean(firstName.trim()) || hasUserTalked()
     if (
       isTalkHeld() ||
@@ -319,6 +328,7 @@ export function ConversationPage() {
     // Intentionally omit `voice` — greet once per Talk visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    parkResume,
     block,
     spokenTour,
     textMode,
@@ -343,6 +353,8 @@ export function ConversationPage() {
 
   // Chat page is live: as soon as chrome clears, open the mic and start the
   // listen window from this visit (not from the last spoken word).
+  // Parked return restarts listening without a wake prompt and resets the
+  // stay-live timer (default 10 minutes).
   useEffect(() => {
     if (
       textMode ||
@@ -355,13 +367,15 @@ export function ConversationPage() {
       return
     }
     if (voice.handsFree || voice.status !== 'idle') return
-    if (sessionGreetedRef.current) {
+    if (parkResume || sessionGreetedRef.current) {
+      voice.activateLiveWindow()
       void voice.start()
     }
     // Greeting effect handles first open; this covers return to chat when a
     // welcome was already spoken this visit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    parkResume,
     textMode,
     block,
     spokenTour,

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { DISCOVERY_CONTACT } from '../../seo/keaDiscovery'
 
 /** Legal links for the public website footer. */
 export function SiteFooter({
@@ -15,6 +16,7 @@ export function SiteFooter({
         <Link to="/privacy-policy">Privacy</Link>
         <Link to="/terms-of-service">Terms of Service</Link>
         <Link to="/cookie-policy">Cookies</Link>
+        <a href={`mailto:${DISCOVERY_CONTACT}`}>Contact</a>
       </nav>
       <p className="site-footer__copy">© {new Date().getFullYear()} Kea</p>
     </footer>

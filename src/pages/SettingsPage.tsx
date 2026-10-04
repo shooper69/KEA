@@ -29,7 +29,10 @@ import {
   type RussianScript,
 } from '../architecture/russianScript'
 import {
+  ANSWER_SILENCE_SECOND_OPTIONS,
+  answerSilenceLabel,
   DEFAULT_ANSWER_SILENCE_SECONDS,
+  clampAnswerSilenceSeconds,
   getAnswerSilenceSeconds,
   saveAnswerSilenceSeconds,
 } from '../data/keaAnswerSilence'
@@ -684,37 +687,44 @@ export function SettingsPage() {
             </select>
           </label>
           <p className="settings-note">
-            Starts when you open the chat page and refreshes whenever you talk
-            (or Kea answers). Menus pause the mic until you close them.
+            Kea stays live for this long after the latest talk activity (default
+            10 minutes). Leaving chat stops the mic but does not end the
+            session — returning resumes listening and restarts this timer.
+            Menus pause the mic until you close them.
           </p>
           <label className="welcome-field">
             <span>Kea starts to answer after</span>
             <select
-              value={draftAnswerSilence}
+              value={clampAnswerSilenceSeconds(draftAnswerSilence)}
               onChange={(event) => {
-                setDraftAnswerSilence(Number(event.target.value))
+                setDraftAnswerSilence(clampAnswerSilenceSeconds(Number(event.target.value)))
                 setListeningSaved('')
               }}
             >
-              {[1, 2, 3, 4, 5, 6, 8, 10].map((seconds) => (
+              {ANSWER_SILENCE_SECOND_OPTIONS.map((seconds) => (
                 <option key={seconds} value={seconds}>
-                  {seconds} seconds of silence
+                  {answerSilenceLabel(seconds)} of silence
                   {seconds === DEFAULT_ANSWER_SILENCE_SECONDS ? ' (default)' : ''}
                 </option>
               ))}
             </select>
           </label>
+          <p className="settings-note">
+            Fastest is the default. Raise this if Kea cuts in before you finish.
+          </p>
           {listeningSaved ? <p className="settings-note">{listeningSaved}</p> : null}
           <button
             type="button"
             className="kea-button settings-save"
             onClick={() => {
+              const silence = clampAnswerSilenceSeconds(draftAnswerSilence)
               savePreferredMicId(preferredMicId)
-              saveAnswerSilenceSeconds(draftAnswerSilence)
-              setAnswerSilence(draftAnswerSilence)
+              saveAnswerSilenceSeconds(silence)
+              setAnswerSilence(silence)
+              setDraftAnswerSilence(silence)
               setProfile({
                 listenIdleSeconds: normalizeListenIdleSeconds(draftListenIdle),
-                answerAfterSilenceSeconds: draftAnswerSilence,
+                answerAfterSilenceSeconds: silence,
               })
               setDraftListenIdle(normalizeListenIdleSeconds(draftListenIdle))
               setListeningSaved('Saved.')

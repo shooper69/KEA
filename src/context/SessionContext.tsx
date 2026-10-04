@@ -155,11 +155,14 @@ function readProfile(): StoredProfile {
         const migrated = getAnswerSilenceSeconds()
         if (
           Number.isFinite(answerAfterSilenceSeconds) &&
-          answerAfterSilenceSeconds >= 1
+          answerAfterSilenceSeconds >= 0.5
         ) {
-          const n = Math.min(15, Math.round(answerAfterSilenceSeconds))
-          // Old shipped default was 3s; after the v2 silence migration, prefer 2s.
-          if (n === 3 && migrated === DEFAULT_ANSWER_SILENCE_SECONDS) {
+          const n = Math.min(15, Math.round(answerAfterSilenceSeconds * 2) / 2)
+          // Old shipped defaults were 3s / 2s — prefer the current fast default.
+          if (
+            (n === 3 || n === 2) &&
+            migrated === DEFAULT_ANSWER_SILENCE_SECONDS
+          ) {
             return DEFAULT_ANSWER_SILENCE_SECONDS
           }
           return n
@@ -461,7 +464,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (patch.answerAfterSilenceSeconds !== undefined) {
         const n = Number(patch.answerAfterSilenceSeconds)
         next.answerAfterSilenceSeconds =
-          Number.isFinite(n) && n >= 1 ? Math.min(15, Math.round(n)) : 3
+          Number.isFinite(n) && n >= 0.5
+            ? Math.min(15, Math.round(n * 2) / 2)
+            : DEFAULT_ANSWER_SILENCE_SECONDS
       }
       if (patch.sessionTimeoutMinutes !== undefined) {
         next.sessionTimeoutMinutes = normalizeSessionTimeoutMinutes(

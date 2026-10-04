@@ -21,7 +21,7 @@ export const DISCOVERY_NOT = [
 export const DISCOVERY_HOW = [
   {
     title: 'Talk',
-    body: 'You talk with Kea hands-free. She replies as a companion, in the language you are acquiring.',
+    body: 'You talk with Kea hands-free. She replies as a companion, in the language you are acquiring. You can choose a character and shape her mood as you talk.',
   },
   {
     title: 'Learn List',
@@ -34,7 +34,7 @@ export const DISCOVERY_HOW = [
 ]
 
 export const DISCOVERY_LANGUAGES =
-  'English, Spanish, French, German, and Russian. You speak one and talk with Kea in another.'
+  'Kea offers 32 languages. You speak one and talk with Kea in another.'
 
 export const DISCOVERY_CONTACT = 'team@kea.chat'
 
@@ -137,11 +137,6 @@ export const DISCOVERY_FAQS: Array<{ question: string; answer: string }> = [
     question: 'What is the Learn List?',
     answer:
       'The Learn List holds words and phrases Kea noticed you struggling with. They leave the list when you start using them well in conversation.',
-  },
-  {
-    question: 'Where should people start?',
-    answer:
-      'Open https://kea.chat to create a free account and talk. Read The Method at https://kea.chat/method for how acquisition works. This page is the short definition for people and search engines.',
   },
 ]
 

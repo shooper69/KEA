@@ -26,7 +26,7 @@ const OPEN_TOPIC_LOCAL_KEY = 'kea-open-topic-id-v1'
 const CHANGE_EVENT = 'kea-learn-memory'
 
 const LEARN_REQUEST =
-  /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say|\b(add|put|save|stick)\b.+\b(learn\s*list|my list|the list)\b|\bremember (the )?(word|phrase)\b|\badd .+ to (my )?list\b/i
+  /how (do you|do i|to) say|what does .+ mean|c[oó]mo se dice|wie sagt man|comment dit[- ]on|как сказать|translate|what is the (word|difference)|ser vs estar|subjunctive|grammar|help me (say|express)|why (do|does) (we|you|they) say|\b(add|put|save|stick)\b.+\b(learn\s*list|my list|the list)\b|\bremember (the )?(word|phrase)\b|\badd .+ to (my )?list\b|\b(save|add|put|stick)\s+(this|that|it)\b|\b(save|add|remember)\s+(this|that|the)\s+(word|phrase)\b/i
 
 const LEARN_LIST_QUIZ =
   /\b(test|quiz|practi[sc]e|drill|examine)\s+me\b|\b(test|quiz|practi[sc]e)\s+(my\s+)?(words|vocabulary|vocab|list)\b|\blearn\s*list\b.*\b(test|quiz|practi[sc]e|drill|review)\b|\b(test|quiz|practi[sc]e|drill|review)\b.*\blearn\s*list\b|\bgo through (my )?(words|list)\b|\bhelp me (review|practi[sc]e)\b|\bexam[ií]name\b|\bponme a prueba\b|\brepasemos\b/i
@@ -53,7 +53,14 @@ const ADD_TO_LEARN_LIST =
   /\b(?:add|put|save|stick)\s+(?:the\s+(?:word|phrase)\s+)?["«“']?(.+?)["»”']?\s+(?:to|on|onto|in)\s+(?:my\s+)?(?:the\s+)?(?:learn\s*)?list\b/i
 
 const ADD_WORD_REMEMBER =
-  /\b(?:remember|save)\s+(?:the\s+)?(?:word|phrase)\s+["«“']?([^?"»”'.!,;:]+)["»”']?/i
+  /\b(?:remember|save|add)\s+(?:the\s+|this\s+|that\s+)?(?:word|phrase)(?:\s+["«“']?([^?"»”'.!,;:]+)["»”']?)?/i
+
+/** “Save this word”, “add that to the list”, “put it on my learn list”. */
+const SAVE_DEMONSTRATIVE =
+  /\b(?:save|add|put|stick|remember)\s+(?:this|that|it)(?:\s+(?:word|phrase))?(?:\s+(?:to|on|onto|in)\s+(?:my\s+)?(?:the\s+)?(?:learn\s*)?list)?\b|\b(?:save|add|remember)\s+(?:the\s+)?(?:word|phrase)\s*$/i
+
+const QUOTED_TERM =
+  /["«“']([^\s"»”']{2,42})["»”']/g
 
 const MEMORY_BLOCK =
   /(?:\n|^)\s*<<<KEA_MEMORY\s*([\s\S]*?)\s*(?:>>>|KEA_MEMORY>>>)\s*$/i
@@ -414,12 +421,43 @@ function askedTerm(userText: string) {
   return ''
 }
 
-function requestedLearnListTerms(userText: string): string[] {
+/** Pull a concrete word from Kea's reply when the learner says “save this”. */
+function resolveDemonstrativeTerm(keaReply: string, userText: string): string {
+  const fromReply: string[] = []
+  for (const match of keaReply.matchAll(QUOTED_TERM)) {
+    if (match[1]) fromReply.push(match[1])
+  }
+  // Prefer the last quoted term in Kea's line ("… means «lluvia»").
+  for (let i = fromReply.length - 1; i >= 0; i--) {
+    const term = normalizeTerm(fromReply[i])
+    if (isLearnWordPhrase(term)) return term
+  }
+  // Bold/italic style markers some models emit: *word* or _word_
+  const marked = keaReply.match(/[*_]{1,2}([^\s*_.,;:?!]{2,42})[*_]{1,2}/)
+  if (marked?.[1] && isLearnWordPhrase(marked[1])) {
+    return normalizeTerm(marked[1])
+  }
+  // “the word X” / “la palabra X” in Kea's reply
+  const labeled = keaReply.match(
+    /\b(?:word|phrase|palabra|mot|wort|слово)\s+["«“']?([^\s"»”'.,;:?!]{2,42})/i,
+  )
+  if (labeled?.[1] && isLearnWordPhrase(labeled[1])) {
+    return normalizeTerm(labeled[1])
+  }
+  // Last highlighted native intrusion from the learner's prior phrasing in this turn.
+  const slips = extractNativeIntrusions(userText)
+  if (slips.length) return slips[slips.length - 1]
+  return ''
+}
+
+function requestedLearnListTerms(userText: string, keaReply = ''): string[] {
   const found: string[] = []
   const seen = new Set<string>()
   const push = (raw: string) => {
     const term = normalizeTerm(raw.replace(/^["«“']+|["»”']+$/g, ''))
     if (!isLearnWordPhrase(term)) return
+    // Skip bare demonstratives — resolve those from Kea's reply instead.
+    if (/^(this|that|it)(\s+(word|phrase))?$/i.test(term)) return
     const key = termKey(term)
     if (seen.has(key)) return
     seen.add(key)
@@ -431,6 +469,10 @@ function requestedLearnListTerms(userText: string): string[] {
   if (addHit?.[1]) push(addHit[1])
   const rememberHit = userText.match(ADD_WORD_REMEMBER)
   if (rememberHit?.[1]) push(rememberHit[1])
+  if (SAVE_DEMONSTRATIVE.test(userText) || /\b(this|that|it)\b/i.test(addHit?.[1] ?? '')) {
+    const resolved = resolveDemonstrativeTerm(keaReply, userText)
+    if (resolved) push(resolved)
+  }
   return found
 }
 
@@ -811,15 +853,26 @@ export function applyLearnTurn(options: {
   const seenAdd = new Set<string>()
 
   const additions = [...(options.signals?.add ?? [])]
-  for (const term of requestedLearnListTerms(options.userText)) {
+  for (const term of requestedLearnListTerms(
+    options.userText,
+    options.keaReply,
+  )) {
     const signalMatch = additions.find(
       (item) =>
         termKey(item.term) === termKey(term) ||
         termKey(item.translation) === termKey(term),
     )
+    // Pair a bare term with a translation gleaned from Kea's reply when needed.
+    let translation = signalMatch?.translation || ''
+    if (!translation && options.keaReply) {
+      const quoted = [...options.keaReply.matchAll(QUOTED_TERM)]
+        .map((m) => normalizeTerm(m[1] ?? ''))
+        .filter((t) => t && termKey(t) !== termKey(term) && isLearnWordPhrase(t))
+      if (quoted.length) translation = quoted[quoted.length - 1]
+    }
     additions.push({
       term,
-      translation: signalMatch?.translation || '',
+      translation,
     })
   }
 
@@ -864,9 +917,15 @@ export function applyLearnTurn(options: {
     for (const item of items) {
       if (item.languageCode !== options.languageCode) continue
       if (addedIds.has(item.id)) continue
-      // Natural use = saying the target-language word in a real chat turn.
-      if (item.translation && hasLearnTarget(options.userText, item.translation)) {
-        usedTokens.add(termKey(item.translation))
+      // Natural use = saying the learn-language (+LL) form in a real chat turn.
+      const ll =
+        item.translation && !looksLikeEnglishToken(item.translation)
+          ? item.translation
+          : looksLikeEnglishToken(item.term)
+            ? ''
+            : item.term
+      if (ll && hasLearnTarget(options.userText, ll)) {
+        usedTokens.add(termKey(ll))
       }
     }
   }

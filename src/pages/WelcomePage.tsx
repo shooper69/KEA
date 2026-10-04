@@ -1,3 +1,8 @@
+/**
+ * MARKETING HOME — LOCKED.
+ * Do not change layout, copy, or visuals here unless the user explicitly asks.
+ * Agents: see `.cursor/rules/marketing-home-lock.mdc` — prompt before editing.
+ */
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { Link, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/companion/Button'

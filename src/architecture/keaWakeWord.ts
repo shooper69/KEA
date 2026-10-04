@@ -26,16 +26,28 @@ export function heardKeaWake(text: string) {
   const tail = words.slice(-12).join(' ')
   if (!tail) return false
 
-  if (/^(kea|kia|kiah|keya|ke+a)$/.test(tail)) return true
+  // Lone name (short utterance).
+  if (/^(kea|kia|kiah|keya|ke+a|okaya|ok\s*kea)$/.test(tail)) return true
 
   if (new RegExp(`\\b${HEY_TOKEN}\\s+(there\\s+)?${KEA_TOKEN}\\b`).test(tail)) {
+    return true
+  }
+  // "Okay Kea", "Alright Kea", "Kea listen"
+  if (
+    new RegExp(
+      `\\b(ok|okay|alright|ready)\\s+${KEA_TOKEN}\\b`,
+    ).test(tail)
+  ) {
+    return true
+  }
+  if (new RegExp(`\\b${KEA_TOKEN}\\s+(listen|wake|start|talk)\\b`).test(tail)) {
     return true
   }
 
   const compact = tail.replace(/\s+/g, '')
   if (
-    compact.length <= 28 &&
-    /(hey|hay|hei|hi|yo)+k(ea|ia|iah|eya|ee+a|ey)/.test(compact)
+    compact.length <= 32 &&
+    /(hey|hay|hei|hi|yo|ok|okay)+k(ea|ia|iah|eya|ee+a|ey)/.test(compact)
   ) {
     return true
   }
@@ -46,32 +58,36 @@ export function heardKeaWake(text: string) {
 export function heardKeaStop(text: string) {
   const n = normalizeHeard(text)
   if (!n) return false
-  if (new RegExp(`\\b(stop|quit|end)\\s+${KEA_TOKEN}\\b`).test(n)) {
+  if (new RegExp(`\\b(stop|quit|end|pause)\\s+${KEA_TOKEN}\\b`).test(n)) {
     return true
   }
   // Soft variants: "stop listening Kea", "Kea stop", "stop words Kea"
   if (
     new RegExp(
-      `\\b(stop|quit|end)\\s+(listening|talking|words)?\\s*${KEA_TOKEN}\\b`,
+      `\\b(stop|quit|end|pause)\\s+(listening|talking|words|please|now)?\\s*${KEA_TOKEN}\\b`,
     ).test(n)
   ) {
     return true
   }
-  if (new RegExp(`\\b${KEA_TOKEN}\\s+(stop|quit|end)\\b`).test(n)) {
+  if (new RegExp(`\\b${KEA_TOKEN}\\s+(stop|quit|end|pause|enough)\\b`).test(n)) {
     return true
   }
   // Short alone when the whole utterance is just stop / quit talking.
-  if (/^(stop|quit|end)(\s+(please|now))?$/.test(n)) {
+  if (/^(stop|quit|end|pause|enough)(\s+(please|now))?$/.test(n)) {
     return true
   }
-  if (/^(stop|quit)\s+(listening|talking|please|now)$/.test(n)) {
+  if (/^(stop|quit|pause)\s+(listening|talking|please|now)$/.test(n)) {
+    return true
+  }
+  if (/^(that('|’)s|thats)\s+enough$/.test(n)) {
     return true
   }
   // Compact / slurred phone ASR: "stopkea", "stoplisten"
   const compact = n.replace(/\s+/g, '')
   if (
-    /^(stop|quit|end)(kea|kia|kiah|keya|kee+a|key)$/.test(compact) ||
-    /^(kea|kia|kiah|keya|kee+a|key)(stop|quit|end)$/.test(compact)
+    /^(stop|quit|end|pause)(kea|kia|kiah|keya|kee+a|key)$/.test(compact) ||
+    /^(kea|kia|kiah|keya|kee+a|key)(stop|quit|end|pause)$/.test(compact) ||
+    /^(stop|quit)(listening|talking)$/.test(compact)
   ) {
     return true
   }

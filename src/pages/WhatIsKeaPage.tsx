@@ -1,8 +1,8 @@
-import { Link } from 'react-router-dom'
+import { BackToTop } from '../components/companion/BackToTop'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { SiteFooter } from '../components/companion/SiteFooter'
+import { MarketingSiteFooter } from '../components/companion/MarketingSiteFooter'
+import { MarketingSiteHeader } from '../components/companion/MarketingSiteHeader'
 import {
-  DISCOVERY_CONTACT,
   DISCOVERY_DEFINITION,
   DISCOVERY_FAQS,
   DISCOVERY_HOW,
@@ -11,48 +11,108 @@ import {
   DISCOVERY_TITLE,
 } from '../seo/keaDiscovery'
 
+const DISCOVERY_CARDS = [
+  {
+    title: 'A chatty companion',
+    body: DISCOVERY_DEFINITION,
+    image: '/method/method-community.webp',
+    alt: 'Friends gathered around a table in warm conversation',
+  },
+  {
+    title: 'Kea is not',
+    body: [
+      DISCOVERY_NOT.map((item) => item.replace(/^a /, 'A ').replace(/^an /, 'An ')).join(
+        '. ',
+      ) + '.',
+    ],
+    image: '/method/method-no-levels.webp',
+    alt: 'An open path under a wide sky — no levels, no classroom walls',
+  },
+  {
+    title: DISCOVERY_HOW[0].title,
+    body: [DISCOVERY_HOW[0].body],
+    image: '/method/method-talk-tracked.webp',
+    alt: 'Talking with Kea while conversation is gently tracked',
+  },
+  {
+    title: DISCOVERY_HOW[1].title,
+    body: [DISCOVERY_HOW[1].body],
+    image: '/method/method-growth.webp',
+    alt: 'Progress that grows from real conversation',
+  },
+  {
+    title: DISCOVERY_HOW[2].title,
+    body: [DISCOVERY_HOW[2].body],
+    image: '/method/method-family.webp',
+    alt: 'Familiar topics you can return to later',
+  },
+  {
+    title: 'Languages',
+    body: [DISCOVERY_LANGUAGES],
+    image: '/method/method-world-friends.webp',
+    alt: 'People from around the world sharing a moment together',
+  },
+] as const
+
 export function WhatIsKeaPage() {
   return (
-    <main className="companion-screen legal-screen">
-      <CloudAtmosphere presence="idle" />
-      <div className="legal-screen__content">
-        <div className="settings-title-row">
-          <h1>{DISCOVERY_TITLE}</h1>
-          <Link to="/method" className="settings-close" aria-label="Back to The Method">
-            ×
-          </Link>
-        </div>
-        <article className="settings-card legal-doc legal-doc--discovery">
-          {DISCOVERY_DEFINITION.map((paragraph) => (
-            <p key={paragraph.slice(0, 40)}>{paragraph}</p>
-          ))}
-          <h2>Kea is not</h2>
-          <ul>
-            {DISCOVERY_NOT.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          {DISCOVERY_HOW.map((item) => (
-            <section key={item.title}>
-              <h2>{item.title}</h2>
-              <p>{item.body}</p>
-            </section>
-          ))}
-          <h2>Languages</h2>
-          <p>{DISCOVERY_LANGUAGES}</p>
-          {DISCOVERY_FAQS.map((item) => (
-            <section key={item.question}>
-              <h2>{item.question}</h2>
-              <p>{item.answer}</p>
-            </section>
-          ))}
-          <p>
-            Contact{' '}
-            <a href={`mailto:${DISCOVERY_CONTACT}`}>{DISCOVERY_CONTACT}</a>.
+    <main className="companion-screen method-screen discovery-screen">
+      <CloudAtmosphere presence="idle" tempo="sunrise" />
+      <MarketingSiteHeader />
+      <div className="method-screen__content">
+        <div className="method-screen__hero">
+          <p className="method-screen__difference">
+            <span className="method-screen__difference-shade">{DISCOVERY_TITLE}</span>
           </p>
-        </article>
+          <h1>
+            <span className="method-screen__hero-line">
+              A language learning chatty companion —
+            </span>
+            <span className="method-screen__hero-line">
+              not a course, tutor, or lesson app.
+            </span>
+          </h1>
+        </div>
+
+        <section className="method-set" aria-label={DISCOVERY_TITLE}>
+          <div className="method-rows">
+            {DISCOVERY_CARDS.map((item) => (
+              <article key={item.title} className="method-row">
+                <div className="method-row__media">
+                  <img
+                    src={item.image}
+                    alt={item.alt}
+                    loading="lazy"
+                    decoding="async"
+                    width={960}
+                    height={720}
+                  />
+                </div>
+                <div className="method-row__copy">
+                  <h3>{item.title}</h3>
+                  {item.body.map((paragraph) => (
+                    <p key={paragraph.slice(0, 40)}>{paragraph}</p>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="discovery-faqs" aria-label="Questions">
+          <h2 className="discovery-faqs__title">Common questions</h2>
+          <div className="discovery-faqs__grid">
+            {DISCOVERY_FAQS.map((item) => (
+              <article key={item.question} className="discovery-faq">
+                <h3>{item.question}</h3>
+                <p>{item.answer}</p>
+              </article>
+            ))}
+          </div>
+        </section>
       </div>
-      <SiteFooter tone="plain" />
+      <MarketingSiteFooter />
+      <BackToTop />
     </main>
   )
 }

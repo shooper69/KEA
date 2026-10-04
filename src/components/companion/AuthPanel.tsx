@@ -1,3 +1,8 @@
+/**
+ * Home create-account / login UI — part of MARKETING HOME LOCK.
+ * Do not change for drive-by polish; ask first.
+ * See `.cursor/rules/marketing-home-lock.mdc`.
+ */
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from './Button'
@@ -292,6 +297,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             />
           </label>
           <PasswordField
+            hideLabel
             label="Password"
             autoComplete="new-password"
             placeholder="Password"
@@ -301,6 +307,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
             onChange={setPassword}
           />
           <PasswordField
+            hideLabel
             label="Enter password again"
             autoComplete="new-password"
             placeholder="Enter password again"
@@ -345,7 +352,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
               className="auth-text-link"
               onClick={() => setView('login')}
             >
-              Sign in
+              Login
             </button>
           </div>
         </form>

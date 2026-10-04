@@ -133,8 +133,8 @@ function TimingSection() {
       <h2>Answer timing</h2>
       <p className="settings-note">
         After the learner stops talking, Kea waits this long, then starts her
-        reply. Default is {DEFAULT_ANSWER_SILENCE_SECONDS} seconds — about how
-        long a natural turn should feel before she answers.
+        reply. Default is {DEFAULT_ANSWER_SILENCE_SECONDS}s (fastest). Raise it
+        to slow Kea down if she cuts in early.
       </p>
       <label className="welcome-field kea-length">
         <span>Kea starts to answer after</span>
@@ -143,6 +143,7 @@ function TimingSection() {
             type="range"
             min={MIN_ANSWER_SILENCE_SECONDS}
             max={MAX_ANSWER_SILENCE_SECONDS}
+            step={0.5}
             value={answerSilence}
             aria-valuetext={`${answerSilence} seconds`}
             onChange={(event) => {
@@ -155,6 +156,7 @@ function TimingSection() {
             type="number"
             min={MIN_ANSWER_SILENCE_SECONDS}
             max={MAX_ANSWER_SILENCE_SECONDS}
+            step={0.5}
             value={answerSilence}
             aria-label="Seconds of silence before Kea answers"
             onChange={(event) => {

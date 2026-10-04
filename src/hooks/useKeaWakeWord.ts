@@ -25,13 +25,14 @@ interface UseKeaWakeWordOptions {
 
 const SPEECH_HOLD_MS = 55
 const SHOT_COOLDOWN_MS = 650
-const WAKE_SILENCE_MS = 300
+const WAKE_SILENCE_MS = 280
 /** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 110
+const MIN_SPEECH_BURST_MS = 90
 const MAX_UTTERANCE_MS = 2200
 const RING_SECONDS = 2.0
-const AMBIENT_CALIBRATE_MS = 480
-const WAKE_VAD_FLOOR = Math.min(SPEECH_RMS_FLOOR, 0.01)
+const AMBIENT_CALIBRATE_MS = 520
+/** Wake gate stays a touch softer than talk VAD so “Hey Kea” still arms. */
+const WAKE_VAD_FLOOR = Math.max(0.014, SPEECH_RMS_FLOOR * 0.7)
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'
@@ -143,7 +144,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
     let recordingUtterance = false
     let ring: Float32Array | null = null
     let ringPos = 0
-    let processor: ScriptProcessorNode | null = null
+    let floatScratch: Float32Array | null = null
 
     const stopRecognition = () => {
       try {
@@ -161,11 +162,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
       recordingUtterance = false
       analyser = null
-      if (processor) {
-        processor.onaudioprocess = null
-        processor.disconnect()
-        processor = null
-      }
+      floatScratch = null
       ring = null
       ringPos = 0
       watchStream?.getTracks().forEach((track) => track.stop())
@@ -263,20 +260,8 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         analyser = linked.analyser
         ring = new Float32Array(Math.floor(audioContext.sampleRate * RING_SECONDS))
         ringPos = 0
-        processor = audioContext.createScriptProcessor(4096, 1, 1)
-        const mute = audioContext.createGain()
-        mute.gain.value = 0
-        linked.source.connect(processor)
-        processor.connect(mute)
-        mute.connect(audioContext.destination)
-        processor.onaudioprocess = (event) => {
-          const input = event.inputBuffer.getChannelData(0)
-          if (!ring) return
-          for (let i = 0; i < input.length; i++) {
-            ring[ringPos] = input[i]
-            ringPos = (ringPos + 1) % ring.length
-          }
-        }
+        // Analyser ring — avoids deprecated ScriptProcessor crashes on modern WebViews.
+        floatScratch = new Float32Array(analyser.fftSize)
         const vad = createSpeechVad(WAKE_VAD_FLOOR)
 
         const samples = new Uint8Array(analyser.fftSize)
@@ -284,7 +269,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         const calibrateUntil = performance.now() + AMBIENT_CALIBRATE_MS
         logWake('armed', {
           mobile,
-          path: mobile ? 'whisper' : 'speech',
+          path: mobile ? 'whisper' : 'speech+whisper',
           mic: opened.info.label,
         })
         const tick = (now: number) => {
@@ -292,9 +277,28 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
           if (dead || waking || cancelled || !enabledRef.current) return
           if (listeningShot) return
           if (isKeaReplayActive()) return
-          if (!analyser) return
-          if (audioContext?.state === 'suspended') {
+          if (!analyser || !ring || !floatScratch || !audioContext) return
+          if (audioContext.state === 'suspended') {
             void audioContext.resume()
+          }
+          try {
+            analyser.getFloatTimeDomainData(floatScratch)
+            const delta = now - last
+            const need = Math.max(
+              1,
+              Math.min(
+                floatScratch.length,
+                Math.floor((audioContext.sampleRate * delta) / 1000),
+              ),
+            )
+            const start = floatScratch.length - need
+            for (let i = start; i < floatScratch.length; i++) {
+              ring[ringPos] = floatScratch[i]
+              ringPos = (ringPos + 1) % ring.length
+            }
+          } catch {
+            // Analyser can throw if the context closed mid-frame.
+            return
           }
           analyser.getByteTimeDomainData(samples)
           let sum = 0
@@ -343,9 +347,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         patchVoiceDiagnostics({
           recognitionAvailable: true,
           recognitionRunning: true,
-          recognitionLanguage: mobile
-            ? `wake-whisper · ${opened.info.label}`
-            : `wake-whisper · ${opened.info.label}`,
+          recognitionLanguage: `wake-whisper · ${opened.info.label}`,
         })
       } catch (caught) {
         logWake('arm failed', caught)
@@ -417,6 +419,8 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
     }
 
+    // Desktop: continuous SpeechRecognition (Whisper energy on SR failure).
+    // Phones: Whisper energy only — browser SR pings on every start.
     if (preferContinuousSpeech) startContinuous()
     else void armEnergy()
 

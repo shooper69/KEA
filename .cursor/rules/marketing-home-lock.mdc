@@ -1,0 +1,24 @@
+---
+description: Lock Kea marketing home page — no unsolicited edits; ask first
+alwaysApply: true
+---
+
+# Marketing home page lock
+
+The **marketing home** is perfect and frozen. Do not change it unless the user explicitly asks in this chat.
+
+## Locked surfaces (do not edit unless the user explicitly asks)
+
+- `src/pages/WelcomePage.tsx`
+- Marketing-home CSS in `src/index.css` for: `.welcome-screen*`, `.welcome-stage*`, `.welcome-lang-picker*`, `.welcome-method-cta*`, `.auth-modal*` (home register/login shell)
+- Home-only companions: `src/architecture/welcomeMarketing.ts`, `src/data/keaWelcomeTitle.ts`
+- `AuthPanel.tsx` when the change is for home create-account / login UI
+- Home visual assets used only by that page
+
+## Required behavior
+
+1. **Default: do not change** any locked file or selector above.
+2. If a task seems to need a home change: **stop and ask first**.
+3. Only proceed after an **explicit** ask (e.g. “change the home footer”).
+4. Unrelated work must **not** retune home layout as a side effect.
+5. Shared chrome (`SiteFooter`, `MarketingSiteHeader`, `MarketingSiteFooter`) may be edited for Method / Learn more only when asked — do **not** alter home-only welcome CSS while doing that.

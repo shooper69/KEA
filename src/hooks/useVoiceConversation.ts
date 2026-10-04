@@ -51,10 +51,15 @@ import {
 } from '../data/keaListenIdle'
 import { heardKeaStop, oneShotSpeechRecognition, speechRecognitionPings } from '../architecture/keaWakeWord'
 import {
+  clearParkedTalkSession,
+  parkTalkSession,
+} from '../architecture/keaTalkPark'
+import {
   isKeaUiHeld,
   KEA_UI_HOLD,
   KEA_UI_RELEASE,
 } from '../architecture/keaUiHold'
+import { DEFAULT_ANSWER_SILENCE_SECONDS } from '../data/keaAnswerSilence'
 import type {
   LanguageCode,
   LearnerLevel,
@@ -65,11 +70,11 @@ import type {
 } from '../types'
 
 const CHARACTER_KEY = 'kea-voice-character'
-const RESTART_LISTEN_MS = 280
-const MIN_SPEECH_MS = 420
+const RESTART_LISTEN_MS = 120
+const MIN_SPEECH_MS = 380
 const MAX_RECORD_MS = 22000
-const AMBIENT_CALIBRATE_MS = 450
-const DEFAULT_ANSWER_SILENCE_MS = 2000
+const AMBIENT_CALIBRATE_MS = 700
+const DEFAULT_ANSWER_SILENCE_MS = DEFAULT_ANSWER_SILENCE_SECONDS * 1000
 /** Absolute ceiling — soft Kea lines can run long; never cut while audio remains. */
 const SPEAK_SAFETY_MS = 120_000
 
@@ -133,7 +138,7 @@ export function useVoiceConversation({
   level,
   firstName = '',
   listenIdleSeconds = DEFAULT_LISTEN_IDLE_SECONDS,
-  answerAfterSilenceSeconds = 2,
+  answerAfterSilenceSeconds = DEFAULT_ANSWER_SILENCE_SECONDS,
 }: UseVoiceConversationOptions) {
   const [status, setStatus] = useState<VoicePresenceState>('idle')
   const [messages, setMessages] = useState<TranscriptMessage[]>(() =>
@@ -177,8 +182,9 @@ export function useVoiceConversation({
   const watchStopWhileSpeakingRef = useRef<() => () => void>(() => () => {})
   const answerSilenceMsRef = useRef(DEFAULT_ANSWER_SILENCE_MS)
   answerSilenceMsRef.current = Math.round(
-    Math.min(15, Math.max(1, answerAfterSilenceSeconds)) * 1000,
+    Math.min(15, Math.max(0.5, answerAfterSilenceSeconds)) * 1000,
   )
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     handsFreeRef.current = handsFree
@@ -430,17 +436,33 @@ export function useVoiceConversation({
   }, [])
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      // Leave chat: stop listening / speech, but park so return resumes without wake.
+      if (handsFreeRef.current || statusRef.current !== 'idle') {
+        parkTalkSession()
+      }
+      try {
+        stopKeaSpeech()
+      } catch {
+        // ignore
+      }
       if (listenIdleTimerRef.current !== null) window.clearTimeout(listenIdleTimerRef.current)
       if (restartTimerRef.current !== null) window.clearTimeout(restartTimerRef.current)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       streamRef.current?.getTracks().forEach((track) => track.stop())
-      if (audioContextRef.current) void audioContextRef.current.close()
+      streamRef.current = null
+      if (audioContextRef.current) {
+        void audioContextRef.current.close()
+        audioContextRef.current = null
+      }
     }
   }, [])
 
   const pauseListening = useCallback(() => {
     if (busyRef.current) return
+    clearParkedTalkSession()
     clearListenIdleTimer()
     clearRestartTimer()
     handsFreeRef.current = false
@@ -530,11 +552,14 @@ export function useVoiceConversation({
   )
 
   const processRecording = useCallback(async (blob: Blob) => {
+    if (!mountedRef.current) return
     if (fatalListenRef.current || !handsFreeRef.current) return
     if (sendingRef.current) return
-    if (blob.size < 800) {
+    if (blob.size < 1200) {
       busyRef.current = false
-      if (handsFreeRef.current && !busyRef.current) startListeningRef.current()
+      if (handsFreeRef.current && !busyRef.current && mountedRef.current) {
+        startListeningRef.current()
+      }
       return
     }
     busyRef.current = true
@@ -544,11 +569,15 @@ export function useVoiceConversation({
     try {
       logSpeech('whisper')
       const result = await transcribeWithWhisper(blob)
+      if (!mountedRef.current || fatalListenRef.current) {
+        busyRef.current = false
+        return
+      }
       logSpeech('transcript', result)
       if (!isUsableSpeechTranscript(result.text, result.confidence)) {
         logSpeech('ignored noise/hallucination', result)
         busyRef.current = false
-        if (handsFreeRef.current) startListeningRef.current()
+        if (handsFreeRef.current && mountedRef.current) startListeningRef.current()
         else setStatus('idle')
         return
       }
@@ -565,6 +594,7 @@ export function useVoiceConversation({
       await sendToKeaRef.current(result.text)
     } catch (caught) {
       busyRef.current = false
+      if (!mountedRef.current) return
       const message = caught instanceof Error ? caught.message : 'Could not transcribe speech'
       logSpeech('error', message)
       patchVoiceDiagnostics({ lastRecognitionError: message, recognitionRunning: false })
@@ -958,6 +988,7 @@ export function useVoiceConversation({
 
   const hardStopFromPhrase = useCallback(() => {
     logSpeech('stop phrase')
+    clearParkedTalkSession()
     stopWatchGen.current += 1
     busyRef.current = false
     sendingRef.current = false
@@ -976,13 +1007,16 @@ export function useVoiceConversation({
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
-  /** While Kea is talking, listen for “Stop Kea” — desktop only (phones ping). */
+  /**
+   * While Kea is talking, listen for “Stop Kea”.
+   * Desktop: short SpeechRecognition shots. Phones: Whisper on the open mic
+   * (browser SR beeps on every start).
+   */
   const watchStopWhileSpeaking = useCallback(() => {
-    if (speechRecognitionPings()) {
-      return () => {}
-    }
     const gen = ++stopWatchGen.current
-    const tick = async () => {
+    const mobile = speechRecognitionPings()
+
+    const tickDesktop = async () => {
       while (
         stopWatchGen.current === gen &&
         handsFreeRef.current &&
@@ -1003,7 +1037,72 @@ export function useVoiceConversation({
         await new Promise((resolve) => window.setTimeout(resolve, 280))
       }
     }
-    void tick()
+
+    const tickMobileWhisper = async () => {
+      while (
+        stopWatchGen.current === gen &&
+        handsFreeRef.current &&
+        !fatalListenRef.current &&
+        statusRef.current === 'speaking'
+      ) {
+        const stream = streamRef.current
+        if (!stream) {
+          await new Promise((resolve) => window.setTimeout(resolve, 400))
+          continue
+        }
+        try {
+          const mime = pickRecorderMime()
+          const recorder = mime
+            ? new MediaRecorder(stream, { mimeType: mime })
+            : new MediaRecorder(stream)
+          const chunks: Blob[] = []
+          recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) chunks.push(event.data)
+          }
+          const stopped = new Promise<Blob>((resolve) => {
+            recorder.onstop = () => {
+              resolve(
+                new Blob(chunks, {
+                  type: recorder.mimeType || mime || 'audio/webm',
+                }),
+              )
+            }
+          })
+          recorder.start(80)
+          await new Promise((resolve) => window.setTimeout(resolve, 1600))
+          if (stopWatchGen.current !== gen || statusRef.current !== 'speaking') {
+            try {
+              if (recorder.state !== 'inactive') recorder.stop()
+            } catch {
+              // ignore
+            }
+            return
+          }
+          try {
+            recorder.stop()
+          } catch {
+            return
+          }
+          const blob = await stopped
+          if (stopWatchGen.current !== gen || blob.size < 800) continue
+          const result = await transcribeWithWhisper(blob, {
+            prompt:
+              'The speaker may say "stop Kea", "Kea stop", or "stop listening". Prefer those short phrases when heard. If only Kea speaking or noise, return empty.',
+            language: 'en',
+          })
+          if (stopWatchGen.current !== gen) return
+          if (result.text && heardKeaStop(result.text)) {
+            hardStopFromPhrase()
+            return
+          }
+        } catch {
+          await new Promise((resolve) => window.setTimeout(resolve, 350))
+        }
+      }
+    }
+
+    if (mobile) void tickMobileWhisper()
+    else void tickDesktop()
     return () => {
       if (stopWatchGen.current === gen) stopWatchGen.current += 1
     }
@@ -1188,6 +1287,7 @@ export function useVoiceConversation({
   }, [start])
 
   const stop = useCallback(() => {
+    clearParkedTalkSession()
     stopWatchGen.current += 1
     startingRef.current = false
     setStarting(false)

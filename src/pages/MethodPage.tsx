@@ -1,7 +1,8 @@
-import { Link, NavLink } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { BackToTop } from '../components/companion/BackToTop'
 import { CloudAtmosphere } from '../components/companion/CloudAtmosphere'
-import { SiteFooter } from '../components/companion/SiteFooter'
-import { StoreBadges } from '../components/companion/StoreBadges'
+import { MarketingSiteFooter } from '../components/companion/MarketingSiteFooter'
+import { MarketingSiteHeader } from '../components/companion/MarketingSiteHeader'
 
 const METHOD_CARDS = [
   {
@@ -64,33 +65,8 @@ export function MethodPage() {
   return (
     <main className="companion-screen method-screen">
       <CloudAtmosphere presence="idle" tempo="sunrise" />
+      <MarketingSiteHeader />
       <div className="method-screen__content">
-        <header className="method-screen__top">
-          <Link to="/" className="method-screen__brand" aria-label="Kea home">
-            <img
-              className="method-screen__logo"
-              src="/kea-05.png"
-              alt="Kea"
-              width={180}
-              height={90}
-            />
-          </Link>
-          <nav className="method-screen__nav" aria-label="Site">
-            <NavLink to="/" end className="method-screen__home">
-              Home
-            </NavLink>
-            <NavLink to="/method" className="method-screen__page-title">
-              The Method
-            </NavLink>
-            <Link
-              to="/?login=1"
-              className="method-screen__page-title method-screen__login"
-            >
-              Login
-            </Link>
-          </nav>
-        </header>
-
         <div className="method-screen__hero">
           <p className="method-screen__difference">
             <span className="method-screen__difference-shade">Kea is different</span>
@@ -152,14 +128,9 @@ export function MethodPage() {
             </Link>
           </div>
         </div>
-
-        <footer className="welcome-screen__store-footer method-screen__store-footer">
-          <div className="welcome-screen__store-footer-bar">
-            <StoreBadges />
-            <SiteFooter tone="marketing" />
-          </div>
-        </footer>
       </div>
+      <MarketingSiteFooter />
+      <BackToTop />
     </main>
   )
 }

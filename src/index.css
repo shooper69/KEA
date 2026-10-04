@@ -878,6 +878,8 @@ body:has(.welcome-screen),
   filter: none;
 }
 
+/* MARKETING HOME LOCK — .welcome-screen* / .welcome-stage* : ask user before changing.
+   See .cursor/rules/marketing-home-lock.mdc */
 .welcome-screen {
   position: fixed;
   inset: 0;
@@ -2805,7 +2807,11 @@ body:has(.welcome-screen),
 
 .welcome-screen__header.method-screen__top {
   position: absolute;
-  top: max(0.55rem, env(safe-area-inset-top));
+  /* Header only — lift logo + Home / Method / Login by 0.5cm; leave page body alone. */
+  top: max(
+    0px,
+    calc(max(0.55rem, env(safe-area-inset-top, 0px)) - 0.5cm)
+  );
   left: max(0.85rem, env(safe-area-inset-left));
   right: max(0.85rem, env(safe-area-inset-right));
   z-index: 6;
@@ -3549,6 +3555,8 @@ body:has(.welcome-screen),
   display: none;
 }
 
+/* MARKETING HOME LOCK — .auth-modal* (home register/login): ask user before changing.
+   See .cursor/rules/marketing-home-lock.mdc */
 .auth-modal {
   position: fixed;
   inset: 0;
@@ -3576,37 +3584,45 @@ body:has(.welcome-screen),
 }
 
 .auth-modal__stage {
+  /*
+   * Locked auth perch (register + login). One token set scales with stage
+   * width only — do not retune bird size / overlap / lift in media queries.
+   */
+  --auth-bird-width: min(12rem, 53.333%);
+  --auth-bird-overlap: calc(var(--auth-bird-width) * -0.34);
+  --auth-bird-lift: calc(-1.05rem - 0.75cm);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   width: min(22.5rem, calc(100% - 1.25rem));
   margin: 0 auto;
-  padding-top: clamp(0.35rem, 1.5vh, 0.85rem);
+  padding-top: calc(var(--auth-bird-width) * 0.06);
 }
 
 .auth-modal__mascot {
   position: relative;
   z-index: 3;
-  margin-bottom: clamp(-4.15rem, -10.5vw, -3.25rem);
-  /* Lift claws onto the card top edge (~2mm above prior perch). */
-  transform: translateY(calc(-1.05rem - 2mm));
+  flex: 0 0 auto;
+  width: var(--auth-bird-width);
+  margin: 0 0 var(--auth-bird-overlap);
+  transform: translateY(var(--auth-bird-lift));
   pointer-events: none;
 }
 
 .auth-modal__bird-wrap {
   position: relative;
-  display: inline-block;
+  display: block;
   line-height: 0;
-  width: fit-content;
+  width: 100%;
 }
 
 .auth-modal__bird {
   position: relative;
   z-index: 2;
   display: block;
-  width: min(12rem, 56vw);
-  max-width: 13.5rem;
+  width: 100%;
+  max-width: none;
   height: auto;
   filter: drop-shadow(0 10px 18px rgba(18, 10, 40, 0.38));
 }
@@ -3769,6 +3785,33 @@ body:has(.welcome-screen),
 .auth-modal .auth-login-actions {
   margin-top: 0.45rem;
   margin-bottom: 0;
+}
+
+.auth-modal .auth-register {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.auth-modal .auth-register .welcome-field {
+  margin-bottom: 0;
+}
+
+.auth-modal .auth-register .welcome-languages {
+  margin-top: 0.15rem;
+  margin-bottom: 0;
+}
+
+.auth-modal .auth-register .auth-login-actions {
+  margin-top: 0.55rem;
+  flex-shrink: 0;
+}
+
+.auth-modal .auth-register .auth-text-link {
+  display: inline-block;
+  margin-top: 0.15rem;
+  visibility: visible;
+  opacity: 1;
 }
 
 .auth-modal .auth-profile-form .welcome-screen__actions {
@@ -7138,6 +7181,7 @@ button.memory-library__target--retry {
   }
 
   .auth-modal__stage {
+    /* Stage may narrow; bird/perch tokens stay locked to stage width. */
     width: min(22rem, calc(100% - 1.5rem));
   }
 
@@ -7148,15 +7192,6 @@ button.memory-library__target--retry {
 
   .auth-modal__card--compact {
     padding: 1.35rem 1.1rem 0.65rem;
-  }
-
-  .auth-modal__bird {
-    width: min(9.5rem, 48vw);
-  }
-
-  .auth-modal__mascot {
-    margin-bottom: clamp(-3.7rem, -10.5vw, -2.85rem);
-    transform: translateY(calc(-1.15rem - 2mm));
   }
 }
 
@@ -8937,8 +8972,13 @@ button.memory-library__target--retry {
 /* —— The Method (public marketing) —— */
 .method-screen {
   position: relative;
+  height: 100svh;
+  max-height: 100svh;
   min-height: 100svh;
-  overflow: visible;
+  /* Header + scroll body + footer; content never paints under chrome. */
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   justify-content: flex-start;
   align-items: stretch;
   padding: 0;
@@ -8947,8 +8987,11 @@ button.memory-library__target--retry {
 }
 
 .method-screen::before {
-  /* Use the shared companion colour flow — same as welcome / marketing home. */
-  display: block;
+  /* Keep the colour flow, but do not extend past the page (was 120% / -10% and left a void). */
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .method-screen .cloud-atmosphere {
@@ -9012,16 +9055,28 @@ button.memory-library__target--retry {
 .method-screen__content {
   position: relative;
   z-index: 2;
+  flex: 1 1 auto;
+  min-height: 0;
   width: min(56rem, calc(100% - 1.5rem));
   margin: 0 auto;
-  padding: max(1rem, env(safe-area-inset-top)) 0.35rem
-    max(1.25rem, calc(env(safe-area-inset-bottom) + 0.75rem));
-  overflow: visible;
+  padding: 0.35rem 0.35rem 1.25rem;
+  overflow-x: hidden;
+  overflow-y: auto;
   max-height: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.method-screen__content::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 html:has(.method-screen),
 body:has(.method-screen) {
+  overflow: hidden;
+  height: 100%;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -9037,39 +9092,35 @@ body:has(.method-screen)::-webkit-scrollbar {
   display: none;
 }
 
-/* Method page: in-flow footer (must beat .welcome-screen__store-footer fixed). */
-.welcome-screen__store-footer.method-screen__store-footer,
-.method-screen__store-footer {
+/*
+ * Method / Learn more chrome = marketing home layout over the real page
+ * atmosphere (no separate plate colour). Content scrolls between header and
+ * footer so sections never pass under the store buttons.
+ */
+.method-screen > .welcome-screen__header.method-screen__top {
   position: relative;
+  flex: 0 0 auto;
+  top: auto;
   left: auto;
   right: auto;
-  bottom: auto;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.45rem;
-  width: 100%;
-  margin: 0.55rem 0 0;
-  padding: 0.35rem max(1rem, env(safe-area-inset-right), 4vw)
-    max(0.65rem, env(safe-area-inset-bottom))
-    max(1rem, env(safe-area-inset-left), 4vw);
-  pointer-events: auto;
+  z-index: 7;
+  margin: 0;
+  width: auto;
+  padding-top: max(
+    0px,
+    calc(max(0.55rem, env(safe-area-inset-top, 0px)) - 0.5cm)
+  );
+  padding-inline: calc(
+      max(0.85rem, env(safe-area-inset-left)) + clamp(0.75rem, 5vw, 1.25rem)
+    )
+    calc(
+      max(0.85rem, env(safe-area-inset-right)) + clamp(0.75rem, 5vw, 1.25rem)
+    );
+  box-sizing: border-box;
   background: transparent;
   border: 0;
   border-radius: 0;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   box-shadow: none;
-  box-sizing: border-box;
-}
-
-.method-screen__store-footer .store-badges,
-.method-screen__store-footer .store-badge,
-.method-screen__store-footer .site-footer,
-.method-screen__store-footer .install-app__store-button,
-.method-screen__store-footer a {
-  pointer-events: auto;
 }
 
 .method-screen__top {
@@ -9082,14 +9133,34 @@ body:has(.method-screen)::-webkit-scrollbar {
   box-sizing: border-box;
 }
 
+.welcome-screen__store-footer.method-screen__store-footer {
+  position: relative;
+  flex: 0 0 auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 6;
+  background: transparent;
+  /* Space above badges so scrolling sections clear the buttons. */
+  padding-top: 2rem;
+  padding-bottom: max(0.55rem, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.welcome-screen__store-footer.method-screen__store-footer
+  .welcome-screen__store-footer-bar {
+  pointer-events: auto;
+}
+
 @media (min-width: 721px) {
-  .method-screen > .method-screen__content > .method-screen__top {
-    /* Inset logo + Home / The Method toward centre (~2in each side) */
-    width: 100vw;
-    max-width: 100vw;
-    margin-left: calc(50% - 50vw);
-    margin-right: calc(50% - 50vw);
-    padding-inline: 2in;
+  .method-screen > .welcome-screen__header.method-screen__top {
+    padding-inline: calc(max(0.85rem, env(safe-area-inset-left)) + 2in)
+      calc(max(0.85rem, env(safe-area-inset-right)) + 2in);
+  }
+
+  .welcome-screen__store-footer.method-screen__store-footer {
+    padding-top: 2.25rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 }
 
@@ -9310,29 +9381,24 @@ button.method-screen__login.active {
   overflow: hidden;
   border-radius: 1.65rem;
   border: 1px solid rgba(255, 255, 255, 0.55);
-  box-shadow:
-    0 24px 48px rgba(24, 10, 48, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  /* Card fill restored; no drop-shadow plate behind the section. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(16px) saturate(1.15);
   -webkit-backdrop-filter: blur(16px) saturate(1.15);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 12.5rem;
 }
 
-/* Match marketing home / login glass cards on the shared home atmosphere */
 .method-row:nth-child(6n + 1),
 .method-row:nth-child(6n + 2),
 .method-row:nth-child(6n + 3),
 .method-row:nth-child(6n + 4),
 .method-row:nth-child(6n + 5),
 .method-row:nth-child(6n + 6) {
-  background:
-    linear-gradient(
-      155deg,
-      rgba(92, 48, 168, 0.72) 0%,
-      rgba(148, 58, 150, 0.62) 42%,
-      rgba(210, 120, 70, 0.48) 100%
-    );
+  background: linear-gradient(
+    155deg,
+    rgba(92, 48, 168, 0.72) 0%,
+    rgba(148, 58, 150, 0.62) 42%,
+    rgba(210, 120, 70, 0.48) 100%
+  );
 }
 
 @media (min-width: 720px) {
@@ -9356,33 +9422,37 @@ button.method-screen__login.active {
 
 .method-row__media {
   position: relative;
+  align-self: stretch;
   min-height: 11rem;
   overflow: hidden;
-  background:
-    linear-gradient(145deg, rgba(78, 196, 212, 0.28), rgba(255, 170, 120, 0.22));
+  background: linear-gradient(
+    145deg,
+    rgba(78, 196, 212, 0.28),
+    rgba(255, 170, 120, 0.22)
+  );
 }
 
 .method-row__media img {
+  /* Fill the media pane edge-to-edge (no purple strip under the art). */
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 11rem;
+  min-height: 0;
   object-fit: cover;
   object-position: center;
-  /* Avoid layout thrash while decoding large assets */
-  content-visibility: auto;
 }
 
-/* Rewards card: perch claws on the glass top (~2mm higher). */
+/* Rewards card: keep subject framed while still covering the full pane. */
 .method-row:last-child .method-row__media img {
-  object-position: center calc(50% - 2mm);
+  object-position: center 42%;
 }
 
 @media (min-width: 720px) {
-  .method-row__media,
-  .method-row__media img {
+  .method-row__media {
     min-height: 100%;
-    height: 100%;
+    height: auto;
   }
 }
 
@@ -9487,6 +9557,93 @@ button.method-screen__login.active {
     inset 0 -1px 0 rgba(30, 24, 90, 0.22),
     0 2px 0 #24186a,
     0 4px 8px rgba(28, 16, 70, 0.16);
+}
+
+.discovery-faqs {
+  margin: 1.35rem 0 0.5rem;
+}
+
+.discovery-faqs__title {
+  margin: 0 0 0.85rem;
+  text-align: center;
+  font-size: clamp(1.35rem, 2.8vw, 1.75rem);
+  color: #fff8f0;
+  text-shadow: 0 1px 8px rgba(20, 12, 40, 0.24);
+}
+
+.discovery-faqs__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+
+@media (min-width: 720px) {
+  .discovery-faqs__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.discovery-faq {
+  margin: 0;
+  padding: 1.1rem 1.2rem 1.15rem;
+  border-radius: 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(
+    155deg,
+    rgba(92, 48, 168, 0.72) 0%,
+    rgba(148, 58, 150, 0.62) 42%,
+    rgba(210, 120, 70, 0.48) 100%
+  );
+  /* Same card fill as method rows; no drop-shadow behind. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+.discovery-faq h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  color: #fffaf4;
+}
+
+.discovery-faq p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(255, 248, 240, 0.92);
+}
+
+.back-to-top {
+  appearance: none;
+  position: fixed;
+  right: max(0.85rem, env(safe-area-inset-right));
+  /* Sit above the locked marketing footer bar. */
+  bottom: calc(max(0.95rem, env(safe-area-inset-bottom)) + 4.25rem);
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(40, 24, 90, 0.55);
+  color: #fff8f0;
+  box-shadow: 0 10px 22px rgba(16, 8, 40, 0.28);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  cursor: pointer;
+}
+
+.back-to-top:hover,
+.back-to-top:focus-visible {
+  background: rgba(60, 36, 130, 0.72);
+}
+
+.back-to-top svg {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .learner-quiz-spoken {

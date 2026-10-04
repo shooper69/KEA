@@ -1,0 +1,23 @@
+---
+description: Lock Method / Learn more fixed header and marketing footer chrome
+alwaysApply: true
+---
+
+# Method + Learn more chrome lock
+
+The Method (`/method`) and Learn more (`/what-is-kea`) pages must use the **same header and footer as marketing home** (logo `/kea-mark.png`, Home / The Method / Login, store badges + legal bar with Contact). Visually identical to home chrome.
+
+## Locked chrome (ask before changing)
+
+- `src/components/companion/MarketingSiteHeader.tsx`
+- `src/components/companion/MarketingSiteFooter.tsx`
+- Method-only overrides of `.welcome-screen__header` / `.welcome-screen__store-footer` in `src/index.css`
+- Shared `SiteFooter` marketing link row when the change would alter Method / Learn more / home footer together
+
+## Required behavior
+
+1. Header and footer must **match marketing home** (no solid purple bars, no different logo).
+2. Header stays on screen while scrolling; footer stays fixed at the bottom like home.
+3. Do not invent a separate chrome style for Method / Learn more.
+4. Page body content may change when asked — without restyling the locked chrome.
+5. If a task seems to need chrome changes: **stop and ask first**.
