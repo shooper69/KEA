@@ -18,10 +18,8 @@ import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
 import { hasActiveSubscription } from '../architecture/keaBilling'
-import { shouldPromptAudioRouteOnce } from '../architecture/keaAudioRoute'
 import { getMarketingIntroVoice } from '../architecture/voiceCatalog'
 import { welcomeScriptForLanguage, WELCOME_CLOSING_TTS_HINT } from '../architecture/welcomeMarketing'
-import { MobileAudioRoutePopup } from '../components/companion/MobileAudioRoutePopup'
 import { usePwaInstall } from '../components/companion/InstallAppButton'
 import {
   dismissHomeOffer,
@@ -99,11 +97,10 @@ export function WelcomePage() {
   const [visibleCopy, setVisibleCopy] = useState('')
   const [introBusy, setIntroBusy] = useState(false)
   const [introHeard, setIntroHeard] = useState(false)
-  const [audioRouteOpen, setAudioRouteOpen] = useState(false)
   const [homeOfferOpen, setHomeOfferOpen] = useState(false)
   const [leavePromptOpen, setLeavePromptOpen] = useState(false)
   const introRunId = useRef(0)
-  const pendingIntroLang = useRef<LanguageCode | null>(null)
+  const introBusyRef = useRef(false)
   const langMenuRef = useRef<HTMLDivElement>(null)
   const introScrollRef = useRef<HTMLDivElement>(null)
   const leaveArmedRef = useRef(false)
@@ -111,6 +108,7 @@ export function WelcomePage() {
   const leaveShownRef = useRef(leavePromptAlreadyShown())
   const leavePromptOpenRef = useRef(false)
   leavePromptOpenRef.current = leavePromptOpen
+  introBusyRef.current = introBusy
 
   const { installed: appInstalled } = usePwaInstall()
   const [subscribed, setSubscribed] = useState(hasActiveSubscription)
@@ -218,13 +216,8 @@ export function WelcomePage() {
       if (!leaveArmedRef.current || leaveAllowRef.current || leaveShownRef.current) {
         return
       }
-      // Cancel any in-flight welcome intro and restore marketing home under the funnel.
-      introRunId.current += 1
-      stopKeaSpeech()
-      setIntroBusy(false)
-      setVisibleCopy('')
-      setAudioRouteOpen(false)
-      pendingIntroLang.current = null
+      // Do not interrupt the spoken welcome — leave funnel waits until she finishes.
+      if (introBusyRef.current) return
       setLeavePromptOpen(true)
       setHomeOfferOpen(false)
     }
@@ -303,10 +296,16 @@ export function WelcomePage() {
     setProspectLang(code)
     setSpoken(code)
     setNativeLanguage(code)
-    if (shouldPromptAudioRouteOnce()) {
-      pendingIntroLang.current = code
-      setAudioRouteOpen(true)
-      return
+    // Unlock autoplay while we still have the language-menu click gesture.
+    try {
+      const unlock = new Audio(
+        'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=',
+      )
+      void unlock.play().then(() => {
+        unlock.pause()
+      }).catch(() => undefined)
+    } catch {
+      // ignore
     }
     void playWelcomeIntro(code)
   }
@@ -315,6 +314,7 @@ export function WelcomePage() {
     const runId = ++introRunId.current
     stopKeaSpeech()
     setVisibleCopy('')
+    introBusyRef.current = true
     setIntroBusy(true)
     setLangMenuOpen(false)
     setProspectLang(code)
@@ -392,6 +392,7 @@ export function WelcomePage() {
       }
     } finally {
       if (runId === introRunId.current) {
+        introBusyRef.current = false
         setIntroBusy(false)
         setIntroHeard(true)
       }
@@ -504,7 +505,7 @@ export function WelcomePage() {
         className="welcome-lang-picker__trigger"
         aria-expanded={langMenuOpen}
         aria-haspopup="listbox"
-        disabled={introBusy || audioRouteOpen}
+        disabled={introBusy}
         onClick={() => setLangMenuOpen((open) => !open)}
       >
         <span>Choose to chat with Kea</span>
@@ -813,16 +814,6 @@ export function WelcomePage() {
           onCreateAccount={openRegister}
           onStay={dismissLeavePrompt}
           onLeave={confirmLeaveAnyway}
-        />
-      ) : null}
-      {audioRouteOpen ? (
-        <MobileAudioRoutePopup
-          onDone={() => {
-            setAudioRouteOpen(false)
-            const code = pendingIntroLang.current
-            pendingIntroLang.current = null
-            if (code) void playWelcomeIntro(code)
-          }}
         />
       ) : null}
     </main>

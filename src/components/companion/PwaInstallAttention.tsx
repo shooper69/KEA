@@ -8,13 +8,15 @@ import { usePwaInstall } from './InstallAppButton'
  * (not the installed PWA / Play app). Opens an install explain + install flow.
  */
 export function PwaInstallAttention() {
-  const { installed, busy, canPrompt, promptInstall, manualInstallHint } =
+  const { installed, busy, canPrompt, promptInstall, pwaInstallGuide } =
     usePwaInstall()
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   useHoldKeaListening(open || Boolean(note))
 
   if (isKeaNativeApp() || installed) return null
+
+  const guide = pwaInstallGuide()
 
   async function install() {
     if (!canPrompt) {
@@ -24,7 +26,7 @@ export function PwaInstallAttention() {
     const result = await promptInstall()
     setOpen(false)
     if (result === 'manual') {
-      setNote(manualInstallHint())
+      setNote('manual')
       return
     }
     if (result === 'accepted') {
@@ -34,17 +36,15 @@ export function PwaInstallAttention() {
 
   return (
     <>
-      <div className="companion-nav__pwa-slot">
-        <button
-          type="button"
-          className="companion-nav__pwa-alert"
-          aria-label="Install Kea on your phone"
-          title="Install Kea on your phone"
-          onClick={() => setOpen(true)}
-        >
-          !
-        </button>
-      </div>
+      <button
+        type="button"
+        className="companion-nav__pwa-alert"
+        aria-label="Save Kea on this device"
+        title="Save Kea on this device"
+        onClick={() => setOpen(true)}
+      >
+        !
+      </button>
       {open ? (
         <div
           className="kea-confirm"
@@ -58,16 +58,17 @@ export function PwaInstallAttention() {
             onClick={(event) => event.stopPropagation()}
           >
             <p id="kea-pwa-install-title" className="kea-confirm__title">
-              Put Kea on your phone
+              {guide.title}
             </p>
-            <p className="kea-confirm__note">
-              Install Kea as an app on your home screen. You get a proper app
-              icon, fuller-screen chat, and quicker return when you want to
-              talk — without going through the browser each time.
-            </p>
-            {!canPrompt ? (
+            <p className="kea-confirm__note">{guide.lead}</p>
+            <ol className="kea-confirm__steps">
+              {guide.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {guide.footer ? (
               <p className="kea-confirm__note kea-confirm__note--hint">
-                {manualInstallHint()}
+                {guide.footer}
               </p>
             ) : null}
             <div className="kea-confirm__actions">
@@ -101,13 +102,34 @@ export function PwaInstallAttention() {
           onClick={() => setNote('')}
         >
           <div
-            className="kea-confirm__card"
+            className="kea-confirm__card kea-confirm__card--pwa"
             onClick={(event) => event.stopPropagation()}
           >
-            <p id="kea-pwa-note-title" className="kea-confirm__title">
-              Phone app
-            </p>
-            <p className="kea-confirm__note">{note}</p>
+            {note === 'manual' ? (
+              <>
+                <p id="kea-pwa-note-title" className="kea-confirm__title">
+                  {guide.title}
+                </p>
+                <p className="kea-confirm__note">{guide.lead}</p>
+                <ol className="kea-confirm__steps">
+                  {guide.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                {guide.footer ? (
+                  <p className="kea-confirm__note kea-confirm__note--hint">
+                    {guide.footer}
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <p id="kea-pwa-note-title" className="kea-confirm__title">
+                  Kea app
+                </p>
+                <p className="kea-confirm__note">{note}</p>
+              </>
+            )}
             <div className="kea-confirm__actions">
               <button
                 type="button"

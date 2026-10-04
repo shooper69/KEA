@@ -4,6 +4,7 @@ import {
   VOICE_SAMPLE,
   type ManagedVoice,
 } from '../architecture/voiceCatalog'
+import { applyPreferredAudioOutput } from '../architecture/keaMicrophone'
 import { keaAuthHeaders } from './keaAuthHeaders'
 
 let currentAudio: HTMLAudioElement | null = null
@@ -181,13 +182,13 @@ export async function prefetchManagedVoiceAudio(
   return URL.createObjectURL(blob)
 }
 
-function playBlobUrl(
+async function playBlobUrl(
   url: string,
   text: string,
   gen: number,
   options: SpeakOptions,
   revoke: boolean,
-) {
+): Promise<boolean> {
   const audio = new Audio(url)
   currentAudio = audio
   options.onCharIndex?.(0)
@@ -230,12 +231,17 @@ function playBlobUrl(
       options.onend?.()
     }
   }
-  return audio.play().catch(() => {
+  try {
+    await applyPreferredAudioOutput(audio).catch(() => undefined)
+    if (gen !== speakGeneration) return false
+    await audio.play()
+    return true
+  } catch {
     clearAudioProgress()
     if (revoke) URL.revokeObjectURL(url)
     if (currentAudio === audio) currentAudio = null
-    if (gen === speakGeneration) options.onerror?.()
-  })
+    return false
+  }
 }
 
 function trackAudioProgress(
@@ -280,7 +286,14 @@ export async function speakManagedVoice(
   if (voice.provider === 'openai' && voice.openaiVoice) {
     try {
       if (options.prefetchedUrl) {
-        await playBlobUrl(options.prefetchedUrl, text, gen, options, true)
+        const played = await playBlobUrl(
+          options.prefetchedUrl,
+          text,
+          gen,
+          options,
+          true,
+        )
+        if (!played && gen === speakGeneration) fallbackBrowser()
         return
       }
       const blob = await Promise.race([
@@ -305,7 +318,8 @@ export async function speakManagedVoice(
         options.onend?.()
         return
       }
-      await playBlobUrl(url, text, gen, options, true)
+      const played = await playBlobUrl(url, text, gen, options, true)
+      if (!played && gen === speakGeneration) fallbackBrowser()
     } catch {
       fallbackBrowser()
     }

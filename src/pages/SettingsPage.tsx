@@ -423,7 +423,7 @@ export function SettingsPage() {
   return (
     <main
       className={`companion-screen settings-screen${
-        isAdmin && skyTheme === 'night' ? ' settings-screen--night' : ''
+        skyTheme === 'night' ? ' settings-screen--night' : ''
       }`}
     >
       <CloudAtmosphere presence="idle" />
@@ -467,18 +467,17 @@ export function SettingsPage() {
         </div>
         {tab === 'choices' ? (
           <>
-        {isAdmin ? (
         <section className="settings-card">
           <h2>Themes</h2>
           <p className="settings-note">
-            Admin only while we test night viewing. Everyone else stays in the
-            clouds.
+            Or use the sun / moon control in the top bar. Same choice either
+            way.
           </p>
           <label className="settings-choice">
             <input
               type="radio"
               name="sky"
-              checked={skyTheme === 'clouds'}
+              checked={skyTheme !== 'night'}
               onChange={() => setProfile({ skyTheme: 'clouds' as SkyTheme })}
             />
             <span>
@@ -500,7 +499,6 @@ export function SettingsPage() {
             </span>
           </label>
         </section>
-        ) : null}
         <section className="settings-card">
           <h2>Voice</h2>
           <p className="settings-note">

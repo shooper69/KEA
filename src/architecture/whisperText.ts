@@ -47,7 +47,10 @@ const HALLUCINATIONS = [
   /^(silence|quiet|blank|music|applause|laughter|coughing|breathing)([,\s]+\1){1,}\.?$/i,
   /^(silence[\s,.]+){2,}silence\.?$/i,
   /^(uh+|um+|hmm+|ah+|oh+)([,\s]+\1){2,}\.?$/i,
-  /^\[?(silence|inaudible|music|blank)\]?\.?$/i,
+  /^\[?(silence|inaudible|music|blank|noise|static|typing|keyboard)\]?\.?$/i,
+  // Keyboard / tap noise often becomes punctuation-only or click onomatopoeia
+  /^[.\-–—…·•,\s]+$/,
+  /^(click|clicks|tap|taps|tick|ticks|knock|knocks|typing|type)\.?$/i,
 ]
 
 const MIN_TRANSCRIPT_CONFIDENCE = 0.32

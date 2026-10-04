@@ -2,6 +2,7 @@ import {
   audioRouteMicBoost,
   looksLikeHeadsetMic,
   probeAudioEnvironment,
+  readAudioRoute,
   saveAudioRoute,
   type KeaAudioEnvironment,
   type KeaAudioRoute,
@@ -16,6 +17,7 @@ const PREFERRED_MIC =
   /samson|meteor|blue yeti|yeti|fifine|hyperx|logitech|headset|usb|realtek|array|intel|microphone/i
 
 const PREFERRED_KEY = 'kea-preferred-mic-id'
+const PREFERRED_OUTPUT_KEY = 'kea-preferred-speaker-id'
 
 export interface KeaMicInfo {
   deviceId: string
@@ -56,10 +58,51 @@ export function savePreferredMicId(deviceId: string) {
   }
 }
 
+export function readPreferredOutputId(): string {
+  try {
+    return localStorage.getItem(PREFERRED_OUTPUT_KEY)?.trim() || ''
+  } catch {
+    return ''
+  }
+}
+
+export function savePreferredOutputId(deviceId: string) {
+  try {
+    if (deviceId) localStorage.setItem(PREFERRED_OUTPUT_KEY, deviceId)
+    else localStorage.removeItem(PREFERRED_OUTPUT_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/** Route HTMLAudioElement playback to the saved PC speaker when the browser allows it. */
+export async function applyPreferredAudioOutput(audio: HTMLAudioElement) {
+  // Only when the user picked "This computer" — never force a sink on marketing
+  // welcome or phone routes (setSinkId can block autoplay after async work).
+  if (readAudioRoute() !== 'pc') return
+  const sinkId = readPreferredOutputId()
+  if (!sinkId) return
+  const el = audio as HTMLAudioElement & {
+    setSinkId?: (id: string) => Promise<void>
+  }
+  if (typeof el.setSinkId !== 'function') return
+  try {
+    await el.setSinkId(sinkId)
+  } catch {
+    // Browser or OS may refuse; keep default output.
+  }
+}
+
 export async function listAudioInputs(): Promise<MediaDeviceInfo[]> {
   if (!navigator.mediaDevices?.enumerateDevices) return []
   const devices = await navigator.mediaDevices.enumerateDevices()
   return devices.filter((item) => item.kind === 'audioinput')
+}
+
+export async function listAudioOutputs(): Promise<MediaDeviceInfo[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return []
+  const devices = await navigator.mediaDevices.enumerateDevices()
+  return devices.filter((item) => item.kind === 'audiooutput')
 }
 
 async function unlockMicLabels() {
@@ -232,6 +275,7 @@ export async function openKeaMicrophone(): Promise<{
  */
 export async function applyAudioRouteMic(route: KeaAudioRoute) {
   saveAudioRoute(route)
+  if (route === 'pc') return
   try {
     const inputs = await ensureMicLabels()
     if (inputs.length === 0) return
@@ -269,6 +313,16 @@ export async function applyAudioRouteMic(route: KeaAudioRoute) {
   } catch {
     // Route preference still saved; mic picker falls back later.
   }
+}
+
+/** Lock PC surface to a specific mic (and optional speaker) from the chooser. */
+export async function applyPcAudioDevices(options: {
+  inputDeviceId: string
+  outputDeviceId?: string
+}) {
+  saveAudioRoute('pc')
+  savePreferredMicId(options.inputDeviceId)
+  savePreferredOutputId(options.outputDeviceId || '')
 }
 
 /** Probe the phone’s current audio devices and apply the matching mic. */

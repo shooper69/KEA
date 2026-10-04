@@ -113,7 +113,7 @@ export function MethodPage() {
         <div className="method-screen__cta">
           <p className="method-screen__invite">
             <span className="method-screen__invite-line">
-              So let’s see if we’re
+              Let’s see if we’re
             </span>
             <span className="method-screen__invite-line">
               going to become friends

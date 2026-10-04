@@ -222,6 +222,7 @@ html.kea-motion .kea-button:not(:disabled):hover {
 html.kea-motion .memory-button,
 html.kea-motion .companion-nav__clear,
 html.kea-motion .companion-nav__text,
+html.kea-motion .companion-nav__mic-pick,
 html.kea-motion .settings-tabs button,
 html.kea-motion .settings-tabs a,
 html.kea-motion .admin-tabs a,
@@ -237,6 +238,7 @@ html.kea-motion .voice-cast__play {
 html.kea-motion .memory-button:hover,
 html.kea-motion .companion-nav__clear:hover,
 html.kea-motion .companion-nav__text:hover,
+html.kea-motion .companion-nav__mic-pick:hover,
 html.kea-motion .settings-tabs button:hover,
 html.kea-motion .settings-tabs a:hover,
 html.kea-motion .admin-tabs a:hover {
@@ -4569,13 +4571,22 @@ button.memory-library__target--retry {
   z-index: 5;
 }
 
-.companion-nav__pwa-slot {
-  flex: 1 1 auto;
+.companion-nav__tools {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 1.5rem;
+  justify-content: flex-start;
+  gap: 0.15rem;
+  flex: 0 0 auto;
+  min-width: 0;
   z-index: 4;
+}
+
+.companion-nav__tools:not(:has(*)) {
+  display: none;
+}
+
+.companion-nav__cluster .companion-nav__theme {
+  flex: 0 0 auto;
 }
 
 .companion-nav__pwa-alert {
@@ -4606,7 +4617,26 @@ button.memory-library__target--retry {
 }
 
 .kea-confirm__card--pwa {
-  width: min(19rem, calc(100% - 2rem));
+  width: min(24rem, calc(100% - 1.5rem));
+  max-height: min(88dvh, 36rem);
+  overflow: auto;
+}
+
+.kea-confirm__steps {
+  margin: 0 0 0.85rem;
+  padding: 0 0 0 1.15rem;
+  color: rgba(255, 244, 232, 0.92);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.kea-confirm__steps li {
+  margin: 0 0 0.45rem;
+}
+
+.kea-confirm__steps li:last-child {
+  margin-bottom: 0;
 }
 
 .companion-nav__cluster {
@@ -4640,6 +4670,15 @@ button.memory-library__target--retry {
 
 .companion-corner .companion-nav__icon {
   position: relative;
+}
+
+.companion-nav__clear {
+  color: #111111;
+}
+
+/* Night sky — keep the reset control readable on the dark wash. */
+.companion-screen:has(.cloud-atmosphere--night) .companion-nav__clear {
+  color: #ffffff;
 }
 
 .corner-tip {
@@ -5836,7 +5875,7 @@ button.memory-library__target--retry {
 
 .rising-words__english {
   margin: 0;
-  font-size: 0.92em;
+  font-size: 0.84em;
   font-weight: 500;
   font-style: normal;
   line-height: 1.24;
@@ -6352,14 +6391,15 @@ button.memory-library__target--retry {
 }
 
 .voice-cast__name {
-  font-family: var(--serif);
-  font-size: 1.08rem;
-  font-weight: 500;
+  font-family: var(--sans);
+  font-size: 1.02rem;
+  font-weight: 650;
 }
 
 .voice-cast__style {
+  font-family: var(--sans);
   font-size: 0.78rem;
-  font-style: italic;
+  font-style: normal;
   color: var(--ink-muted);
   text-align: right;
 }
@@ -8535,25 +8575,69 @@ button.memory-library__target--retry {
 .audio-route {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 120;
   display: grid;
   place-items: center;
   padding: max(1rem, env(safe-area-inset-top)) 1rem
     max(1rem, env(safe-area-inset-bottom));
   background: rgba(12, 10, 18, 0.72);
+  pointer-events: auto;
 }
 
-.audio-route__card {
-  width: min(22rem, calc(100% - 1.4rem));
-  padding: 1.25rem 1.15rem 1.2rem;
+.audio-route__shell {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.65rem;
+  width: fit-content;
+  max-width: calc(100% - 0.4rem);
+  max-height: min(92vh, 40rem);
+  animation: kea-panel-in 0.35s ease both;
+  pointer-events: auto;
+}
+
+.audio-route__shell.has-panel {
+  width: min(48rem, calc(100% - 0.4rem));
+  max-width: calc(100% - 0.4rem);
+}
+
+.audio-route__card,
+.audio-route__panel {
   border-radius: 1.1rem;
   border: 1px solid rgba(255, 255, 255, 0.35);
   background:
     radial-gradient(circle at 12% 0%, rgba(255, 214, 170, 0.55), transparent 42%),
     linear-gradient(165deg, #fff8f0 0%, #f3e7d8 100%);
   box-shadow: 0 16px 36px rgba(20, 12, 30, 0.28);
+}
+
+.audio-route__card {
+  flex: 0 1 20rem;
+  width: min(20rem, 100%);
+  padding: 1.25rem 1.15rem 1.2rem;
   text-align: center;
-  animation: kea-panel-in 0.35s ease both;
+  overflow: auto;
+}
+
+.audio-route__panel {
+  flex: 1 1 18rem;
+  width: min(22rem, 100%);
+  max-width: 22rem;
+  padding: 1rem 1rem 1.1rem;
+  text-align: left;
+  overflow: auto;
+  animation: kea-audio-panel-in 0.28s ease both;
+}
+
+@keyframes kea-audio-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(0.85rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .audio-route__title {
@@ -8575,6 +8659,103 @@ button.memory-library__target--retry {
   margin: 0 0 0.85rem;
   color: var(--ink-muted);
   font-size: 0.82rem;
+}
+
+.audio-route__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.audio-route__panel-title {
+  margin: 0;
+  font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: #1a2430;
+}
+
+.audio-route__panel-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #4a5560;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  border-radius: 0.4rem;
+}
+
+.audio-route__panel-close:hover {
+  background: rgba(26, 36, 48, 0.08);
+}
+
+.audio-route__panel-note {
+  margin: 0 0 0.75rem;
+  color: #3a4654;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.audio-route__device-block {
+  margin: 0 0 0.85rem;
+}
+
+.audio-route__device-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5a6674;
+}
+
+.audio-route__device-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.audio-route__device-empty {
+  font-size: 0.85rem;
+  color: #5a6674;
+  line-height: 1.35;
+  padding: 0.35rem 0.15rem;
+}
+
+.audio-route__device {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(40, 50, 62, 0.14);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.55);
+  color: #1a2430;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+}
+
+.audio-route__device:hover:not(:disabled):not(.audio-route__device--live) {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.audio-route__device--live {
+  border-color: rgba(194, 24, 24, 0.45);
+  background: linear-gradient(180deg, #e23b3b 0%, #c21818 100%);
+  color: #fff;
+  font-weight: 600;
+}
+
+.audio-route__device--live:hover:not(:disabled) {
+  background: linear-gradient(180deg, #e84a4a 0%, #cc1f1f 100%);
+  color: #fff;
 }
 
 .audio-route__devices {
@@ -8620,11 +8801,64 @@ button.memory-library__target--retry {
   flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
+  position: relative;
+  z-index: 2;
 }
 
-.audio-route__actions .kea-button {
+.audio-route__actions--panel {
+  align-items: stretch;
+}
+
+.audio-route__actions .kea-button,
+.audio-route__actions .audio-route__choice {
+  width: 100%;
+  min-height: 2.55rem;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  animation: none;
+}
+
+.audio-route__actions--panel .kea-button,
+.audio-route__actions--panel .audio-route__choice,
+.audio-route__panel > .kea-button {
+  width: 100%;
+}
+
+.audio-route__actions .audio-route__choice--live,
+.audio-route__panel .audio-route__choice--live {
   width: 100%;
   min-height: 2.7rem;
+  background: linear-gradient(180deg, #e23b3b 0%, #c21818 100%);
+  box-shadow:
+    inset 0 -1px 0 rgba(80, 10, 10, 0.28),
+    0 2px 0 #6e1010,
+    0 4px 8px rgba(90, 12, 12, 0.22);
+}
+
+html.kea-motion .audio-route__actions .kea-button:not(:disabled) {
+  animation: none;
+}
+
+.audio-route__actions .audio-route__choice--live:active:not(:disabled),
+.audio-route__panel .audio-route__choice--live:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.audio-route__dismiss {
+  appearance: none;
+  margin-top: 0.75rem;
+  border: 0;
+  background: transparent;
+  color: #5a6674;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.audio-route__dismiss:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .audio-route-settings {
@@ -8637,6 +8871,37 @@ button.memory-library__target--retry {
 .audio-route-settings .kea-button {
   width: 100%;
   min-height: 2.5rem;
+}
+
+@media (max-width: 640px) {
+  .audio-route__shell,
+  .audio-route__shell.has-panel {
+    flex-direction: column;
+    width: min(22rem, calc(100% - 0.4rem));
+    max-height: min(92vh, 48rem);
+  }
+
+  .audio-route__card,
+  .audio-route__panel {
+    width: 100%;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+
+  .audio-route__panel {
+    max-height: min(52vh, 22rem);
+  }
+
+  @keyframes kea-audio-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.65rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 .cost-table-wrap {

@@ -4,10 +4,10 @@ import { MarketingSiteFooter } from '../components/companion/MarketingSiteFooter
 import { MarketingSiteHeader } from '../components/companion/MarketingSiteHeader'
 import {
   DISCOVERY_DEFINITION,
-  DISCOVERY_FAQS,
   DISCOVERY_HOW,
   DISCOVERY_LANGUAGES,
   DISCOVERY_NOT,
+  DISCOVERY_NOT_CLOSING,
   DISCOVERY_TITLE,
 } from '../seo/keaDiscovery'
 
@@ -24,6 +24,7 @@ const DISCOVERY_CARDS = [
       DISCOVERY_NOT.map((item) => item.replace(/^a /, 'A ').replace(/^an /, 'An ')).join(
         '. ',
       ) + '.',
+      DISCOVERY_NOT_CLOSING,
     ],
     image: '/method/method-no-levels.webp',
     alt: 'An open path under a wide sky — no levels, no classroom walls',
@@ -94,18 +95,6 @@ export function WhatIsKeaPage() {
                     <p key={paragraph.slice(0, 40)}>{paragraph}</p>
                   ))}
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="discovery-faqs" aria-label="Questions">
-          <h2 className="discovery-faqs__title">Common questions</h2>
-          <div className="discovery-faqs__grid">
-            {DISCOVERY_FAQS.map((item) => (
-              <article key={item.question} className="discovery-faq">
-                <h3>{item.question}</h3>
-                <p>{item.answer}</p>
               </article>
             ))}
           </div>

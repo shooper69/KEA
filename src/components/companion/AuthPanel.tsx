@@ -105,8 +105,9 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setBusy(true)
     setMessage('')
     trackRegisterClick({ label: 'Create account' })
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
+    const normalizedEmail = email.trim().toLowerCase()
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
       password,
       options: {
         emailRedirectTo: keaAuthRedirect(),
@@ -123,11 +124,19 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
       setMessage(authMessage(error, 'Could not create your account.'))
       return
     }
-    identify({ first_name: name.trim(), email: email.trim() })
+    // Supabase returns a user with empty identities when the email is already
+    // registered — and sends no confirmation mail.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setMessage('That email already has a Kea account. Sign in instead.')
+      setView('login')
+      return
+    }
+    setEmail(normalizedEmail)
+    identify({ first_name: name.trim(), email: normalizedEmail })
     setProfile({
       firstName: name.trim(),
       lastName: lastName.trim(),
-      email: email.trim(),
+      email: normalizedEmail,
       nativeLanguage: spoken,
       targetLanguage: learning,
     })
@@ -189,9 +198,12 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setBusy(true)
     setMessage('')
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: keaAuthRedirect(),
-      })
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: keaAuthRedirect(),
+        },
+      )
       if (error) {
         setMessage(authMessage(error, 'Could not send a reset note.'))
         return
@@ -212,14 +224,14 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     setBusy(true)
     const { error } = await supabase.auth.resend({
       type: 'signup',
-      email: email.trim(),
+      email: email.trim().toLowerCase(),
       options: { emailRedirectTo: keaAuthRedirect() },
     })
     setBusy(false)
     setMessage(
       error
         ? authMessage(error, 'Could not send the note again.')
-        : 'Another note is on its way.',
+        : 'Another note is on its way from Kea <noreply@kea.chat>. Check inbox and spam.',
     )
   }
 
@@ -486,7 +498,8 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
         <>
           <h2 className="welcome-screen__onboard-title">Look at your email</h2>
           <p className="settings-note">
-            Confirm your address (or open the reset note) to continue.
+            Kea sent a confirm note to {email || 'your address'} from{' '}
+            noreply@kea.chat. Open it (check spam too), then sign in.
           </p>
           <div className="welcome-screen__actions auth-check-actions">
             <Button type="button" disabled={busy} onClick={() => void resend()}>

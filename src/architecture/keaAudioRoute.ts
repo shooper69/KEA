@@ -6,8 +6,11 @@ const PROMPT_KEY = 'kea-audio-route-prompt'
 /** Set after the user picks a route this browser/PWA session. */
 const SESSION_DONE_KEY = 'kea-audio-route-session-done'
 
-/** How Kea should prefer the mic, based on what the phone reports. */
-export type KeaAudioRoute = 'speaker' | 'headphones' | 'bluetooth'
+/** How Kea should prefer the mic / device surface. */
+export type KeaAudioRoute = 'speaker' | 'headphones' | 'bluetooth' | 'pc'
+
+/** Top-level chooser sections in the audio popup. */
+export type KeaAudioSurface = 'phone' | 'pc' | 'bluetooth'
 
 export type KeaAudioDeviceRole = 'bluetooth' | 'headset' | 'builtin' | 'other'
 
@@ -58,13 +61,26 @@ export function isKeaMobileDevice() {
 export function readAudioRoute(): KeaAudioRoute | null {
   try {
     const value = localStorage.getItem(ROUTE_KEY)
-    if (value === 'speaker' || value === 'headphones' || value === 'bluetooth') {
+    if (
+      value === 'speaker' ||
+      value === 'headphones' ||
+      value === 'bluetooth' ||
+      value === 'pc'
+    ) {
       return value
     }
   } catch {
     // ignore
   }
   return null
+}
+
+/** Which primary section is currently live in the chooser. */
+export function audioRouteSurface(route: KeaAudioRoute | null): KeaAudioSurface | null {
+  if (!route) return null
+  if (route === 'pc') return 'pc'
+  if (route === 'bluetooth') return 'bluetooth'
+  return 'phone'
 }
 
 export function saveAudioRoute(route: KeaAudioRoute) {
@@ -139,8 +155,9 @@ export function shouldOpenAudioRouteCheck(options?: {
   restartListen?: boolean
 }) {
   if (options?.restartListen) return false
-  if (!isKeaMobileDevice()) return false
+  // After login/register, always show the chooser once (desktop + mobile).
   if (consumeAudioRoutePromptPending()) return true
+  if (!isKeaMobileDevice()) return false
   return shouldPromptAudioRouteOnce()
 }
 
@@ -294,13 +311,14 @@ export function audioRouteLabel(route: KeaAudioRoute | null): string {
   if (route === 'bluetooth') return 'Car / Bluetooth'
   if (route === 'headphones') return 'Headphones'
   if (route === 'speaker') return 'Phone speaker'
+  if (route === 'pc') return 'This computer'
   return 'Not set yet'
 }
 
 /** Score boost for the chosen audio route when ranking mics. */
 export function audioRouteMicBoost(label: string, deviceId: string): number {
   const route = readAudioRoute()
-  if (!route) return 0
+  if (!route || route === 'pc') return 0
   const name = `${label} ${deviceId}`
   const bluetooth = BLUETOOTH_AUDIO.test(name)
   const headset = HEADSET_MIC.test(name) || bluetooth

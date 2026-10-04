@@ -11,14 +11,20 @@ export function UserMenu() {
     useSession()
   const navigate = useNavigate()
   const { rootRef, open, setOpen, onPointerLeave } = useStickyMenu()
-  const { installed, busy, canPrompt, promptInstall, manualInstallHint } =
+  const { installed, busy, canPrompt, promptInstall, pwaInstallGuide } =
     usePwaInstall()
   const [comingSoon, setComingSoon] = useState<string | null>(null)
   const [installAsk, setInstallAsk] = useState(false)
   const [installNote, setInstallNote] = useState('')
+  const [showInstallGuide, setShowInstallGuide] = useState(false)
   useHoldKeaListening(
-    open || Boolean(comingSoon) || installAsk || Boolean(installNote),
+    open ||
+      Boolean(comingSoon) ||
+      installAsk ||
+      Boolean(installNote) ||
+      showInstallGuide,
   )
+  const guide = pwaInstallGuide()
 
   function goSettings() {
     setOpen(false)
@@ -38,12 +44,12 @@ export function UserMenu() {
   function askInstallApp() {
     setOpen(false)
     if (installed) {
-      setInstallNote('Kea is already installed on this phone.')
+      setInstallNote('Kea is already installed on this device.')
       return
     }
     // No browser install prompt available yet — show how to add manually.
     if (!canPrompt) {
-      setInstallNote(manualInstallHint())
+      setShowInstallGuide(true)
       return
     }
     setInstallAsk(true)
@@ -55,7 +61,7 @@ export function UserMenu() {
     const result = await promptInstall()
     setInstallAsk(false)
     if (result === 'manual') {
-      setInstallNote(manualInstallHint())
+      setShowInstallGuide(true)
       return
     }
     if (result === 'accepted') {
@@ -234,6 +240,44 @@ export function UserMenu() {
           </div>
         </div>
       ) : null}
+      {showInstallGuide ? (
+        <div
+          className="kea-confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kea-install-guide-title"
+          onClick={() => setShowInstallGuide(false)}
+        >
+          <div
+            className="kea-confirm__card kea-confirm__card--pwa"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p id="kea-install-guide-title" className="kea-confirm__title">
+              {guide.title}
+            </p>
+            <p className="kea-confirm__note">{guide.lead}</p>
+            <ol className="kea-confirm__steps">
+              {guide.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            {guide.footer ? (
+              <p className="kea-confirm__note kea-confirm__note--hint">
+                {guide.footer}
+              </p>
+            ) : null}
+            <div className="kea-confirm__actions">
+              <button
+                type="button"
+                className="kea-button"
+                onClick={() => setShowInstallGuide(false)}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {installNote ? (
         <div
           className="kea-confirm"
@@ -247,7 +291,7 @@ export function UserMenu() {
             onClick={(event) => event.stopPropagation()}
           >
             <p id="kea-install-note-title" className="kea-confirm__title">
-              Phone App
+              Kea app
             </p>
             <p className="kea-confirm__note">{installNote}</p>
             <div className="kea-confirm__actions">

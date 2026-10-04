@@ -66,9 +66,9 @@ const OPENAI_SEED: Array<{
   {
     openaiVoice: 'alloy',
     actualName: 'Alloy',
-    userName: 'Quiet Friend',
-    userDescription: 'Soft, never in a hurry.',
-    enabled: true,
+    userName: '',
+    userDescription: '',
+    enabled: false,
   },
   {
     openaiVoice: 'ash',
@@ -80,9 +80,9 @@ const OPENAI_SEED: Array<{
   {
     openaiVoice: 'ballad',
     actualName: 'Ballad',
-    userName: 'Velvet Tone',
-    userDescription: 'Smooth, intimate, and melodic.',
-    enabled: false,
+    userName: 'Velvet Charm',
+    userDescription: 'Warm, intimate, and a little flirtatious — soft melody in the voice.',
+    enabled: true,
   },
   {
     openaiVoice: 'echo',
@@ -123,7 +123,10 @@ function browserId(uri: string) {
 }
 
 const SOFT_CHARM_ID = () => openaiId('nova')
+const VELVET_CHARM_ID = () => openaiId('ballad')
+const QUIET_FRIEND_ID = () => openaiId('alloy')
 const CHARM_DEFAULT_FLAG = 'kea-voice-charm-default-v2'
+const VELVET_REPLACE_FLAG = 'kea-voice-velvet-charm-v1'
 
 function seedCatalog(): VoiceCatalog {
   const voices = OPENAI_SEED.map((item) => ({
@@ -182,6 +185,64 @@ export function mergeBrowserVoices(
   }
   if (!extras.length) return catalog
   return { ...catalog, voices: [...catalog.voices, ...extras] }
+}
+
+/** One-time swap: Quiet Friend (Alloy) → Velvet Charm (Ballad). */
+function migrateQuietFriendToVelvet(catalog: VoiceCatalog): VoiceCatalog {
+  try {
+    if (localStorage.getItem(VELVET_REPLACE_FLAG) === '1') return catalog
+  } catch {
+    return catalog
+  }
+
+  const velvet = VELVET_CHARM_ID()
+  const quiet = QUIET_FRIEND_ID()
+  const next: VoiceCatalog = {
+    ...catalog,
+    voices: catalog.voices.map((item) => {
+      if (item.id === velvet || item.openaiVoice === 'ballad') {
+        return {
+          ...item,
+          enabled: true,
+          userName: 'Velvet Charm',
+          userDescription:
+            'Warm, intimate, and a little flirtatious — soft melody in the voice.',
+        }
+      }
+      if (item.id === quiet || item.openaiVoice === 'alloy') {
+        return {
+          ...item,
+          enabled: false,
+          userName: '',
+          userDescription: '',
+        }
+      }
+      return item
+    }),
+  }
+
+  if (!next.voices.some((item) => item.id === velvet)) {
+    const seeded = seedCatalog().voices.find((item) => item.id === velvet)
+    if (seeded) next.voices.push(seeded)
+  }
+
+  if (next.defaultId === quiet) next.defaultId = velvet
+  if (next.marketingIntroId === quiet) next.marketingIntroId = velvet
+
+  saveVoiceCatalog(next)
+  try {
+    localStorage.setItem(VELVET_REPLACE_FLAG, '1')
+  } catch {
+    // ignore
+  }
+  try {
+    if (localStorage.getItem(USER_VOICE_KEY) === quiet) {
+      localStorage.setItem(USER_VOICE_KEY, velvet)
+    }
+  } catch {
+    // ignore
+  }
+  return next
 }
 
 /** One-time move from the colder Coral default to Soft Charm (Nova). */
@@ -253,7 +314,9 @@ function migrateCharmDefault(catalog: VoiceCatalog): VoiceCatalog {
 
 export function loadVoiceCatalog(): VoiceCatalog {
   const stored = readStored()
-  const base = migrateCharmDefault(stored ?? seedCatalog())
+  const base = migrateQuietFriendToVelvet(
+    migrateCharmDefault(stored ?? seedCatalog()),
+  )
   const byId = new Map(base.voices.map((item) => [item.id, item]))
   for (const seed of seedCatalog().voices) {
     if (!byId.has(seed.id)) base.voices.push(seed)

@@ -17,10 +17,13 @@ export function CloudAtmosphere({
   tempo = 'calm',
 }: CloudAtmosphereProps) {
   const { skyTheme, isAdmin } = useSession()
+  // Night is available to everyone (nav toggle). Weather cycle stays admin-only.
   const activeTheme =
-    isAdmin && (skyTheme === 'weather' || skyTheme === 'night')
-      ? skyTheme
-      : 'clouds'
+    skyTheme === 'night'
+      ? 'night'
+      : isAdmin && skyTheme === 'weather'
+        ? 'weather'
+        : 'clouds'
   const [weather, setWeather] = useState<WeatherKind>('clear')
 
   useEffect(() => {

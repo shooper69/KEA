@@ -486,6 +486,7 @@ export function ConversationPage() {
         <CompanionNav
           textMode={textMode}
           onToggleTextMode={toggleTextMode}
+          onOpenAudioRoute={() => setAudioRouteOpen(true)}
         />
       </header>
       <div className="conversation-screen__stage">
@@ -569,13 +570,13 @@ export function ConversationPage() {
             onSend={sendTyped}
           />
         </div>
-      ) : !quizOpen && !spokenTour && !textMode ? (
+      ) : !quizOpen && !spokenTour && !textMode && !audioRouteOpen ? (
       <VoiceMic
         live={live}
         status={micStatus}
-        wakePhrase={!audioRouteOpen}
+        wakePhrase
         onToggle={() => {
-          if (audioRouteOpen || quizOpen) return
+          if (quizOpen) return
           wake.release()
           // Stop wins whenever talk is live OR still arming — never ignore a stop tap.
           if (live || voice.handsFree || voice.starting || voice.status !== 'idle') {

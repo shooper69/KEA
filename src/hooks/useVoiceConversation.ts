@@ -28,6 +28,7 @@ import { withoutRejoinWelcomes } from '../architecture/keaStartSpeech'
 import {
   connectSpeechAnalyser,
   createSpeechVad,
+  SPEECH_ONSET_MS,
   SPEECH_RMS_FLOOR,
 } from '../architecture/keaSpeechVad'
 import {
@@ -71,9 +72,10 @@ import type {
 
 const CHARACTER_KEY = 'kea-voice-character'
 const RESTART_LISTEN_MS = 120
-const MIN_SPEECH_MS = 380
+/** Must hold real speech this long before an answer can be triggered. */
+const MIN_SPEECH_MS = 520
 const MAX_RECORD_MS = 22000
-const AMBIENT_CALIBRATE_MS = 700
+const AMBIENT_CALIBRATE_MS = 800
 const DEFAULT_ANSWER_SILENCE_MS = DEFAULT_ANSWER_SILENCE_SECONDS * 1000
 /** Absolute ceiling — soft Kea lines can run long; never cut while audio remains. */
 const SPEAK_SAFETY_MS = 120_000
@@ -555,7 +557,8 @@ export function useVoiceConversation({
     if (!mountedRef.current) return
     if (fatalListenRef.current || !handsFreeRef.current) return
     if (sendingRef.current) return
-    if (blob.size < 1200) {
+    // Tiny clips are almost always key-click / room spikes, not speech.
+    if (blob.size < 2400) {
       busyRef.current = false
       if (handsFreeRef.current && !busyRef.current && mountedRef.current) {
         startListeningRef.current()
@@ -661,6 +664,8 @@ export function useVoiceConversation({
       const ambientUntil = performance.now() + AMBIENT_CALIBRATE_MS
       const vad = createSpeechVad(SPEECH_RMS_FLOOR)
       speechVadRef.current = vad
+      /** Frames that look like speech but have not yet held long enough (rejects taps). */
+      let speechOnsetMs = 0
       const finishForAnswer = () => {
         if (recorder.state !== 'recording') return
         stopAnalyser()
@@ -686,15 +691,26 @@ export function useVoiceConversation({
         last = now
         const calibrating = now < ambientUntil && speechMsRef.current === 0
         vad.observe(rms, { calibrating })
+        if (calibrating) return
         if (vad.isSpeech(rms)) {
-          speechMsRef.current += delta
+          // Keyboard taps are short spikes — require sustained onset first.
+          if (speechMsRef.current === 0) {
+            speechOnsetMs += delta
+            if (speechOnsetMs < SPEECH_ONSET_MS) return
+            speechMsRef.current = speechOnsetMs
+          } else {
+            speechMsRef.current += delta
+          }
           silenceMsRef.current = 0
           armListenIdle()
-        } else if (speechMsRef.current > MIN_SPEECH_MS) {
-          silenceMsRef.current += delta
-          if (silenceMsRef.current >= answerSilenceMsRef.current) {
-            finishForAnswer()
-            return
+        } else {
+          speechOnsetMs = 0
+          if (speechMsRef.current > MIN_SPEECH_MS) {
+            silenceMsRef.current += delta
+            if (silenceMsRef.current >= answerSilenceMsRef.current) {
+              finishForAnswer()
+              return
+            }
           }
         }
         if (now - recordStartedAtRef.current >= MAX_RECORD_MS) {

@@ -23,16 +23,16 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_HOLD_MS = 55
+const SPEECH_HOLD_MS = 140
 const SHOT_COOLDOWN_MS = 650
 const WAKE_SILENCE_MS = 280
-/** “Hey Kea” is short — don’t require a long burst before checking. */
-const MIN_SPEECH_BURST_MS = 90
+/** Longer than a key-tap; still short enough for “Hey Kea”. */
+const MIN_SPEECH_BURST_MS = 180
 const MAX_UTTERANCE_MS = 2200
 const RING_SECONDS = 2.0
 const AMBIENT_CALIBRATE_MS = 520
 /** Wake gate stays a touch softer than talk VAD so “Hey Kea” still arms. */
-const WAKE_VAD_FLOOR = Math.max(0.014, SPEECH_RMS_FLOOR * 0.7)
+const WAKE_VAD_FLOOR = Math.max(0.016, SPEECH_RMS_FLOOR * 0.75)
 /** Mild hint for the two-word wake; avoid priming with lone "Kea". */
 const WAKE_PROMPT =
   'The speaker may say the wake phrase "Hey Kea" or "Hi Kea". Prefer that exact short phrase when it is what was said. If there is only noise or silence, return an empty transcript.'

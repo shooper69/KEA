@@ -107,10 +107,131 @@ export function isIosSafari() {
   return iOS && webkit && !chrome
 }
 
+/** iPhone / iPad / iPod (includes iPadOS that reports as MacIntel). */
+export function isAppleMobileDevice() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  return (
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  )
+}
+
+/** Desktop Mac (not an iPad pretending to be MacIntel). */
+export function isAppleMacDesktop() {
+  if (typeof navigator === 'undefined') return false
+  if (isAppleMobileDevice()) return false
+  return /Macintosh|Mac OS X/i.test(navigator.userAgent)
+}
+
+export function isAppleSafariBrowser() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const safari = /Safari/i.test(ua)
+  const other = /CriOS|Chrome|EdgiOS|Edg\/|FxiOS|Firefox|OPR|Opera/i.test(ua)
+  return safari && !other
+}
+
 function isAndroidChrome() {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent
   return /Android/i.test(ua) && /Chrome/i.test(ua) && !/EdgA|OPR|SamsungBrowser/i.test(ua)
+}
+
+export type PwaInstallGuide = {
+  title: string
+  lead: string
+  steps: string[]
+  footer?: string
+}
+
+/** Plain steps for the install popup — especially Apple, which has no Install button. */
+export function pwaInstallGuide(): PwaInstallGuide {
+  if (isAppleMobileDevice()) {
+    const device = /iPad/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      ? 'iPad'
+      : 'iPhone'
+    if (!isAppleSafariBrowser()) {
+      return {
+        title: 'Save Kea on your Apple device',
+        lead: `On ${device}, Kea can only be saved from Safari — not from Chrome or an in-app browser.`,
+        steps: [
+          'Open Safari (the compass icon).',
+          'Go to kea.chat and sign in if you need to.',
+          'Tap the Share button — a square with an arrow pointing up. On iPhone it is at the bottom of Safari; on iPad it is at the top.',
+          'Scroll the share sheet and tap Add to Home Screen.',
+          'Tap Add. Kea appears on your Home Screen like any other app.',
+        ],
+        footer:
+          'After that, open Kea from the Home Screen icon — not from a Safari tab.',
+      }
+    }
+    return {
+      title: 'Save Kea on your Apple device',
+      lead: `Apple does not show an Install button. Use Safari’s Share menu on your ${device}:`,
+      steps: [
+        'Tap the Share button — a square with an arrow pointing up. On iPhone it sits at the bottom centre of Safari; on iPad it is near the top of the window.',
+        'In the share sheet, scroll down and tap Add to Home Screen.',
+        'If you do not see it, scroll further or tap Edit Actions and turn Add to Home Screen on.',
+        'Tap Add (top right). Kea’s icon appears on your Home Screen.',
+      ],
+      footer:
+        'Open Kea from that Home Screen icon next time. This works the same on iPhone and iPad.',
+    }
+  }
+
+  if (isAppleMacDesktop()) {
+    if (!isAppleSafariBrowser()) {
+      return {
+        title: 'Save Kea on your Mac',
+        lead: 'On a Mac, save Kea from Safari (not Chrome).',
+        steps: [
+          'Open Safari and go to kea.chat.',
+          'In the menu bar choose File → Add to Dock (wording can also say Add to Dock / Add to Home Screen).',
+          'Or click the Share button in the Safari toolbar, then Add to Dock.',
+          'Kea appears in your Dock — open it from there like an app.',
+        ],
+        footer: 'Needs a recent macOS with Safari that supports web apps.',
+      }
+    }
+    return {
+      title: 'Save Kea on your Mac',
+      lead: 'Safari on Mac can put Kea in your Dock as an app:',
+      steps: [
+        'In the menu bar, choose File → Add to Dock (or Add to Home Screen on some macOS versions).',
+        'You can also click the Share button in the Safari toolbar, then choose Add to Dock.',
+        'Confirm Add. Kea appears in your Dock with its own icon.',
+      ],
+      footer: 'Open Kea from the Dock next time — it runs in its own window.',
+    }
+  }
+
+  if (isAndroidChrome()) {
+    return {
+      title: 'Install Kea on your phone',
+      lead: 'Chrome can install Kea as an app on your home screen.',
+      steps: [
+        'Tap the ⋮ menu at the top right.',
+        'Tap Install app or Add to Home screen.',
+        'Confirm Install. Open Kea from the new home-screen icon.',
+      ],
+      footer:
+        'If you do not see Install app, open kea.chat in Chrome (not inside another app) and try again after a short browse.',
+    }
+  }
+
+  return {
+    title: 'Install Kea on this device',
+    lead: 'Use your browser’s install option to put Kea on your home screen or dock.',
+    steps: [
+      'Open the browser menu (often ⋮ or ⋯).',
+      'Choose Install app or Add to Home Screen.',
+      'Confirm, then open Kea from the new icon.',
+    ],
+    footer:
+      'On Apple devices, use Safari. On Android, Chrome is the simplest path.',
+  }
 }
 
 /** Shared PWA install state for menu + welcome install buttons. */
@@ -167,13 +288,9 @@ export function usePwaInstall() {
   }
 
   function manualInstallHint() {
-    if (isIosSafari()) {
-      return 'On iPhone: tap the Share button, then Add to Home Screen.'
-    }
-    if (isAndroidChrome()) {
-      return 'In Chrome, tap the ⋮ menu (top right), then Install app or Add to Home screen. If you do not see Install app, open kea.chat in Chrome (not inside another app) and try again after browsing a little.'
-    }
-    return 'Use your browser menu → Install app or Add to Home Screen. Chrome on Android is the simplest path.'
+    const guide = pwaInstallGuide()
+    const steps = guide.steps.map((step, index) => `${index + 1}. ${step}`).join(' ')
+    return [guide.lead, steps, guide.footer].filter(Boolean).join(' ')
   }
 
   return {
@@ -183,6 +300,7 @@ export function usePwaInstall() {
     canPrompt: Boolean(deferred || sharedDeferred),
     promptInstall,
     manualInstallHint,
+    pwaInstallGuide,
   }
 }
 

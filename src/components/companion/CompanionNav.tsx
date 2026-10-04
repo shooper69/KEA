@@ -9,6 +9,7 @@ import {
 } from '../../architecture/keaTalkPerformance'
 import { dismissSpokenTour } from '../../data/keaOnboarding'
 import { useSession } from '../../context/SessionContext'
+import type { SkyTheme } from '../../types'
 import { KeaMark } from './KeaMark'
 import { LanguageSwitcher } from './LanguageSwitcher'
 import { PwaInstallAttention } from './PwaInstallAttention'
@@ -18,8 +19,34 @@ function ClearChatIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path
-        fill="#111111"
+        fill="currentColor"
         d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 13.65-6.65z"
+      />
+    </svg>
+  )
+}
+
+function MicPickIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="9" y="2.5" width="6" height="11" rx="3" fill="#2f6cff" />
+      <path
+        fill="none"
+        stroke="#c44bff"
+        strokeWidth="2"
+        strokeLinecap="round"
+        d="M6.2 11.2a5.8 5.8 0 0 0 11.6 0"
+      />
+      <path
+        fill="#ffe14a"
+        d="M11.15 18.2h1.7v2.6h-1.7z"
+      />
+      <path
+        fill="none"
+        stroke="#ffe14a"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M8.4 21.2h7.2"
       />
     </svg>
   )
@@ -102,21 +129,54 @@ function TrendIcon({ tone }: { tone: 'up' | 'down' | 'flat' }) {
   )
 }
 
+/** Sun = switch to light (clouds); moon = switch to night. */
+function ThemeIcon({ mode }: { mode: 'light' | 'dark' }) {
+  if (mode === 'dark') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path
+          fill="#f0e6ff"
+          d="M12.1 3.1a8.9 8.9 0 1 0 8.8 10.4 7.1 7.1 0 0 1-8.8-10.4z"
+        />
+        <circle cx="17.2" cy="7.1" r="1.05" fill="#ffe14a" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="4.2" fill="#ffe14a" />
+      <g stroke="#ffb15a" strokeWidth="1.8" strokeLinecap="round">
+        <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M5.4 18.6l1.6-1.6M17 7l1.6-1.6" />
+      </g>
+    </svg>
+  )
+}
+
 interface CompanionNavProps {
   /** Quiet typing mode: no microphone and no spoken replies. */
   textMode?: boolean
   onToggleTextMode?: () => void
+  /** Opens the speaker / headphones / Bluetooth input picker. */
+  onOpenAudioRoute?: () => void
 }
 
 export function CompanionNav({
   textMode = false,
   onToggleTextMode,
+  onOpenAudioRoute,
 }: CompanionNavProps) {
-  const { email, firstName } = useSession()
+  const { email, firstName, skyTheme, setProfile } = useSession()
   const [clearOpen, setClearOpen] = useState(false)
   const [trend, setTrend] = useState(() => getTalkTrendPercent())
   const resetArmedAt = useRef(0)
   useHoldKeaListening(clearOpen)
+  const isNight = skyTheme === 'night'
+
+  function toggleTheme() {
+    setProfile({
+      skyTheme: (isNight ? 'clouds' : 'night') as SkyTheme,
+    })
+  }
 
   useEffect(() => {
     const refresh = () => setTrend(getTalkTrendPercent())
@@ -150,8 +210,20 @@ export function CompanionNav({
         <Link to="/conversation" className="companion-nav__mark" aria-label="Kea home">
           <KeaMark className="kea-mark--header" />
         </Link>
-        <PwaInstallAttention />
+        <div className="companion-nav__tools">
+          <PwaInstallAttention />
+        </div>
         <div className="companion-nav__cluster">
+        <button
+          type="button"
+          className="companion-nav__icon companion-nav__theme"
+          aria-label={isNight ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={isNight ? 'Light theme' : 'Dark theme'}
+          aria-pressed={isNight}
+          onClick={toggleTheme}
+        >
+          <ThemeIcon mode={isNight ? 'light' : 'dark'} />
+        </button>
         <LanguageSwitcher />
         {onToggleTextMode ? null : (
           <NavLink
@@ -192,6 +264,21 @@ export function CompanionNav({
         </div>
       </nav>
       <div className="companion-corner">
+        {onOpenAudioRoute ? (
+          <button
+            type="button"
+            className="companion-nav__icon companion-nav__mic-pick"
+            aria-label="Choose microphone and speakers"
+            title="Audio input / output"
+            onClick={onOpenAudioRoute}
+          >
+            <MicPickIcon />
+            <span className="corner-tip" role="tooltip">
+              Pick phone speaker, headphones, or Bluetooth so Kea uses the right
+              microphone.
+            </span>
+          </button>
+        ) : null}
         {onToggleTextMode ? (
           <button
             type="button"

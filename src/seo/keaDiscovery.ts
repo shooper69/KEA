@@ -6,7 +6,7 @@ export const DISCOVERY_DESCRIPTION =
   'Kea is a language learning chatty companion. She talks with you like a friend — not a course, tutor, or lesson app — and remembers topics and words you struggle with.'
 
 export const DISCOVERY_DEFINITION = [
-  'Kea is a language learning chatty companion. People pick up a language by talking with her, the way they picked up their first language: through experience, meaning, and repetition in real conversation.',
+  'Kea is a language learning chatty companion. She talks with you like a friend so you acquire language through conversation, not through a course — the way people picked up their first language: through experience, meaning, and repetition.',
   'You speak one language and talk with Kea in another. She answers in that language, keeps the thread of what you have been talking about, and notices words and phrases you struggle with.',
   'Those words live on a personal Learn List until you start using them well. Topics you have spoken about can be opened again later. There is no lesson plan, no streak, and no classroom.',
 ]
@@ -18,6 +18,10 @@ export const DISCOVERY_NOT = [
   'a game with levels, stars, or ads',
 ]
 
+/** Extra line for the “Kea is not” section — from former common-questions copy. */
+export const DISCOVERY_NOT_CLOSING =
+  'She is a companion you talk with. Understanding comes first; speech follows naturally.'
+
 export const DISCOVERY_HOW = [
   {
     title: 'Talk',
@@ -25,7 +29,7 @@ export const DISCOVERY_HOW = [
   },
   {
     title: 'Learn List',
-    body: 'When you struggle with a word or phrase, Kea keeps it on a Learn List. Items leave when you use them well.',
+    body: 'When you struggle with a word or phrase, Kea keeps it on a Learn List. Items leave when you start using them well in conversation.',
   },
   {
     title: 'Topics',
@@ -178,6 +182,8 @@ export function keaLlmsTxt(origin: string) {
     'Kea is not:',
     ...DISCOVERY_NOT.map((item) => `- ${item}`),
     '',
+    DISCOVERY_NOT_CLOSING,
+    '',
     '## How it works',
     '',
     ...DISCOVERY_HOW.map((item) => `- ${item.title}: ${item.body}`),
@@ -286,6 +292,7 @@ ${definition}
       <ul>
 ${notItems}
       </ul>
+      <p>${escapeHtml(DISCOVERY_NOT_CLOSING)}</p>
 ${how}
       <h2>Languages</h2>
       <p>${escapeHtml(DISCOVERY_LANGUAGES)}</p>
