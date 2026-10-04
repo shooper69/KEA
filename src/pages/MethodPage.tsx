@@ -79,9 +79,6 @@ export function MethodPage() {
             <NavLink to="/" end className="method-screen__home">
               Home
             </NavLink>
-            <NavLink to="/what-is-kea" className="method-screen__page-title">
-              What is Kea
-            </NavLink>
             <NavLink to="/method" className="method-screen__page-title">
               The Method
             </NavLink>
@@ -146,12 +143,17 @@ export function MethodPage() {
               going to become friends
             </span>
           </p>
-          <Link to="/?register=1" className="kea-button method-screen__cta-button">
-            Create free account
-          </Link>
+          <div className="method-screen__cta-actions">
+            <Link to="/?register=1" className="kea-button method-screen__cta-button">
+              Create free account
+            </Link>
+            <Link to="/what-is-kea" className="method-screen__learn-more">
+              Learn more
+            </Link>
+          </div>
         </div>
 
-        <footer className="method-screen__store-footer">
+        <footer className="welcome-screen__store-footer method-screen__store-footer">
           <div className="welcome-screen__store-footer-bar">
             <StoreBadges />
             <SiteFooter tone="marketing" />

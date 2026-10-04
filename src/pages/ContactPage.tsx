@@ -24,7 +24,6 @@ export function ContactPage() {
           <p>
             For help with an account or subscription, see{' '}
             <Link to="/support">Customer Support</Link>. Read{' '}
-            <Link to="/what-is-kea">What is Kea</Link> or{' '}
             <Link to="/method">The Method</Link>.
           </p>
         </article>

@@ -202,9 +202,14 @@ export function InstallAppButton({
 }) {
   const { installed, busy, promptInstall, manualInstallHint } = usePwaInstall()
 
-  if (installed) return null
+  // Keep the marketing-footer control visible; only hide the header link once installed.
+  if (installed && variant !== 'store') return null
 
   async function install() {
+    if (installed) {
+      window.alert('Kea is already installed on this device.')
+      return
+    }
     const result = await promptInstall()
     if (result === 'manual') window.alert(manualInstallHint())
   }

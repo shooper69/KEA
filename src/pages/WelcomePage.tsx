@@ -665,9 +665,6 @@ export function WelcomePage() {
             <NavLink to="/" end className="method-screen__home">
               Home
             </NavLink>
-            <NavLink to="/what-is-kea" className="method-screen__page-title">
-              What is Kea
-            </NavLink>
             <NavLink to="/method" className="method-screen__page-title">
               The Method
             </NavLink>
@@ -725,21 +722,21 @@ export function WelcomePage() {
             ) : null}
 
             {spokenBlock}
-
-            {!authOpen ? (
-              <footer className="welcome-screen__store-footer">
-                {!introMode ? <HomeCommentsStrip /> : null}
-                <div className="welcome-screen__store-footer-bar">
-                  <StoreBadges />
-                  <SiteFooter tone="marketing" />
-                </div>
-              </footer>
-            ) : null}
           </div>
           {introMode ? (
             <div className="welcome-screen__dock">{homeActions}</div>
           ) : null}
         </div>
+      ) : null}
+
+      {!authOpen ? (
+        <footer className="welcome-screen__store-footer">
+          {!introMode ? <HomeCommentsStrip /> : null}
+          <div className="welcome-screen__store-footer-bar">
+            <StoreBadges />
+            <SiteFooter tone="marketing" />
+          </div>
+        </footer>
       ) : null}
 
       {authOpen ? (

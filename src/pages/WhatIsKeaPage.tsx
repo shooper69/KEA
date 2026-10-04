@@ -18,7 +18,7 @@ export function WhatIsKeaPage() {
       <div className="legal-screen__content">
         <div className="settings-title-row">
           <h1>{DISCOVERY_TITLE}</h1>
-          <Link to="/" className="settings-close" aria-label="Close">
+          <Link to="/method" className="settings-close" aria-label="Back to The Method">
             ×
           </Link>
         </div>

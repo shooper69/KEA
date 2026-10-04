@@ -71,7 +71,6 @@ const METHOD_COPY = [
 function publicNav() {
   return `      <nav aria-label="Site">
         <a href="${KEA_ORIGIN}/">Home</a>
-        <a href="${KEA_ORIGIN}${DISCOVERY_PATH}">What is Kea</a>
         <a href="${KEA_ORIGIN}/method">The Method</a>
         <a href="${KEA_ORIGIN}/support">Support</a>
         <a href="${KEA_ORIGIN}/contact">Contact</a>

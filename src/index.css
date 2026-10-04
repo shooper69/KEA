@@ -760,11 +760,11 @@ body:has(.welcome-screen),
   background: transparent;
 }
 
-/* Idle home: room under shared Method-style header; footer lives in scroll */
+/* Idle home: room under shared Method-style header + comments/footer */
 .welcome-screen__shell:not(.welcome-screen__shell--intro) {
   justify-content: flex-start;
   padding-top: clamp(3.6rem, 9vh, 5.25rem);
-  padding-bottom: 0;
+  padding-bottom: clamp(9.5rem, 32vh, 16rem);
 }
 
 .welcome-screen__shell:not(.welcome-screen__shell--intro) .welcome-screen__scroll {
@@ -795,7 +795,7 @@ body:has(.welcome-screen),
 
 .welcome-screen__shell:not(.welcome-screen__shell--intro)
   .welcome-screen__actions.welcome-screen__actions--home {
-  margin-top: clamp(1rem, 3.5vh, 1.75rem);
+  margin-top: clamp(3rem, 14vh, 7rem);
   padding-top: 0;
   padding-bottom: 0;
 }
@@ -892,7 +892,7 @@ body:has(.welcome-screen),
   padding:
     max(1.1rem, env(safe-area-inset-top))
     max(1.5rem, env(safe-area-inset-right), 6.5vw)
-    max(0.75rem, env(safe-area-inset-bottom))
+    max(6.4rem, calc(env(safe-area-inset-bottom) + 5.2rem))
     max(1.5rem, env(safe-area-inset-left), 6.5vw);
   background-color: #4a3aad;
   background-image: radial-gradient(
@@ -2396,7 +2396,7 @@ body:has(.welcome-screen),
     margin-left: auto;
     margin-right: auto;
     padding-top: clamp(4.2rem, 8vh, 5.8rem);
-    padding-bottom: 0;
+    padding-bottom: clamp(8rem, 18vh, 12rem);
     padding-inline: clamp(0.75rem, 2vw, 1.5rem);
   }
 
@@ -2442,7 +2442,7 @@ body:has(.welcome-screen),
     position: absolute;
     left: 50%;
     /* Sit on the branch above the customer quotes; head may overlap the card. */
-    bottom: calc(clamp(2.4rem, 5.5vh, 3.6rem) + 0.35cm);
+    bottom: calc(clamp(2.4rem, 5.5vh, 3.6rem) + 0.35cm - 1in);
     z-index: 5;
     order: unset;
     grid-column: unset;
@@ -2906,7 +2906,7 @@ body:has(.welcome-screen),
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 1.15rem;
+  gap: 0.65rem 0.85rem;
   flex: 0 0 auto;
   width: 100%;
   margin: 0;
@@ -2914,29 +2914,18 @@ body:has(.welcome-screen),
 }
 
 .welcome-screen__store-footer {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(0.55rem, env(safe-area-inset-bottom));
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.45rem;
-  width: 100%;
-  margin-top: 1rem;
-  margin-bottom: 0;
-  padding: 0.85rem max(0.75rem, env(safe-area-inset-right), 3vw)
-    max(0.85rem, env(safe-area-inset-bottom))
-    max(0.75rem, env(safe-area-inset-left), 3vw);
-  pointer-events: auto;
-  border-radius: 1.1rem 1.1rem 0 0;
-  background: #2a1c4e;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 0;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-sizing: border-box;
+  padding: 0 max(0.75rem, env(safe-area-inset-right), 3vw)
+    0 max(0.75rem, env(safe-area-inset-left), 3vw);
+  pointer-events: none;
 }
 
 .welcome-screen__store-footer-bar {
@@ -3158,6 +3147,7 @@ body:has(.welcome-screen),
     flex-direction: column;
     align-items: stretch;
     gap: 0.65rem;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
     padding-inline: max(1.25rem, env(safe-area-inset-left), 3vw)
       max(1.25rem, env(safe-area-inset-right), 3vw);
   }
@@ -3200,16 +3190,16 @@ body:has(.welcome-screen),
     min-height: 1.85rem;
     padding: 0.28rem 0.85rem 0.28rem 1rem;
     border-radius: 0.65rem;
-    background: transparent;
-    border: 0;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: rgba(42, 28, 78, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(10px) saturate(1.05);
+    -webkit-backdrop-filter: blur(10px) saturate(1.05);
     text-align: right;
     box-sizing: border-box;
   }
 
   .welcome-screen__store-footer .site-footer:not(.site-footer--plain) .site-footer__nav {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     gap: 0.55rem 0.9rem;
   }
@@ -9047,6 +9037,8 @@ body:has(.method-screen)::-webkit-scrollbar {
   display: none;
 }
 
+/* Method page: in-flow footer (must beat .welcome-screen__store-footer fixed). */
+.welcome-screen__store-footer.method-screen__store-footer,
 .method-screen__store-footer {
   position: relative;
   left: auto;
@@ -9059,14 +9051,13 @@ body:has(.method-screen)::-webkit-scrollbar {
   gap: 0.45rem;
   width: 100%;
   margin: 0.55rem 0 0;
-  padding: 0.85rem max(1rem, env(safe-area-inset-right), 4vw)
-    max(0.85rem, env(safe-area-inset-bottom))
+  padding: 0.35rem max(1rem, env(safe-area-inset-right), 4vw)
+    max(0.65rem, env(safe-area-inset-bottom))
     max(1rem, env(safe-area-inset-left), 4vw);
   pointer-events: auto;
-  border-radius: 1.1rem 1.1rem 0 0;
-  background: #2a1c4e;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-bottom: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   box-shadow: none;
@@ -9074,17 +9065,11 @@ body:has(.method-screen)::-webkit-scrollbar {
 }
 
 .method-screen__store-footer .store-badges,
+.method-screen__store-footer .store-badge,
 .method-screen__store-footer .site-footer,
+.method-screen__store-footer .install-app__store-button,
 .method-screen__store-footer a {
   pointer-events: auto;
-}
-
-.method-screen__store-footer .site-footer:not(.site-footer--plain) {
-  background: transparent;
-  border: 0;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  padding: 0;
 }
 
 .method-screen__top {
@@ -9433,6 +9418,29 @@ button.method-screen__login.active {
   align-items: center;
   gap: 0.85rem;
   margin: 0.35rem 0 0;
+}
+
+.method-screen__cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem 1.25rem;
+}
+
+.method-screen__learn-more {
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 248, 240, 0.95);
+  text-decoration: none;
+  text-underline-offset: 0.18em;
+}
+
+.method-screen__learn-more:hover,
+.method-screen__learn-more:focus-visible {
+  text-decoration: underline;
 }
 
 .method-screen__invite {
