@@ -20,6 +20,15 @@ export async function requireWtAdmin(authHeader: string | null): Promise<WtAdmin
   })
   const { data, error } = await supabase.auth.getUser(token)
   if (error || !data.user?.email) {
+    const msg = (error?.message || '').toLowerCase()
+    if (msg.includes('invalid api key')) {
+      return {
+        ok: false,
+        error:
+          'Invalid Supabase API key (check SUPABASE_ANON_KEY / VITE_SUPABASE_ANON_KEY)',
+        status: 401,
+      }
+    }
     return { ok: false, error: 'Invalid session', status: 401 }
   }
   if (data.user.email.trim().toLowerCase() !== KEA_ADMIN_EMAIL.trim().toLowerCase()) {

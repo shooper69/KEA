@@ -8,6 +8,12 @@ import {
   requireKeaTalkAccess,
   talkAccessEnvFromProcess,
 } from '../../src/server/keaTalkAccessGate'
+import {
+  actorForEmail,
+  logAiUsage,
+  lookupPlanIdAtTime,
+  openaiRequestId,
+} from '../../src/server/aiUsage/logAiUsage'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024
@@ -21,6 +27,7 @@ type TranscribeEvent = {
 
 type WhisperVerbose = {
   text?: string
+  duration?: number
   no_speech_prob?: number
   segments?: Array<{ avg_logprob?: number; no_speech_prob?: number }>
   error?: { message?: string }
@@ -133,7 +140,23 @@ export async function handler(event: TranscribeEvent) {
   )
 
   const data = (await openaiResponse.json()) as WhisperVerbose
+  const audioSeconds =
+    typeof data.duration === 'number' && data.duration > 0
+      ? data.duration
+      : bytes.length / 2000
+  const usageBase = {
+    userId: auth.userId,
+    userEmail: auth.email,
+    actor: actorForEmail(auth.userId, auth.email),
+    feature: 'transcription' as const,
+    requestType: 'audio_transcriptions' as const,
+    model: 'whisper-1',
+    planIdAtTime: await lookupPlanIdAtTime(auth.userId),
+    audioSeconds,
+    requestId: openaiRequestId(openaiResponse),
+  }
   if (!openaiResponse.ok) {
+    logAiUsage({ ...usageBase, status: 'error' })
     return {
       statusCode: 502,
       body: JSON.stringify({
@@ -141,6 +164,8 @@ export async function handler(event: TranscribeEvent) {
       }),
     }
   }
+
+  logAiUsage({ ...usageBase, status: 'ok' })
 
   const text = cleanSpokenText(data.text ?? '')
 

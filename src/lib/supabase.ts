@@ -8,10 +8,18 @@ import {
 export const KEA_SUPABASE_URL = KEA_PUBLIC_SUPABASE_URL
 export const KEA_PROJECT_REF = 'laubnngplqvsxokbfski'
 
+function usableAnonKey(value: string | undefined) {
+  const key = (value || '').trim()
+  // Reject truncated/placeholder env values so they cannot override the
+  // publishable Kea Production anon key (Supabase: "Invalid API key").
+  if (key.startsWith('eyJ') && key.split('.').length === 3 && key.length > 100) {
+    return key
+  }
+  return KEA_PUBLIC_SUPABASE_ANON_KEY
+}
+
 const url = (import.meta.env.VITE_SUPABASE_URL || KEA_SUPABASE_URL).trim()
-const anonKey = (
-  import.meta.env.VITE_SUPABASE_ANON_KEY || KEA_PUBLIC_SUPABASE_ANON_KEY
-).trim()
+const anonKey = usableAnonKey(import.meta.env.VITE_SUPABASE_ANON_KEY)
 
 let client: SupabaseClient | null = null
 

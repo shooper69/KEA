@@ -18,6 +18,13 @@ import {
   talkAccessEnvFromProcess,
 } from './keaTalkAccessGate.ts'
 import { buildKeaSystemPrompt } from './keaPrompt.ts'
+import {
+  actorForEmail,
+  logAiUsage,
+  lookupPlanIdAtTime,
+  openaiRequestId,
+  type AiUsageFeature,
+} from './aiUsage/logAiUsage.ts'
 
 interface ChatTurn {
   role: 'user' | 'assistant'
@@ -92,6 +99,8 @@ export async function handleKeaChat(
 
   const headers = reqHeaders(req)
   const ip = clientIpFromHeaders(headers)
+  let userId: string | null = null
+  let userEmail: string | null = null
   if (isPublicPlainTranslateAllowed(payload)) {
     if (!allowPublicSpend(`chat-public:${ip}`, 30)) {
       res.statusCode = 429
@@ -105,6 +114,8 @@ export async function handleKeaChat(
       res.end(JSON.stringify({ error: auth.error }))
       return
     }
+    userId = auth.userId
+    userEmail = auth.email
     const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
     if (!access.ok) {
       res.statusCode = access.status
@@ -205,9 +216,34 @@ export async function handleKeaChat(
   const data = (await openaiResponse.json()) as {
     error?: { message?: string }
     choices?: Array<{ message?: { content?: string } }>
+    usage?: { prompt_tokens?: number; completion_tokens?: number }
+  }
+
+  const feature: AiUsageFeature = isPlainTranslate
+    ? userId
+      ? 'translation'
+      : 'plain_translation'
+    : isTranslate
+      ? 'translation'
+      : 'conversation_chat'
+  const promptTokens = Number(data.usage?.prompt_tokens) || 0
+  const completionTokens = Number(data.usage?.completion_tokens) || 0
+  const planIdAtTime = await lookupPlanIdAtTime(userId)
+  const usageBase = {
+    userId,
+    userEmail,
+    actor: actorForEmail(userId, userEmail),
+    feature,
+    requestType: 'chat_completions' as const,
+    model: 'gpt-4o-mini',
+    planIdAtTime,
+    promptTokens,
+    completionTokens,
+    requestId: openaiRequestId(openaiResponse),
   }
 
   if (!openaiResponse.ok) {
+    logAiUsage({ ...usageBase, status: 'error' })
     res.statusCode = 502
     res.end(
       JSON.stringify({
@@ -219,10 +255,13 @@ export async function handleKeaChat(
 
   const reply = data.choices?.[0]?.message?.content?.trim()
   if (!reply) {
+    logAiUsage({ ...usageBase, status: 'error' })
     res.statusCode = 502
     res.end(JSON.stringify({ error: 'Empty reply from Kea' }))
     return
   }
+
+  logAiUsage({ ...usageBase, status: 'ok' })
 
   res.statusCode = 200
   res.end(

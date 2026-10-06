@@ -9,6 +9,7 @@ import { handleKeaTranscribe } from './src/server/handleKeaTranscribe.ts'
 import { handleKeaTts } from './src/server/handleKeaTts.ts'
 import { handleKeaWebsiteTrackerAdmin } from './src/server/handleKeaWebsiteTrackerAdmin.ts'
 import { handleKeaWebsiteTrackerIngest } from './src/server/handleKeaWebsiteTrackerIngest.ts'
+import { handleKeaCostsAdmin } from './src/server/handleKeaCostsAdmin.ts'
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -71,6 +72,9 @@ async function runNetlifyStyle(
 }
 
 function keaApiPlugin(env: Record<string, string>): Plugin {
+  for (const [key, value] of Object.entries(env)) {
+    if (value && !process.env[key]) process.env[key] = value
+  }
   const attach = (
     middlewares: {
       use: (
@@ -84,6 +88,20 @@ function keaApiPlugin(env: Record<string, string>): Plugin {
   ) => {
     middlewares.use((req, res, next) => {
       const url = req.url || ''
+      if (url.startsWith('/api/costs/admin')) {
+        void runNetlifyStyle(req, res, handleKeaCostsAdmin).catch(
+          (err) => {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : 'Costs admin failed',
+              }),
+            )
+          },
+        )
+        return
+      }
       if (url.startsWith('/api/website-tracker/admin')) {
         void runNetlifyStyle(req, res, handleKeaWebsiteTrackerAdmin).catch(
           (err) => {
@@ -196,19 +214,19 @@ export default defineConfig(({ mode }) => {
           lang: 'en',
           icons: [
             {
-              src: '/favicon-192.png?v=5',
+              src: '/kea-bird-icon.png?v=6',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png?v=5',
+              src: '/kea-bird-icon.png?v=6',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/favicon-512.png?v=5',
+              src: '/kea-bird-icon.png?v=6',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
   DEFAULT_PLAN_CATALOG,
-  formatDailyMinutes,
+  dailyMinutesFromHoursPerMonth,
+  formatMonthlyAllowance,
+  formatSoftDailyPace,
   formatUsd,
+  hoursPerMonthFromDaily,
   loadPlanCatalog,
   savePlanCatalog,
   subscribePlanCatalog,
@@ -110,7 +113,7 @@ export function AdminPlansPage() {
               min={1}
               max={120}
               value={catalog.trialDailyMinutes}
-              aria-label="Trial minutes each day"
+              aria-label="Trial soft daily pace in minutes"
               onChange={(event) =>
                 commit({
                   ...catalog,
@@ -118,7 +121,7 @@ export function AdminPlansPage() {
                 })
               }
             />
-            <span>minutes a day</span>
+            <span>min/day soft pace (trial)</span>
           </label>
           <span> · </span>
           <span className="settings-usage-link" aria-hidden="true">
@@ -255,7 +258,10 @@ export function AdminPlansPage() {
                   </p>
                   <p className="plan-card__tagline">{plan.tagline}</p>
                   <p className="plan-card__minutes">
-                    {formatDailyMinutes(plan.dailyMinutes)}
+                    {formatMonthlyAllowance(plan.dailyMinutes)}
+                    {plan.dailyMinutes > 0
+                      ? ` · ${formatSoftDailyPace(plan.dailyMinutes)}`
+                      : ''}
                   </p>
                   <ul>
                     {plan.bullets.map((line, bulletIndex) => (
@@ -343,20 +349,28 @@ function EditablePlanCard({
         />
       </label>
       <label className="admin-plans__field admin-plans__field--minutes">
-        <span className="visually-hidden">Minutes a day (0 = unlimited)</span>
+        <span className="visually-hidden">
+          Hours per month (0 = unlimited)
+        </span>
         <input
           type="number"
           min={0}
-          max={600}
-          value={plan.dailyMinutes}
+          max={200}
+          step={0.5}
+          value={hoursPerMonthFromDaily(plan.dailyMinutes)}
           onChange={(event) =>
             onPatch({
-              dailyMinutes: Math.round(Number(event.target.value) || 0),
+              dailyMinutes: dailyMinutesFromHoursPerMonth(
+                Number(event.target.value) || 0,
+              ),
             })
           }
         />
         <span className="admin-plans__minutes-hint">
-          {formatDailyMinutes(plan.dailyMinutes)}
+          {formatMonthlyAllowance(plan.dailyMinutes)}
+          {plan.dailyMinutes > 0
+            ? ` · ${formatSoftDailyPace(plan.dailyMinutes)}`
+            : ''}
         </span>
       </label>
       <label className="admin-plans__field admin-plans__field--bullets">

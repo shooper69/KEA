@@ -3557,6 +3557,28 @@ body:has(.welcome-screen),
   display: none;
 }
 
+/* Admin → Design → Black. Marketing pages only (home, Method, What is Kea, login/register). */
+html.kea-marketing-black .welcome-screen,
+html.kea-marketing-black .method-screen,
+html.kea-marketing-black .discovery-screen {
+  background: #050505;
+  background-image: none;
+}
+
+html.kea-marketing-black .welcome-screen::before,
+html.kea-marketing-black .method-screen::before,
+html.kea-marketing-black .discovery-screen::before,
+html.kea-marketing-black .welcome-screen .cloud-atmosphere,
+html.kea-marketing-black .method-screen .cloud-atmosphere,
+html.kea-marketing-black .discovery-screen .cloud-atmosphere {
+  opacity: 0;
+  visibility: hidden;
+}
+
+html.kea-marketing-black .auth-modal {
+  background: #050505;
+}
+
 /* MARKETING HOME LOCK — .auth-modal* (home register/login): ask user before changing.
    See .cursor/rules/marketing-home-lock.mdc */
 .auth-modal {
@@ -4378,7 +4400,7 @@ button.memory-library__target--retry {
 }
 
 .rising-words__loan {
-  color: #e06500;
+  color: #e01818;
   font-weight: 700;
 }
 
@@ -7617,7 +7639,7 @@ button.memory-library__target--retry {
     max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom))
     max(1rem, env(safe-area-inset-left));
-  background: rgba(14, 10, 36, 0.55);
+  background: #0c0a14;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -7626,19 +7648,13 @@ button.memory-library__target--retry {
   width: min(16.5rem, calc(100% - 2rem));
   padding: 0.95rem 0.95rem 0.85rem;
   border-radius: 1.15rem;
-  background:
-    linear-gradient(
-      155deg,
-      rgba(78, 48, 158, 0.92) 0%,
-      rgba(98, 52, 168, 0.88) 48%,
-      rgba(52, 78, 178, 0.86) 100%
-    );
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: linear-gradient(155deg, #4e309e 0%, #6234a8 48%, #344eb2 100%);
+  border: 1px solid #d7d0ea;
   box-shadow:
     0 16px 36px rgba(16, 8, 48, 0.36),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(18px) saturate(1.15);
-  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: kea-panel-in 0.32s ease both;
 }
 
@@ -8582,23 +8598,24 @@ button.memory-library__target--retry {
     max(1rem, env(safe-area-inset-bottom));
   background: rgba(12, 10, 18, 0.72);
   pointer-events: auto;
+  overflow: auto;
 }
 
 .audio-route__shell {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: center;
   gap: 0.65rem;
   width: fit-content;
-  max-width: calc(100% - 0.4rem);
-  max-height: min(92vh, 40rem);
+  max-width: calc(100vw - 2rem);
+  margin: auto;
   animation: kea-panel-in 0.35s ease both;
   pointer-events: auto;
 }
 
 .audio-route__shell.has-panel {
-  width: min(48rem, calc(100% - 0.4rem));
-  max-width: calc(100% - 0.4rem);
+  width: min(68rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
 }
 
 .audio-route__card,
@@ -8612,21 +8629,25 @@ button.memory-library__target--retry {
 }
 
 .audio-route__card {
-  flex: 0 1 20rem;
-  width: min(20rem, 100%);
+  flex: 0 0 18.5rem;
+  width: 18.5rem;
   padding: 1.25rem 1.15rem 1.2rem;
   text-align: center;
-  overflow: auto;
+  overflow: visible;
 }
 
 .audio-route__panel {
-  flex: 1 1 18rem;
-  width: min(22rem, 100%);
+  flex: 1 1 16rem;
+  width: min(20rem, 100%);
   max-width: 22rem;
   padding: 1rem 1rem 1.1rem;
   text-align: left;
-  overflow: auto;
+  overflow: visible;
   animation: kea-audio-panel-in 0.28s ease both;
+}
+
+.audio-route__panel--devices {
+  align-self: stretch;
 }
 
 @keyframes kea-audio-panel-in {
@@ -8861,6 +8882,37 @@ html.kea-motion .audio-route__actions .kea-button:not(:disabled) {
   cursor: default;
 }
 
+.audio-route__save {
+  appearance: none;
+  display: block;
+  width: min(9.5rem, 100%);
+  margin: 1.15rem auto 0.15rem;
+  min-height: 2.55rem;
+  padding: 0.45rem 1.1rem;
+  border: 0;
+  border-radius: 0.55rem;
+  background: linear-gradient(180deg, #3cbe63 0%, #1f9a45 100%);
+  color: #fff;
+  font-family: Calibri, Carlito, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow:
+    inset 0 -1px 0 rgba(10, 70, 30, 0.28),
+    0 2px 0 #146b30,
+    0 4px 8px rgba(16, 80, 32, 0.2);
+}
+
+.audio-route__save:hover:not(:disabled) {
+  background: linear-gradient(180deg, #49c86e 0%, #22a64c 100%);
+  color: #fff;
+}
+
+.audio-route__save:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .audio-route-settings {
   display: flex;
   flex-direction: column;
@@ -8873,12 +8925,12 @@ html.kea-motion .audio-route__actions .kea-button:not(:disabled) {
   min-height: 2.5rem;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .audio-route__shell,
   .audio-route__shell.has-panel {
     flex-direction: column;
-    width: min(22rem, calc(100% - 0.4rem));
-    max-height: min(92vh, 48rem);
+    width: min(22rem, calc(100vw - 1.5rem));
+    max-height: none;
   }
 
   .audio-route__card,
@@ -8886,10 +8938,6 @@ html.kea-motion .audio-route__actions .kea-button:not(:disabled) {
     width: 100%;
     max-width: none;
     flex: 0 0 auto;
-  }
-
-  .audio-route__panel {
-    max-height: min(52vh, 22rem);
   }
 
   @keyframes kea-audio-panel-in {
@@ -9028,6 +9076,127 @@ html.kea-motion .audio-route__actions .kea-button:not(:disabled) {
 
 .cost-chart__swatch--revenue {
   background: #2c7a7b;
+}
+
+.cost-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.cost-toolbar__days {
+  min-width: 7.5rem;
+}
+
+.cost-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.7rem;
+  margin: 0.85rem 0 0.4rem;
+}
+
+.cost-kpi {
+  border: 1px solid rgba(110, 66, 44, 0.14);
+  border-radius: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  background: rgba(255, 252, 246, 0.75);
+}
+
+.cost-kpi span,
+.cost-kpi em {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  font-style: normal;
+}
+
+.cost-kpi strong {
+  display: block;
+  margin: 0.2rem 0 0.15rem;
+  font-size: 1.05rem;
+}
+
+.cost-kpi--green {
+  box-shadow: inset 0 0 0 1px rgba(31, 107, 56, 0.35);
+}
+
+.cost-kpi--amber {
+  box-shadow: inset 0 0 0 1px rgba(168, 112, 18, 0.4);
+}
+
+.cost-kpi--red {
+  box-shadow: inset 0 0 0 1px rgba(163, 32, 32, 0.35);
+}
+
+.cost-verdict {
+  margin: 0.35rem 0 0.2rem;
+  font-weight: 650;
+}
+
+.cost-verdict--green {
+  color: #1f6b38;
+}
+
+.cost-verdict--amber {
+  color: #8a5a12;
+}
+
+.cost-verdict--red {
+  color: #a32020;
+}
+
+.cost-light {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.cost-light--green {
+  background: rgba(31, 107, 56, 0.14);
+  color: #1f6b38;
+}
+
+.cost-light--amber {
+  background: rgba(168, 112, 18, 0.16);
+  color: #8a5a12;
+}
+
+.cost-light--red {
+  background: rgba(163, 32, 32, 0.12);
+  color: #a32020;
+}
+
+.cost-toolbar--actions {
+  margin: 0.55rem 0 0.75rem;
+  align-items: center;
+}
+
+.cost-soft-pace {
+  display: inline;
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+  font-style: normal;
+  font-weight: 400;
+}
+
+.cost-apply-cell {
+  white-space: nowrap;
+}
+
+.cost-apply-btn {
+  margin: 0.15rem 0.2rem 0.15rem 0;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.cost-rate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.65rem 0.85rem;
+  margin: 0.75rem 0 0.35rem;
 }
 
 /* Website Tracker (admin) */

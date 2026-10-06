@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { getMonthlyCreditUsage } from '../../architecture/keaBilling'
-import { formatDailyMinutes } from '../../architecture/keaPlans'
+import {
+  formatMonthlyAllowance,
+  formatSoftDailyPace,
+} from '../../architecture/keaPlans'
 
 function minutesLabel(minutes: number) {
   if (minutes < 0.05) return '0 minutes'
-  if (minutes < 10) return `${minutes.toFixed(1)} minutes`
-  return `${Math.round(minutes)} minutes`
+  if (minutes < 60) {
+    if (minutes < 10) return `${minutes.toFixed(1)} minutes`
+    return `${Math.round(minutes)} minutes`
+  }
+  const hours = Math.round((minutes / 60) * 10) / 10
+  return `${hours} hour${hours === 1 ? '' : 's'}`
 }
 
 export function UsagePanel({ isAdmin }: { isAdmin: boolean }) {
@@ -20,7 +27,8 @@ export function UsagePanel({ isAdmin }: { isAdmin: boolean }) {
       <h2>Usage</h2>
       {isAdmin ? null : (
         <p className="settings-note">
-          Time left to talk this month on your plan.
+          Your plan’s talk time is a monthly allowance. The daily figure is only
+          a soft pace to help you spread it out.
         </p>
       )}
       <div
@@ -46,12 +54,17 @@ export function UsagePanel({ isAdmin }: { isAdmin: boolean }) {
         <p className="settings-note">This plan has no monthly time limit.</p>
       ) : null}
       {!isAdmin && !usage.unlimited ? (
-        <p className="settings-note">
-          {minutesLabel(usage.minutesLeft)} left this month
-          {usage.dailyMinutesAllowed
-            ? ` · ${formatDailyMinutes(usage.dailyMinutesAllowed)}.`
-            : '.'}
-        </p>
+        <>
+          <p className="settings-note">
+            {minutesLabel(usage.minutesLeft)} left this month of{' '}
+            {formatMonthlyAllowance(usage.dailyMinutesAllowed)}.
+          </p>
+          {usage.dailyMinutesAllowed > 0 ? (
+            <p className="settings-note">
+              Soft pace: {formatSoftDailyPace(usage.dailyMinutesAllowed)}.
+            </p>
+          ) : null}
+        </>
       ) : null}
     </section>
   )

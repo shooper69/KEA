@@ -88,6 +88,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/costs/admin"
+  to = "/.netlify/functions/costs-admin"
+  status = 200
+  force = true
+
 # Serve crawl files from functions so the SPA fallback cannot swallow them.
 [[redirects]]
   from = "/sitemap.xml"

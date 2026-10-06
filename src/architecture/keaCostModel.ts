@@ -53,7 +53,7 @@ export const DEFAULT_COST_ASSUMPTIONS: CostAssumptions = {
   systemPromptTokens: 2200,
   historyTurns: 6,
   userWordsPerTurn: 22,
-  targetMarginPercent: 70,
+  targetMarginPercent: 50,
   daysPerMonth: 30,
 }
 

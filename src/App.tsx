@@ -4,6 +4,7 @@ import { AdminOverview, AdminPage } from './pages/AdminPage'
 import { AdminCostAnalysisPage } from './pages/AdminCostAnalysisPage'
 import { AdminLeaveFunnelPage } from './pages/AdminLeaveFunnelPage'
 import { AdminOffersPage } from './pages/AdminOffersPage'
+import { AdminDesignPage } from './pages/AdminDesignPage'
 import { AdminHomePage } from './pages/AdminHomePage'
 import { AdminOnboardingPage } from './pages/AdminOnboardingPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
@@ -32,6 +33,7 @@ import { WelcomePage } from './pages/WelcomePage'
 import { HomePage } from './pages/HomePage'
 import type { ReactNode } from 'react'
 import { KeaPageMotion } from './components/companion/KeaPageMotion'
+import { MarketingBackgroundScope } from './components/companion/MarketingBackgroundScope'
 import { KeaSeo } from './components/companion/KeaSeo'
 import { CookieConsentBanner } from './components/companion/CookieConsentBanner'
 import { WebsiteTrackerProvider } from './components/websiteTracker/WebsiteTrackerProvider'
@@ -68,6 +70,7 @@ export default function App() {
         <KeaSeo />
         <CookieConsentBanner />
         <KeaErrorBoundary>
+        <MarketingBackgroundScope />
         <KeaPageMotion>
         <Routes>
           <Route path="/" element={<WelcomePage />} />
@@ -166,6 +169,7 @@ export default function App() {
             <Route index element={<AdminOverview />} />
             <Route path="manage-kea" element={<AdminManageKeaPage />} />
             <Route path="about" element={<Navigate to="/admin/manage-kea" replace />} />
+            <Route path="design" element={<AdminDesignPage />} />
             <Route path="home" element={<AdminHomePage />} />
             <Route path="offers" element={<AdminOffersPage />} />
             <Route path="onboarding" element={<AdminOnboardingPage />} />

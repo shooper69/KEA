@@ -346,9 +346,10 @@ function adminUsedPercent(minutesUsed: number) {
 }
 
 /**
- * Monthly credits are the daily talk cap × days in this calendar month.
- * Usage is the sum of stored daily talk seconds (there is no separate Stripe
- * usage ledger). Unlimited / admin (daily cap 0) has no monthly ceiling.
+ * Monthly entitlement = soft daily pace × days in this calendar month.
+ * The commercial SKU is monthly hours; daily pace is only a pacing guide.
+ * Usage is the sum of stored talk seconds (no separate Stripe usage ledger).
+ * Unlimited / admin (daily pace 0) has no monthly ceiling.
  */
 export function getMonthlyCreditUsage(isAdmin = false): MonthlyCreditUsage {
   const access = getTalkAccess(isAdmin)

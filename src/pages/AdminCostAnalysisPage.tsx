@@ -1,399 +1,634 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  analyseCosts,
-  loadCostAssumptions,
-  loadMonthlyCostSeries,
-  loadOpenAiRates,
-  saveCostAssumptions,
-  saveOpenAiRates,
-  type CostAssumptions,
-  type MonthlyCostPoint,
-  type OpenAiRates,
-} from '../architecture/keaCostModel'
-import { formatUsd, loadPlanCatalog } from '../architecture/keaPlans'
-import { getAverageReplyWords } from '../data/keaSpeech'
+  dailyPaceFromMonthlyMinutes,
+  formatHoursFromMinutes,
+} from '../architecture/keaCostsMath'
+import type { CostsAdminReport, CostsOptimizerRow } from '../architecture/keaCostsTypes'
+import {
+  formatUsd,
+  loadPlanCatalog,
+  savePlanCatalog,
+  type PlanId,
+} from '../architecture/keaPlans'
+import { getSupabase } from '../lib/supabase'
 
 function money(value: number) {
   return formatUsd(value)
 }
 
 function pct(value: number) {
-  return `${Math.round(value * 100)}%`
+  if (!Number.isFinite(value)) return '—'
+  return `${Math.round(value * 1000) / 10}%`
 }
 
-function formatTokens(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`
-  if (value >= 10_000) return `${Math.round(value / 1000)}k`
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`
-  return `${Math.round(value)}`
+function lightLabel(status: string) {
+  if (status === 'green') return 'Green'
+  if (status === 'amber') return 'Amber'
+  return 'Red'
 }
 
-function monthLabel(yyyyMm: string) {
-  const [year, month] = yyyyMm.split('-').map(Number)
-  return new Date(year, month - 1, 1).toLocaleString('en', {
-    month: 'short',
-    year: '2-digit',
-  })
+function hoursLabel(monthlyMinutes: number) {
+  return `${formatHoursFromMinutes(monthlyMinutes)}/mo`
 }
 
-function CostTrendChart({ points }: { points: MonthlyCostPoint[] }) {
-  const width = 720
-  const height = 260
-  const pad = { left: 56, right: 56, top: 18, bottom: 36 }
-  const innerW = width - pad.left - pad.right
-  const innerH = height - pad.top - pad.bottom
-  const maxTokens = Math.max(1, ...points.map((p) => p.tokens))
-  const maxMoney = Math.max(1, ...points.map((p) => Math.max(p.cost, p.revenue)))
-  const last = points[points.length - 1]
-  const n = points.length
-
-  function xAt(index: number) {
-    if (n <= 1) return pad.left + innerW / 2
-    return pad.left + (index / (n - 1)) * innerW
+function BreakdownTable({
+  rows,
+  firstHeader,
+}: {
+  rows: CostsAdminReport['byFeature']
+  firstHeader: string
+}) {
+  if (!rows.length) {
+    return <p className="settings-note">No usage in this window yet.</p>
   }
-
-  function yTokens(value: number) {
-    return pad.top + innerH * (1 - value / maxTokens)
-  }
-
-  function yMoney(value: number) {
-    return pad.top + innerH * (1 - value / maxMoney)
-  }
-
-  function line(key: 'tokens' | 'cost' | 'revenue', yOf: (v: number) => number) {
-    return points
-      .map((point, index) => `${xAt(index).toFixed(1)},${yOf(point[key]).toFixed(1)}`)
-      .join(' ')
-  }
-
-  const ticks = 4
-
   return (
-    <div className="cost-chart">
-      <svg
-        className="cost-chart__svg"
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="Token usage, cost, and revenue by calendar month"
-      >
-        {Array.from({ length: ticks + 1 }, (_, i) => {
-          const y = pad.top + (innerH * i) / ticks
-          const tokenTick = maxTokens * (1 - i / ticks)
-          const moneyTick = maxMoney * (1 - i / ticks)
-          return (
-            <g key={i}>
-              <line
-                className="cost-chart__grid"
-                x1={pad.left}
-                x2={width - pad.right}
-                y1={y}
-                y2={y}
-              />
-              <text className="cost-chart__axis cost-chart__axis--left" x={pad.left - 8} y={y + 4}>
-                {formatTokens(tokenTick)}
-              </text>
-              <text
-                className="cost-chart__axis cost-chart__axis--right"
-                x={width - pad.right + 8}
-                y={y + 4}
-              >
-                {money(moneyTick)}
-              </text>
-            </g>
-          )
-        })}
-        <polyline className="cost-chart__line cost-chart__line--tokens" points={line('tokens', yTokens)} />
-        <polyline className="cost-chart__line cost-chart__line--cost" points={line('cost', yMoney)} />
-        <polyline className="cost-chart__line cost-chart__line--revenue" points={line('revenue', yMoney)} />
-        {points.map((point, index) => (
-          <g key={point.month}>
-            <circle
-              className="cost-chart__dot cost-chart__dot--tokens"
-              cx={xAt(index)}
-              cy={yTokens(point.tokens)}
-              r={3.5}
-            />
-            <circle
-              className="cost-chart__dot cost-chart__dot--cost"
-              cx={xAt(index)}
-              cy={yMoney(point.cost)}
-              r={3.5}
-            />
-            <circle
-              className="cost-chart__dot cost-chart__dot--revenue"
-              cx={xAt(index)}
-              cy={yMoney(point.revenue)}
-              r={3.5}
-            />
-            <text
-              className="cost-chart__month"
-              x={xAt(index)}
-              y={height - 10}
-            >
-              {monthLabel(point.month)}
-            </text>
-          </g>
-        ))}
-      </svg>
-      <ul className="cost-chart__legend">
-        <li>
-          <span className="cost-chart__swatch cost-chart__swatch--tokens" />
-          Used {formatTokens(last?.tokens ?? 0)} tokens
-        </li>
-        <li>
-          <span className="cost-chart__swatch cost-chart__swatch--cost" />
-          Cost {money(last?.cost ?? 0)}
-        </li>
-        <li>
-          <span className="cost-chart__swatch cost-chart__swatch--revenue" />
-          Revenue {money(last?.revenue ?? 0)}
-        </li>
-      </ul>
+    <div className="cost-table-wrap">
+      <table className="cost-table">
+        <thead>
+          <tr>
+            <th>{firstHeader}</th>
+            <th>Events</th>
+            <th>Cost</th>
+            <th>Prompt tok</th>
+            <th>Completion tok</th>
+            <th>Audio sec</th>
+            <th>TTS chars</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <td>{row.label}</td>
+              <td>{row.events}</td>
+              <td>{money(row.costUsd)}</td>
+              <td>{Math.round(row.promptTokens)}</td>
+              <td>{Math.round(row.completionTokens)}</td>
+              <td>{row.audioSeconds.toFixed(1)}</td>
+              <td>{Math.round(row.ttsCharacters)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
 
+type RateDraft = {
+  whisperPerMinute: string
+  chatInputPerMillion: string
+  chatOutputPerMillion: string
+  ttsInputPerMillion: string
+  ttsAudioPerMillion: string
+  ttsHdPerMillionChars: string
+}
+
+function ratesToDraft(rates: CostsAdminReport['rates']): RateDraft {
+  return {
+    whisperPerMinute: String(rates.whisperPerMinute),
+    chatInputPerMillion: String(rates.chatInputPerMillion),
+    chatOutputPerMillion: String(rates.chatOutputPerMillion),
+    ttsInputPerMillion: String(rates.ttsInputPerMillion),
+    ttsAudioPerMillion: String(rates.ttsAudioPerMillion),
+    ttsHdPerMillionChars: String(rates.ttsHdPerMillionChars),
+  }
+}
+
+async function authHeaders() {
+  const supabase = getSupabase()
+  const {
+    data: { session },
+  } = (await supabase?.auth.getSession()) ?? { data: { session: null } }
+  if (!session?.access_token) return null
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json',
+  }
+}
+
+function isPaidPlanId(id: string): id is PlanId {
+  return id === 'starter' || id === 'companion' || id === 'unlimited'
+}
+
 export function AdminCostAnalysisPage() {
-  const [rates, setRates] = useState(loadOpenAiRates)
-  const [assume, setAssume] = useState(loadCostAssumptions)
-  const catalog = loadPlanCatalog()
-  const keaWords = getAverageReplyWords()
-  const report = useMemo(
-    () => analyseCosts(catalog, rates, assume, keaWords),
-    [assume, catalog, keaWords, rates],
-  )
-  const [series, setSeries] = useState<MonthlyCostPoint[]>(() =>
-    loadMonthlyCostSeries(rates, assume, keaWords),
-  )
+  const [days, setDays] = useState(30)
+  const [data, setData] = useState<CostsAdminReport | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [rateDraft, setRateDraft] = useState<RateDraft | null>(null)
+  const [rateBusy, setRateBusy] = useState(false)
+  const [rateNote, setRateNote] = useState<string | null>(null)
+  const [catalogNote, setCatalogNote] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setError('Sign in as admin to load live costs.')
+        setData(null)
+        return
+      }
+      const res = await fetch(`/api/costs/admin?days=${days}`, { headers })
+      const raw = await res.text()
+      let json: CostsAdminReport & { error?: string }
+      try {
+        json = JSON.parse(raw) as CostsAdminReport & { error?: string }
+      } catch {
+        setError(
+          res.status === 404 || raw.trimStart().startsWith('<!')
+            ? 'Costs API is not reachable. Restart Vite locally, or redeploy kea.chat.'
+            : `Invalid costs response (${res.status}).`,
+        )
+        setData(null)
+        return
+      }
+      if (!res.ok) {
+        setError(json.error || `Failed (${res.status})`)
+        setData(null)
+        return
+      }
+      setData(json)
+      setRateDraft(ratesToDraft(json.rates))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load')
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [days])
+
   useEffect(() => {
-    setSeries(loadMonthlyCostSeries(rates, assume, keaWords))
-  }, [assume, keaWords, rates])
+    void load()
+  }, [load])
 
-  function patchRates(patch: Partial<OpenAiRates>) {
-    const next = { ...rates, ...patch }
-    setRates(next)
-    saveOpenAiRates(next)
+  async function saveRateCard() {
+    if (!rateDraft) return
+    setRateBusy(true)
+    setRateNote(null)
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setRateNote('Sign in as admin to save the rate card.')
+        return
+      }
+      const res = await fetch('/api/costs/admin', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          whisperPerMinute: Number(rateDraft.whisperPerMinute),
+          chatInputPerMillion: Number(rateDraft.chatInputPerMillion),
+          chatOutputPerMillion: Number(rateDraft.chatOutputPerMillion),
+          ttsInputPerMillion: Number(rateDraft.ttsInputPerMillion),
+          ttsAudioPerMillion: Number(rateDraft.ttsAudioPerMillion),
+          ttsHdPerMillionChars: Number(rateDraft.ttsHdPerMillionChars),
+        }),
+      })
+      const json = (await res.json()) as {
+        error?: string
+        rates?: CostsAdminReport['rates']
+      }
+      if (!res.ok) {
+        setRateNote(json.error || `Save failed (${res.status})`)
+        return
+      }
+      setRateNote('Rate card saved. New estimates use these rates; refresh for updated COGS.')
+      await load()
+    } catch (e) {
+      setRateNote(e instanceof Error ? e.message : 'Save failed')
+    } finally {
+      setRateBusy(false)
+    }
   }
 
-  function patchAssume(patch: Partial<CostAssumptions>) {
-    const next = { ...assume, ...patch }
-    setAssume(next)
-    saveCostAssumptions(next)
+  function applyRowToCatalog(row: CostsOptimizerRow, mode: 'price' | 'allowance' | 'action') {
+    if (!isPaidPlanId(row.planId)) {
+      setCatalogNote('Trial recommendations are watch-only; they are not applied to paid catalog.')
+      return
+    }
+    const catalog = loadPlanCatalog()
+    const nextPlans = catalog.plans.map((plan) => {
+      if (plan.id !== row.planId) return plan
+      if (mode === 'price' || (mode === 'action' && row.action === 'raise_price')) {
+        return { ...plan, monthlyPrice: row.recommendedPrice }
+      }
+      if (mode === 'allowance' || (mode === 'action' && row.action === 'cut_allowance')) {
+        return {
+          ...plan,
+          dailyMinutes: dailyPaceFromMonthlyMinutes(row.recommendedMonthlyMinutes),
+        }
+      }
+      return plan
+    })
+    savePlanCatalog({ ...catalog, plans: nextPlans })
+    const label =
+      mode === 'price' || (mode === 'action' && row.action === 'raise_price')
+        ? `price → ${money(row.recommendedPrice)}`
+        : `allowance → ${hoursLabel(row.recommendedMonthlyMinutes)}`
+    setCatalogNote(
+      `Applied ${row.name} ${label} to the local plan catalog (Admin → Plans). Stripe Price IDs were not changed — update Stripe Dashboard separately if the sticker price moves.`,
+    )
   }
 
-  const rows = [report.trial, ...report.plans]
-  const startLabel = series[0] ? monthLabel(series[0].month) : monthLabel(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
-  )
+  function applyPreferredActions() {
+    if (!data) return
+    const catalog = loadPlanCatalog()
+    let changed = 0
+    const nextPlans = catalog.plans.map((plan) => {
+      const row = data.optimizer.find((item) => item.planId === plan.id)
+      if (!row || row.action === 'ok') return plan
+      changed += 1
+      if (row.action === 'raise_price') {
+        return { ...plan, monthlyPrice: row.recommendedPrice }
+      }
+      if (row.action === 'cut_allowance') {
+        return {
+          ...plan,
+          dailyMinutes: dailyPaceFromMonthlyMinutes(row.recommendedMonthlyMinutes),
+        }
+      }
+      return plan
+    })
+    if (!changed) {
+      setCatalogNote('No red-plan actions to apply.')
+      return
+    }
+    savePlanCatalog({ ...catalog, plans: nextPlans })
+    setCatalogNote(
+      `Applied preferred actions for ${changed} plan(s) to the local catalog. Stripe products/prices were not updated.`,
+    )
+  }
+
+  const overview = data?.overview
 
   return (
     <>
       <section className="settings-card">
-        <h2>Cost analysis</h2>
-        <p className="settings-note">
-          OpenAI cost for a typical day, using the models Kea actually calls:
-          Whisper (whisper-1) for listening, gpt-4o-mini for replies, and
-          gpt-4o-mini-tts when she speaks. Kea’s average reply length from About
-          Kea ({keaWords} words) is part of the chat and TTS estimate. Change
-          tier prices or daily minutes on Subscription tiers and this table
-          follows.
-        </p>
-      </section>
-      <section className="settings-card">
-        <h2>Used, cost, and revenue</h2>
-        <p className="settings-note">
-          Months from {startLabel} (when this chart first recorded on this
-          device) through the current month. New months appear as the calendar
-          moves. Token usage and cost come from talk minutes stored on this
-          device, using the same Whisper / chat / TTS model as the table below.
-          Revenue is the catalog price of a plan recorded on this device, or $0
-          if there is no subscription.
-        </p>
-        <CostTrendChart points={series} />
-      </section>
-      <section className="settings-card">
-        <h2>OpenAI rates</h2>
-        <p className="settings-note">
-          Defaults match published API prices. Update them if OpenAI changes.
-        </p>
-        <label className="welcome-field">
-          <span>Whisper whisper-1 ($ per audio minute)</span>
-          <input
-            type="number"
-            step="0.001"
-            value={rates.whisperPerMinute}
-            onChange={(event) =>
-              patchRates({ whisperPerMinute: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>gpt-4o-mini input ($ per 1M tokens)</span>
-          <input
-            type="number"
-            step="0.01"
-            value={rates.chatInputPerMillion}
-            onChange={(event) =>
-              patchRates({ chatInputPerMillion: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>gpt-4o-mini output ($ per 1M tokens)</span>
-          <input
-            type="number"
-            step="0.01"
-            value={rates.chatOutputPerMillion}
-            onChange={(event) =>
-              patchRates({ chatOutputPerMillion: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>gpt-4o-mini-tts text input ($ per 1M tokens)</span>
-          <input
-            type="number"
-            step="0.01"
-            value={rates.ttsInputPerMillion}
-            onChange={(event) =>
-              patchRates({ ttsInputPerMillion: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>gpt-4o-mini-tts audio output ($ per 1M tokens)</span>
-          <input
-            type="number"
-            step="0.1"
-            value={rates.ttsAudioPerMillion}
-            onChange={(event) =>
-              patchRates({ ttsAudioPerMillion: Number(event.target.value) })
-            }
-          />
-        </label>
-      </section>
-      <section className="settings-card">
-        <h2>Typical day</h2>
-        <label className="welcome-field">
-          <span>Typical paid user, minutes a day</span>
-          <input
-            type="number"
-            min={1}
-            value={assume.typicalDailyMinutes}
-            onChange={(event) =>
-              patchAssume({ typicalDailyMinutes: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>Typical unlimited user, minutes a day</span>
-          <input
-            type="number"
-            min={1}
-            value={assume.unlimitedTypicalMinutes}
-            onChange={(event) =>
-              patchAssume({ unlimitedTypicalMinutes: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>Share of the session that is the user speaking (0–1)</span>
-          <input
-            type="number"
-            step="0.05"
-            min={0.1}
-            max={0.8}
-            value={assume.userTalkShare}
-            onChange={(event) =>
-              patchAssume({ userTalkShare: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>Share of the session that is Kea speaking (0–1)</span>
-          <input
-            type="number"
-            step="0.05"
-            min={0.1}
-            max={0.8}
-            value={assume.keaTalkShare}
-            onChange={(event) =>
-              patchAssume({ keaTalkShare: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="welcome-field">
-          <span>Target profit margin (%)</span>
-          <input
-            type="number"
-            min={10}
-            max={90}
-            value={assume.targetMarginPercent}
-            onChange={(event) =>
-              patchAssume({ targetMarginPercent: Number(event.target.value) })
-            }
-          />
-        </label>
-      </section>
-      <section className="settings-card">
-        <h2>Profit by tier</h2>
-        <div className="cost-table-wrap">
-          <table className="cost-table">
-            <thead>
-              <tr>
-                <th>Tier</th>
-                <th>Price / mo</th>
-                <th>Day cap</th>
-                <th>AI cost / day at cap</th>
-                <th>AI cost / mo at cap</th>
-                <th>Profit at cap</th>
-                <th>Margin at cap</th>
-                <th>Typical day cost</th>
-                <th>Profit typical</th>
-                <th>Price for target margin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.name}</td>
-                  <td>{money(row.monthlyPrice)}</td>
-                  <td>
-                    {row.allowanceMinutes <= 0
-                      ? `${assume.unlimitedTypicalMinutes}m typ.`
-                      : `${row.allowanceMinutes}m`}
-                  </td>
-                  <td>{money(row.atCap.total)}</td>
-                  <td>{money(row.monthlyCostAtCap)}</td>
-                  <td className={row.profitAtCap < 0 ? 'is-loss' : 'is-gain'}>
-                    {money(row.profitAtCap)}
-                  </td>
-                  <td>{pct(row.marginAtCap)}</td>
-                  <td>{money(row.typical.total)}</td>
-                  <td className={row.profitTypical < 0 ? 'is-loss' : 'is-gain'}>
-                    {money(row.profitTypical)}
-                  </td>
-                  <td>{money(row.recommendedPrice)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="wt-admin-head">
+          <div>
+            <h2>Costs</h2>
+            <p className="settings-note">
+              Monthly economics for Kea subscriptions. Primary SKU unit is hours
+              (or minutes) per month. Daily figures are a soft pacing guide only.
+              Margin target is 50% after Stripe fees and OpenAI costs, at full
+              monthly entitlement and heavy talk intensity.
+            </p>
+          </div>
+          <div className="cost-toolbar">
+            <label className="welcome-field cost-toolbar__days">
+              <span>Usage window</span>
+              <select
+                value={days}
+                onChange={(event) => setDays(Number(event.target.value))}
+              >
+                <option value={7}>7 days</option>
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="kea-button kea-button--ghost"
+              disabled={loading}
+              onClick={() => void load()}
+            >
+              {loading ? 'Loading…' : 'Refresh'}
+            </button>
+          </div>
         </div>
-        <p className="settings-note">
-          At cap is the expensive case: every subscriber uses their full daily
-          minutes (or the unlimited typical for Unlimited). Typical is a lighter
-          day. Recommended price is monthly AI cost at cap divided by one minus
-          the target margin, so Starter / Companion / Unlimited stay profitable
-          even if people talk for the whole allowance.
-        </p>
-        {report.plans.map((row) => (
-          <p key={row.id} className="settings-note">
-            {row.name}: Whisper {money(row.atCap.whisper)} · chat{' '}
-            {money(row.atCap.chat)} · TTS {money(row.atCap.tts)} per max day (
-            {Math.round(row.atCap.turns)} turns).
-          </p>
-        ))}
+        {error ? <p className="settings-note is-loss">{error}</p> : null}
       </section>
+
+      {data && overview ? (
+        <section className="settings-card">
+          <h2>Is this month profitable?</h2>
+          <p className={`cost-verdict cost-verdict--${overview.status}`}>
+            {overview.profitable
+              ? 'Yes — at or above 50% gross margin on current MRR vs monthly-equivalent OpenAI cost.'
+              : overview.paidSubscribers === 0 && overview.openaiMonthlyEquivalent > 0
+                ? 'Not yet — OpenAI spend with no paid subscribers in this snapshot.'
+                : 'No — below the 50% gross-margin floor (after Stripe and OpenAI).'}
+          </p>
+          <div className="cost-kpis">
+            <div className="cost-kpi">
+              <span>Monthly revenue (MRR)</span>
+              <strong>{money(overview.revenue)}</strong>
+              <em>{overview.paidSubscribers} paid</em>
+            </div>
+            <div className="cost-kpi">
+              <span>Stripe fees / mo</span>
+              <strong>{money(overview.stripeFees)}</strong>
+              <em>2.9% + $0.30 / sub</em>
+            </div>
+            <div className="cost-kpi">
+              <span>Net after Stripe / mo</span>
+              <strong>{money(overview.netAfterStripe)}</strong>
+            </div>
+            <div className="cost-kpi">
+              <span>OpenAI (window)</span>
+              <strong>{money(overview.openaiCost)}</strong>
+              <em>{data.eventCount} events</em>
+            </div>
+            <div className="cost-kpi">
+              <span>OpenAI / month</span>
+              <strong>{money(overview.openaiMonthlyEquivalent)}</strong>
+            </div>
+            <div className={`cost-kpi cost-kpi--${overview.status}`}>
+              <span>Gross margin</span>
+              <strong>{pct(overview.grossMargin)}</strong>
+              <em>Profit {money(overview.grossProfit)}</em>
+            </div>
+          </div>
+          <p className="settings-note">
+            Mode:{' '}
+            {data.mode === 'observed'
+              ? 'observed usage'
+              : 'planning (not enough events yet)'}
+            . COGS used for monthly allowances:{' '}
+            {money(data.cogsPerMinute.used)} / talk-minute (planning{' '}
+            {money(data.cogsPerMinute.planning)}
+            {data.cogsPerMinute.observed != null
+              ? `; observed ${money(data.cogsPerMinute.observed)}`
+              : ''}
+            ). Green &gt; 60%, amber 50–60%, red &lt; 50%.
+          </p>
+        </section>
+      ) : null}
+
+      {data ? (
+        <>
+          <section className="settings-card">
+            <h2>Monthly pricing optimizer</h2>
+            <p className="settings-note">
+              Full monthly entitlement × heavy intensity. Prefer cutting the
+              monthly allowance before raising the sticker price. Recommendations
+              do not change Stripe — use Apply to Catalog, then update Stripe
+              Price IDs in Admin → Plans / Dashboard when ready.
+            </p>
+            {catalogNote ? (
+              <p className="settings-note settings-note--status">{catalogNote}</p>
+            ) : null}
+            <div className="cost-toolbar cost-toolbar--actions">
+              <button
+                type="button"
+                className="kea-button kea-button--ghost"
+                onClick={applyPreferredActions}
+              >
+                Apply preferred actions to catalog
+              </button>
+            </div>
+            <div className="cost-table-wrap">
+              <table className="cost-table">
+                <thead>
+                  <tr>
+                    <th>Plan</th>
+                    <th>Price / mo</th>
+                    <th>Price rec.</th>
+                    <th>Allowance / mo</th>
+                    <th>Allowance rec.</th>
+                    <th>Monthly COGS</th>
+                    <th>Net after Stripe</th>
+                    <th>Margin now</th>
+                    <th>Margin if applied</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                    <th>Apply</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.optimizer.map((row) => (
+                    <tr key={row.planId}>
+                      <td>{row.name}</td>
+                      <td>{money(row.currentPrice)}</td>
+                      <td>{money(row.recommendedPrice)}</td>
+                      <td>
+                        {hoursLabel(row.currentMonthlyMinutes)}
+                        {row.currentDailyPace > 0 ? (
+                          <em className="cost-soft-pace">
+                            {' '}
+                            (~{row.currentDailyPace} min/day)
+                          </em>
+                        ) : null}
+                      </td>
+                      <td>
+                        {hoursLabel(row.recommendedMonthlyMinutes)}
+                        {row.recommendedDailyPace > 0 ? (
+                          <em className="cost-soft-pace">
+                            {' '}
+                            (~{row.recommendedDailyPace} min/day)
+                          </em>
+                        ) : null}
+                      </td>
+                      <td>{money(row.monthlyCogsAtCap)}</td>
+                      <td>{money(row.netAfterStripe)}</td>
+                      <td className={row.currentMargin < 0.5 ? 'is-loss' : 'is-gain'}>
+                        {pct(row.currentMargin)}
+                      </td>
+                      <td>{pct(row.projectedMarginAtRecommended)}</td>
+                      <td>
+                        <span className={`cost-light cost-light--${row.status}`}>
+                          {lightLabel(row.status)}
+                        </span>
+                      </td>
+                      <td>{row.actionLabel}</td>
+                      <td className="cost-apply-cell">
+                        {isPaidPlanId(row.planId) ? (
+                          <>
+                            <button
+                              type="button"
+                              className="kea-button kea-button--ghost cost-apply-btn"
+                              onClick={() => applyRowToCatalog(row, 'price')}
+                            >
+                              Price
+                            </button>
+                            <button
+                              type="button"
+                              className="kea-button kea-button--ghost cost-apply-btn"
+                              onClick={() => applyRowToCatalog(row, 'allowance')}
+                            >
+                              Hours
+                            </button>
+                            {row.action !== 'ok' ? (
+                              <button
+                                type="button"
+                                className="kea-button cost-apply-btn"
+                                onClick={() => applyRowToCatalog(row, 'action')}
+                              >
+                                Preferred
+                              </button>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="settings-note">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2>OpenAI rate card</h2>
+            <p className="settings-note">
+              List rates used to estimate each logged call. Stored in Supabase (
+              <code>ai_rate_card</code>
+              ). If the row is missing, handlers fall back to code defaults.
+              Source now:{' '}
+              {data.rates.source === 'database' ? 'database' : 'code defaults'}
+              {data.rates.updatedAt
+                ? ` · last updated ${new Date(data.rates.updatedAt).toLocaleString()}`
+                : ''}
+              {data.rates.updatedBy ? ` by ${data.rates.updatedBy}` : ''}.
+            </p>
+            {rateDraft ? (
+              <div className="cost-rate-grid">
+                {(
+                  [
+                    ['whisperPerMinute', 'Whisper $/min'],
+                    ['chatInputPerMillion', 'Chat input $/1M tok'],
+                    ['chatOutputPerMillion', 'Chat output $/1M tok'],
+                    ['ttsInputPerMillion', 'TTS input $/1M tok'],
+                    ['ttsAudioPerMillion', 'TTS audio $/1M tok'],
+                    ['ttsHdPerMillionChars', 'tts-1-hd $/1M chars'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="welcome-field">
+                    <span>{label}</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min={0}
+                      value={rateDraft[key]}
+                      onChange={(event) =>
+                        setRateDraft({ ...rateDraft, [key]: event.target.value })
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <div className="cost-toolbar cost-toolbar--actions">
+              <button
+                type="button"
+                className="kea-button"
+                disabled={rateBusy || !rateDraft}
+                onClick={() => void saveRateCard()}
+              >
+                {rateBusy ? 'Saving…' : 'Save rate card'}
+              </button>
+              {rateNote ? <p className="settings-note">{rateNote}</p> : null}
+            </div>
+          </section>
+
+          <section className="settings-card">
+            <h2>Cost by user</h2>
+            <p className="settings-note">
+              Highest OpenAI cost first. Profit uses that user’s monthly catalog
+              price minus Stripe, vs their usage scaled to 30 days.
+            </p>
+            {data.byUser.length ? (
+              <div className="cost-table-wrap">
+                <table className="cost-table">
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Plan</th>
+                      <th>Events</th>
+                      <th>AI cost (window)</th>
+                      <th>Revenue / mo</th>
+                      <th>Profit / mo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byUser.map((row) => (
+                      <tr key={row.key}>
+                        <td>{row.label}</td>
+                        <td>{row.planId || '—'}</td>
+                        <td>{row.events}</td>
+                        <td>{money(row.costUsd)}</td>
+                        <td>{money(row.revenueUsd)}</td>
+                        <td className={row.profitUsd < 0 ? 'is-loss' : 'is-gain'}>
+                          {money(row.profitUsd)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="settings-note">No per-user events in this window.</p>
+            )}
+          </section>
+
+          <section className="settings-card">
+            <h2>Cost by feature</h2>
+            <BreakdownTable rows={data.byFeature} firstHeader="Feature" />
+          </section>
+
+          <section className="settings-card">
+            <h2>Cost by model</h2>
+            <BreakdownTable rows={data.byModel} firstHeader="Model" />
+          </section>
+
+          <section className="settings-card">
+            <h2>Cost by subscription tier</h2>
+            <BreakdownTable rows={data.byPlan} firstHeader="Plan at call time" />
+          </section>
+
+          <section className="settings-card">
+            <h2>Monthly forecast</h2>
+            <p className="settings-note">
+              Mix from current paid subscribers (equal split if none). Worst case
+              is full monthly entitlement at heavy intensity. Observed uses this
+              window’s monthly-equivalent cost per paid user.
+            </p>
+            <div className="cost-table-wrap">
+              <table className="cost-table">
+                <thead>
+                  <tr>
+                    <th>Users</th>
+                    <th>Revenue / mo</th>
+                    <th>Stripe / mo</th>
+                    <th>OpenAI worst / mo</th>
+                    <th>Margin worst</th>
+                    <th>OpenAI observed / mo</th>
+                    <th>Margin observed</th>
+                    <th>Worst status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.forecast.map((row) => (
+                    <tr key={row.users}>
+                      <td>{row.users.toLocaleString('en-US')}</td>
+                      <td>{money(row.revenue)}</td>
+                      <td>{money(row.stripeFees)}</td>
+                      <td>{money(row.openaiWorstCase)}</td>
+                      <td
+                        className={
+                          row.marginWorstCase < 0.5 ? 'is-loss' : 'is-gain'
+                        }
+                      >
+                        {pct(row.marginWorstCase)}
+                      </td>
+                      <td>{money(row.openaiObserved)}</td>
+                      <td>{pct(row.marginObserved)}</td>
+                      <td>
+                        <span
+                          className={`cost-light cost-light--${row.statusWorstCase}`}
+                        >
+                          {lightLabel(row.statusWorstCase)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      ) : null}
     </>
   )
 }

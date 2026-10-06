@@ -10,6 +10,12 @@ import {
   requireKeaTalkAccess,
   talkAccessEnvFromProcess,
 } from '../../src/server/keaTalkAccessGate'
+import {
+  actorForEmail,
+  logAiUsage,
+  lookupPlanIdAtTime,
+  openaiRequestId,
+} from '../../src/server/aiUsage/logAiUsage'
 
 const OPENAI_VOICES = new Set([
   'alloy',
@@ -37,7 +43,7 @@ async function requestSpeech(
   voice: string,
   text: string,
   extraInstructions?: string,
-) {
+): Promise<{ response: Response; model: string }> {
   const hint = extraInstructions?.trim()
   const instructions = hint
     ? `${KEA_TTS_STYLE} ${hint}`
@@ -56,8 +62,8 @@ async function requestSpeech(
       speed: KEA_TTS_SPEED,
     }),
   })
-  if (first.ok) return first
-  return fetch('https://api.openai.com/v1/audio/speech', {
+  if (first.ok) return { response: first, model: 'gpt-4o-mini-tts' }
+  const fallback = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -70,6 +76,7 @@ async function requestSpeech(
       speed: KEA_TTS_SPEED,
     }),
   })
+  return { response: fallback, model: 'tts-1-hd' }
 }
 
 type TtsEvent = {
@@ -114,7 +121,12 @@ export async function handler(event: TtsEvent) {
   }
 
   const ip = clientIpFromHeaders(event.headers)
-  if (isPublicTtsAllowed(text)) {
+  let userId: string | null = null
+  let userEmail: string | null = null
+  let feature: 'welcome_tts' | 'tts' = 'welcome_tts'
+  const authHeader = event.headers?.authorization || event.headers?.Authorization
+  const hasBearer = Boolean(authHeader?.startsWith('Bearer '))
+  if (!hasBearer && isPublicTtsAllowed(text)) {
     if (!allowPublicSpend(`tts-public:${ip}`, 20)) {
       return {
         statusCode: 429,
@@ -132,6 +144,9 @@ export async function handler(event: TtsEvent) {
     if (!auth.ok) {
       return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) }
     }
+    userId = auth.userId
+    userEmail = auth.email
+    feature = 'tts'
     const access = await requireKeaTalkAccess(talkAccessEnvFromProcess(), auth)
     if (!access.ok) {
       return {
@@ -147,14 +162,27 @@ export async function handler(event: TtsEvent) {
     }
   }
 
-  const openaiResponse = await requestSpeech(
+  const { response: openaiResponse, model } = await requestSpeech(
     apiKey,
     voice,
     text,
     payload.instructions,
   )
 
+  const usageBase = {
+    userId,
+    userEmail,
+    actor: actorForEmail(userId, userEmail),
+    feature,
+    requestType: 'audio_speech' as const,
+    model,
+    planIdAtTime: await lookupPlanIdAtTime(userId),
+    ttsCharacters: text.length,
+    requestId: openaiRequestId(openaiResponse),
+  }
+
   if (!openaiResponse.ok) {
+    logAiUsage({ ...usageBase, status: 'error' })
     const data = (await openaiResponse.json()) as { error?: { message?: string } }
     return {
       statusCode: 502,
@@ -163,6 +191,8 @@ export async function handler(event: TtsEvent) {
       }),
     }
   }
+
+  logAiUsage({ ...usageBase, status: 'ok' })
 
   const bytes = Buffer.from(await openaiResponse.arrayBuffer())
   return {

@@ -13,7 +13,8 @@ import {
   type AppliedDiscount,
 } from '../../architecture/keaDiscountCodes'
 import {
-  formatDailyMinutes,
+  formatMonthlyAllowance,
+  formatSoftDailyPace,
   loadPlanCatalog,
   subscribePlanCatalog,
   type KeaPlanCatalog,
@@ -138,14 +139,14 @@ export function SubscriptionPanel({
 
   const statusCopy =
     access.status === 'active' && access.planId
-      ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatDailyMinutes(access.dailyMinutesAllowed)}.`
+      ? `You are on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'a paid plan'}. ${formatMonthlyAllowance(access.dailyMinutesAllowed)}${access.dailyMinutesAllowed > 0 ? ` (${formatSoftDailyPace(access.dailyMinutesAllowed)})` : ''}.`
       : access.status === 'past_due' && access.planId
         ? `Payment issue on ${catalog.plans.find((item) => item.id === access.planId)?.name ?? 'your plan'}. Update your card to keep talking.`
         : access.status === 'canceled'
           ? 'Your subscription ended. Choose a plan to talk again.'
           : access.status === 'expired'
             ? 'Your trial has expired. Choose a plan to keep talking.'
-            : `${days} day${days === 1 ? '' : 's'} left on the trial · ${catalog.trialDailyMinutes} minutes a day.`
+            : `${days} day${days === 1 ? '' : 's'} left on the trial · about ${catalog.trialDailyMinutes} minutes per day.`
 
   const showPortal =
     access.status === 'active' ||
@@ -288,7 +289,10 @@ export function SubscriptionPanel({
               </p>
               <p className="plan-card__tagline">{plan.tagline}</p>
               <p className="plan-card__minutes">
-                {formatDailyMinutes(plan.dailyMinutes)}
+                {formatMonthlyAllowance(plan.dailyMinutes)}
+                {plan.dailyMinutes > 0
+                  ? ` · ${formatSoftDailyPace(plan.dailyMinutes)}`
+                  : ''}
               </p>
               <ul>
                 {plan.bullets.map((line, index) => (

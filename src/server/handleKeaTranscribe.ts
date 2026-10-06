@@ -9,6 +9,12 @@ import {
   requireKeaTalkAccess,
   talkAccessEnvFromProcess,
 } from './keaTalkAccessGate.ts'
+import {
+  actorForEmail,
+  logAiUsage,
+  lookupPlanIdAtTime,
+  openaiRequestId,
+} from './aiUsage/logAiUsage.ts'
 
 const LEARNER_PROMPT = 'Casual mixed English and Spanish, accents okay.'
 
@@ -21,6 +27,7 @@ interface TranscribeRequest {
 
 interface WhisperVerbose {
   text?: string
+  duration?: number
   no_speech_prob?: number
   segments?: Array<{
     avg_logprob?: number
@@ -163,7 +170,24 @@ export async function handleKeaTranscribe(
 
   const data = (await openaiResponse.json()) as WhisperVerbose
 
+  const audioSeconds =
+    typeof data.duration === 'number' && data.duration > 0
+      ? data.duration
+      : bytes.length / 2000
+  const usageBase = {
+    userId: auth.userId,
+    userEmail: auth.email,
+    actor: actorForEmail(auth.userId, auth.email),
+    feature: 'transcription' as const,
+    requestType: 'audio_transcriptions' as const,
+    model: 'whisper-1',
+    planIdAtTime: await lookupPlanIdAtTime(auth.userId),
+    audioSeconds,
+    requestId: openaiRequestId(openaiResponse),
+  }
+
   if (!openaiResponse.ok) {
+    logAiUsage({ ...usageBase, status: 'error' })
     res.statusCode = 502
     res.end(
       JSON.stringify({
@@ -172,6 +196,8 @@ export async function handleKeaTranscribe(
     )
     return
   }
+
+  logAiUsage({ ...usageBase, status: 'ok' })
 
   const text = cleanSpokenText(data.text ?? '')
   res.statusCode = 200

@@ -1,78 +1,23 @@
-export type PlanId = 'starter' | 'companion' | 'unlimited'
+import {
+  DAYS_PER_MONTH,
+  monthlyMinutesFromDaily,
+} from './keaCostsMath'
+import {
+  DEFAULT_PLAN_CATALOG,
+  type KeaPlan,
+  type KeaPlanCatalog,
+  type PlanId,
+} from './keaPlanCatalog'
 
-export interface KeaPlan {
-  id: PlanId
-  name: string
-  tagline: string
-  monthlyPrice: number
-  dailyMinutes: number
-  bullets: string[]
-  stripePriceId: string
-  featured: boolean
-}
-
-export interface KeaPlanCatalog {
-  trialDays: number
-  trialDailyMinutes: number
-  trialBlurb: string
-  currency: 'usd'
-  plans: KeaPlan[]
+export {
+  DEFAULT_PLAN_CATALOG,
+  type KeaPlan,
+  type KeaPlanCatalog,
+  type PlanId,
 }
 
 const STORAGE_KEY = 'kea-plan-catalog-v1'
 const CHANGE_EVENT = 'kea-plans-changed'
-
-export const DEFAULT_PLAN_CATALOG: KeaPlanCatalog = {
-  trialDays: 7,
-  trialDailyMinutes: 10,
-  trialBlurb:
-    'Seven days free, with 10 minutes of conversation a day. After that, choose a plan to keep talking with Kea.',
-  currency: 'usd',
-  plans: [
-    {
-      id: 'starter',
-      name: 'Starter',
-      tagline: 'Short daily chats.',
-      monthlyPrice: 9.99,
-      dailyMinutes: 15,
-      featured: false,
-      stripePriceId: 'price_1UJqsa6G7iCRQAR8Scrj3QK0',
-      bullets: [
-        '15 minutes of talk a day',
-        'Whisper listening and Kea’s voice',
-        'Learn List and chat topics',
-      ],
-    },
-    {
-      id: 'companion',
-      name: 'Companion',
-      tagline: 'The everyday plan.',
-      monthlyPrice: 19.99,
-      dailyMinutes: 45,
-      featured: true,
-      stripePriceId: 'price_1UJqsb6G7iCRQAR8eywbl44K',
-      bullets: [
-        '45 minutes of talk a day',
-        'All voices the admin has enabled',
-        'Best value for daily practice',
-      ],
-    },
-    {
-      id: 'unlimited',
-      name: 'Unlimited',
-      tagline: 'Talk as long as you like.',
-      monthlyPrice: 34.99,
-      dailyMinutes: 0,
-      featured: false,
-      stripePriceId: 'price_1UJqsd6G7iCRQAR87yJmgO4R',
-      bullets: [
-        'No daily time cap',
-        'Longer sessions without watching the clock',
-        'For people who live in the language',
-      ],
-    },
-  ],
-}
 
 /** Live catalog after Admin saves — same tab sees edits immediately. */
 let memoryCatalog: KeaPlanCatalog | null = null
@@ -233,7 +178,37 @@ export function formatUsd(amount: number) {
   }).format(amount)
 }
 
+/** Primary commercial unit: monthly hours (or minutes if not a clean half-hour). */
+export function formatMonthlyAllowance(dailyMinutes: number) {
+  if (dailyMinutes <= 0) return 'Unlimited'
+  const monthlyMinutes = monthlyMinutesFromDaily(dailyMinutes)
+  const hours = monthlyMinutes / 60
+  const half = Math.round(hours * 2) / 2
+  if (Math.abs(hours - half) < 0.05) {
+    return `${half} hour${half === 1 ? '' : 's'}/month`
+  }
+  return `${monthlyMinutes} minutes/month`
+}
+
+/** Soft pacing guide only — never the primary SKU label. */
+export function formatSoftDailyPace(dailyMinutes: number) {
+  if (dailyMinutes <= 0) return 'no daily cap'
+  return `about ${dailyMinutes} minutes per day`
+}
+
+/** @deprecated Prefer formatMonthlyAllowance + formatSoftDailyPace. */
 export function formatDailyMinutes(minutes: number) {
-  if (minutes <= 0) return 'Unlimited each day'
-  return `${minutes} minutes a day`
+  if (minutes <= 0) return 'Unlimited'
+  return `${formatMonthlyAllowance(minutes)} (${formatSoftDailyPace(minutes)})`
+}
+
+/** Admin input helper: hours/month ↔ stored soft daily pace. */
+export function hoursPerMonthFromDaily(dailyMinutes: number) {
+  if (dailyMinutes <= 0) return 0
+  return Math.round((dailyMinutes * DAYS_PER_MONTH) / 60 * 10) / 10
+}
+
+export function dailyMinutesFromHoursPerMonth(hoursPerMonth: number) {
+  if (!Number.isFinite(hoursPerMonth) || hoursPerMonth <= 0) return 0
+  return Math.max(1, Math.round((hoursPerMonth * 60) / DAYS_PER_MONTH))
 }
