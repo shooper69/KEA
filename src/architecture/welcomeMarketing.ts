@@ -11,6 +11,9 @@ export const WELCOME_CLOSING_LINE_EN = "I'd love to get to know you."
 export const WELCOME_CLOSING_TTS_HINT =
   'Emphasize the word "love" (or the equivalent affection word if translated) with warm sincerity — linger on it slightly so it feels heartfelt.'
 
+/** Index of the “anything-goes” line — the welcome starts this one with less pause. */
+export const WELCOME_ANYTHING_INDEX = 3
+
 export const WELCOME_FIRST_PERSON_EN = [
   "I'm a language learning chatty companion. I help you learn languages naturally through real conversation, remembered topics, and a personalised Learn List.",
   'I behave like a friend, not a teacher. As you chat, you impact my personality, and change my mood, just as you do with a friend.',

@@ -68,6 +68,13 @@ type SpeakOptions = {
   prefetchPromise?: Promise<string | null> | null
   /** Extra gpt-4o-mini-tts instructions merged with the default Kea style. */
   ttsInstructions?: string
+  /** Ms to wait after the clip ends before onend. Default 420. */
+  endTailMs?: number
+  /**
+   * Fire onend this many ms before the clip ends, so the next line can
+   * start during trailing silence. The rest of this clip is then stopped.
+   */
+  handoffEarlyMs?: number
 }
 
 /** Soft, unhurried Kea lines need a long fetch window — 16s was cutting them off. */
@@ -82,6 +89,40 @@ export function isKeaSpeaking() {
   return Boolean(
     currentAudio && !currentAudio.paused && !currentAudio.ended,
   )
+}
+
+/** True while a clip is still open, including a brief stall or pause. */
+export function keaSpeechStillOpen() {
+  const audio = currentAudio
+  return Boolean(audio && !audio.ended && !audio.error)
+}
+
+/** How far the current clip has played (ms), or 0. */
+export function keaSpeechCurrentMs() {
+  const audio = currentAudio
+  if (!audio || audio.ended) return 0
+  const time = audio.currentTime
+  if (!Number.isFinite(time) || time < 0) return 0
+  return Math.round(time * 1000)
+}
+
+/** Nudge a clip that paused or froze mid-sentence. */
+export function nudgeKeaSpeech() {
+  const audio = currentAudio
+  if (!audio || audio.ended || audio.error) return
+  const resume = () => {
+    void audio.play().catch(() => undefined)
+  }
+  if (audio.paused) {
+    resume()
+    return
+  }
+  try {
+    audio.pause()
+  } catch {
+    // ignore
+  }
+  resume()
 }
 
 /** Remaining play time for the current OpenAI clip (ms), or 0. */
@@ -202,19 +243,37 @@ async function playBlobUrl(
   audio.preload = 'auto'
   audio.onloadedmetadata = reportDuration
   audio.ondurationchange = reportDuration
+  let handedOff = false
+  let stallNudges = 0
+  const finishPlayback = (tailMs: number) => {
+    if (handedOff || gen !== speakGeneration) return
+    handedOff = true
+    clearAudioProgress()
+    options.onCharIndex?.(text.length)
+    window.setTimeout(() => {
+      if (gen === speakGeneration) options.onend?.()
+    }, tailMs)
+  }
+  const maybeHandoffEarly = () => {
+    const early = options.handoffEarlyMs
+    if (!early || handedOff || gen !== speakGeneration) return
+    const duration = audio.duration
+    if (!Number.isFinite(duration) || duration <= 0) return
+    const left = (duration - audio.currentTime) * 1000
+    if (left <= early) finishPlayback(0)
+  }
   audio.onplay = () => {
     reportDuration()
     trackAudioProgress(audio, text, options.onCharIndex)
   }
+  audio.ontimeupdate = () => {
+    maybeHandoffEarly()
+  }
   audio.onended = () => {
-    clearAudioProgress()
-    options.onCharIndex?.(text.length)
     if (revoke) URL.revokeObjectURL(url)
     if (currentAudio === audio) currentAudio = null
     // Brief tail so the last syllable is not cut by mic restart / UI unlock.
-    window.setTimeout(() => {
-      if (gen === speakGeneration) options.onend?.()
-    }, 420)
+    finishPlayback(options.endTailMs ?? 420)
   }
   audio.onerror = () => {
     clearAudioProgress()
@@ -229,6 +288,28 @@ async function playBlobUrl(
       if (revoke) URL.revokeObjectURL(url)
       if (currentAudio === audio) currentAudio = null
       options.onend?.()
+      return
+    }
+    // A stall mid-clip looks like a freeze. Resume unless this line was stopped.
+    if (!audio.ended) {
+      stallNudges += 1
+      if (stallNudges > 3) {
+        if (gen === speakGeneration) options.onerror?.()
+        return
+      }
+      window.setTimeout(() => {
+        if (
+          gen !== speakGeneration ||
+          currentAudio !== audio ||
+          audio.ended ||
+          !audio.paused
+        ) {
+          return
+        }
+        void audio.play().catch(() => {
+          if (gen === speakGeneration) options.onerror?.()
+        })
+      }, 160)
     }
   }
   try {

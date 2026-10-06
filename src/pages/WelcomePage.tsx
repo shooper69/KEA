@@ -14,12 +14,17 @@ import { OfferPopup } from '../components/companion/OfferPopup'
 import { PasswordField } from '../components/companion/PasswordField'
 import { StoreBadges } from '../components/companion/StoreBadges'
 import { HomeCommentsStrip } from '../components/companion/HomeCommentsStrip'
+import { MobileAudioRoutePopup } from '../components/companion/MobileAudioRoutePopup'
 import { SiteFooter } from '../components/companion/SiteFooter'
 import { getLanguage, SUPPORTED_LANGUAGES } from '../config/languages'
 import { isAdminEmail } from '../architecture/adminAuth'
 import { hasActiveSubscription } from '../architecture/keaBilling'
 import { getMarketingIntroVoice } from '../architecture/voiceCatalog'
-import { welcomeScriptForLanguage, WELCOME_CLOSING_TTS_HINT } from '../architecture/welcomeMarketing'
+import {
+  welcomeScriptForLanguage,
+  WELCOME_ANYTHING_INDEX,
+  WELCOME_CLOSING_TTS_HINT,
+} from '../architecture/welcomeMarketing'
 import { usePwaInstall } from '../components/companion/InstallAppButton'
 import {
   dismissHomeOffer,
@@ -91,6 +96,8 @@ export function WelcomePage() {
     isPasswordRecoveryLocation() ? 'login' : false,
   )
   const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const [audioRouteOpen, setAudioRouteOpen] = useState(false)
+  const pendingIntroLang = useRef<LanguageCode | null>(null)
   const [prospectLang, setProspectLang] = useState<LanguageCode | ''>(
     nativeLanguage || '',
   )
@@ -307,7 +314,15 @@ export function WelcomePage() {
     } catch {
       // ignore
     }
-    void playWelcomeIntro(code)
+    pendingIntroLang.current = code
+    setAudioRouteOpen(true)
+  }
+
+  function finishAudioRoute() {
+    setAudioRouteOpen(false)
+    const code = pendingIntroLang.current
+    pendingIntroLang.current = null
+    if (code) void playWelcomeIntro(code)
   }
 
   async function playWelcomeIntro(code: LanguageCode) {
@@ -337,12 +352,24 @@ export function WelcomePage() {
             )
           : null
       const gapMs = 90
+      // Fetch the anything-goes line now so it can start as soon as the line before ends.
+      if (
+        introVoice &&
+        WELCOME_ANYTHING_INDEX > 0 &&
+        WELCOME_ANYTHING_INDEX < paragraphs.length
+      ) {
+        void prefetchManagedVoiceAudio(
+          introVoice,
+          paragraphs[WELCOME_ANYTHING_INDEX],
+        )
+      }
 
       for (let index = 0; index < paragraphs.length; index++) {
         if (runId !== introRunId.current) return
         const paragraph = paragraphs[index]
         const closingHint =
           index === paragraphs.length - 1 ? WELCOME_CLOSING_TTS_HINT : undefined
+        const intoAnything = index + 1 === WELCOME_ANYTHING_INDEX
         const prefix = spokenSoFar
         const prefetchedUrl = nextUrl ? await nextUrl : null
         nextUrl =
@@ -361,6 +388,8 @@ export function WelcomePage() {
             lang: locale,
             prefetchedUrl,
             ttsInstructions: closingHint,
+            endTailMs: intoAnything ? 0 : undefined,
+            handoffEarlyMs: intoAnything ? 560 : undefined,
             onCharIndex: (charIndex: number) => {
               if (runId !== introRunId.current) return
               const piece = snapToWordEnd(paragraph, charIndex)
@@ -386,7 +415,11 @@ export function WelcomePage() {
           ? `${spokenSoFar}\n\n${paragraph}`
           : paragraph
         setVisibleCopy(spokenSoFar)
-        if (index + 1 < paragraphs.length && runId === introRunId.current) {
+        if (
+          index + 1 < paragraphs.length &&
+          index + 1 !== WELCOME_ANYTHING_INDEX &&
+          runId === introRunId.current
+        ) {
           await new Promise((resolve) => window.setTimeout(resolve, gapMs))
         }
       }
@@ -808,6 +841,9 @@ export function WelcomePage() {
             setHomeOfferOpen(false)
           }}
         />
+      ) : null}
+      {audioRouteOpen ? (
+        <MobileAudioRoutePopup onDone={finishAudioRoute} />
       ) : null}
       {leavePromptOpen && !authOpen && !isSignedIn ? (
         <LeaveAccountPopup

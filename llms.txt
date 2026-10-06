@@ -2,7 +2,7 @@
 
 > Kea is a language learning chatty companion. She talks with you like a friend — not a course, tutor, or lesson app — and remembers topics and words you struggle with.
 
-Kea is a language learning chatty companion. People pick up a language by talking with her, the way they picked up their first language: through experience, meaning, and repetition in real conversation.
+Kea is a language learning chatty companion. She talks with you like a friend so you acquire language through conversation, not through a course — the way people picked up their first language: through experience, meaning, and repetition.
 
 You speak one language and talk with Kea in another. She answers in that language, keeps the thread of what you have been talking about, and notices words and phrases you struggle with.
 
@@ -14,15 +14,17 @@ Kea is not:
 - a chatbot that drills grammar tables
 - a game with levels, stars, or ads
 
+She is a companion you talk with. Understanding comes first; speech follows naturally.
+
 ## How it works
 
-- Talk: You talk with Kea hands-free. She replies as a companion, in the language you are acquiring.
-- Learn List: When you struggle with a word or phrase, Kea keeps it on a Learn List. Items leave when you use them well.
+- Talk: You talk with Kea hands-free. She replies as a companion, in the language you are acquiring. You can choose a character and shape her mood as you talk.
+- Learn List: When you struggle with a word or phrase, Kea keeps it on a Learn List. Items leave when you start using them well in conversation.
 - Topics: Things you have spoken about are remembered so you can continue a conversation later.
 
 ## Languages
 
-English, Spanish, French, German, and Russian. You speak one and talk with Kea in another.
+Kea offers 32 languages. You speak one and talk with Kea in another.
 
 ## Public pages (use these URLs)
 

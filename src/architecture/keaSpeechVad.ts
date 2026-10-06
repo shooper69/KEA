@@ -5,14 +5,14 @@
  */
 
 /** Absolute floor — ignore soft room hiss / HVAC as “speech”. */
-export const SPEECH_RMS_FLOOR = 0.022
+export const SPEECH_RMS_FLOOR = 0.028
 /** Cap so a loud room does not silence the user entirely. */
 export const SPEECH_RMS_CAP = 0.058
 /**
  * Continuous voiced energy required before an utterance is considered started.
  * Key clicks / taps are shorter than this and never latch listening.
  */
-export const SPEECH_ONSET_MS = 260
+export const SPEECH_ONSET_MS = 380
 
 export interface KeaSpeechVad {
   threshold: number
@@ -20,7 +20,7 @@ export interface KeaSpeechVad {
   /** Call each animation frame with current RMS. */
   observe: (rms: number, opts?: { calibrating?: boolean }) => void
   /** True when this frame looks like sustained speech (not a tap spike). */
-  isSpeech: (rms: number) => boolean
+  isSpeech: (rms: number, peak?: number) => boolean
   reset: () => void
 }
 
@@ -64,12 +64,14 @@ export function createSpeechVad(initialFloor = SPEECH_RMS_FLOOR): KeaSpeechVad {
         adaptThreshold()
       }
     },
-    isSpeech(rms) {
+    isSpeech(rms, peak = rms) {
+      // Keyboard taps are a sharp peak with little sustained energy.
+      if (peak > 0.16 && peak > rms * 4.8) return false
       // Instant spike alone is not enough — smoothed level must agree.
-      const snrOk = rms > noiseFloor * 1.9 + 0.008
+      const snrOk = rms > noiseFloor * 2.15 + 0.01
       const instant =
-        rms > threshold || (snrOk && rms > SPEECH_RMS_FLOOR * 1.35)
-      const sustained = levelEma > threshold * 0.88 && levelEma > noiseFloor * 1.55
+        rms > threshold || (snrOk && rms > SPEECH_RMS_FLOOR * 1.45)
+      const sustained = levelEma > threshold * 0.92 && levelEma > noiseFloor * 1.7
       return instant && sustained
     },
     reset() {
@@ -92,23 +94,39 @@ export function connectSpeechAnalyser(
 ): {
   source: MediaStreamAudioSourceNode
   analyser: AnalyserNode
+  /** Energy above the voice band — keyboard clicks, not speech. */
+  clickAnalyser: AnalyserNode
   highpass: BiquadFilterNode
   lowpass: BiquadFilterNode
 } {
   const source = context.createMediaStreamSource(stream)
   const highpass = context.createBiquadFilter()
   highpass.type = 'highpass'
-  highpass.frequency.value = 160
+  highpass.frequency.value = 180
   highpass.Q.value = 0.85
   const lowpass = context.createBiquadFilter()
   lowpass.type = 'lowpass'
-  lowpass.frequency.value = 3400
+  lowpass.frequency.value = 3000
   lowpass.Q.value = 0.7
+  const clickHigh = context.createBiquadFilter()
+  clickHigh.type = 'highpass'
+  clickHigh.frequency.value = 4200
+  clickHigh.Q.value = 0.7
   const analyser = context.createAnalyser()
   analyser.fftSize = 2048
-  analyser.smoothingTimeConstant = 0.45
+  analyser.smoothingTimeConstant = 0.55
+  const clickAnalyser = context.createAnalyser()
+  clickAnalyser.fftSize = 1024
+  clickAnalyser.smoothingTimeConstant = 0.2
   source.connect(highpass)
   highpass.connect(lowpass)
   lowpass.connect(analyser)
-  return { source, analyser, highpass, lowpass }
+  source.connect(clickHigh)
+  clickHigh.connect(clickAnalyser)
+  return { source, analyser, clickAnalyser, highpass, lowpass }
+}
+
+/** True when this frame is a click/tap rather than voice. */
+export function frameIsClick(voiceRms: number, clickRms: number) {
+  return clickRms > 0.018 && clickRms > voiceRms * 1.05
 }

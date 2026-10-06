@@ -49,11 +49,26 @@ export function speakText(
     }
   }
   utterance.onstart = () => options.onCharIndex?.(0)
+  // Chrome pauses speechSynthesis mid-sentence and never resumes on its own.
+  const keepAlive = window.setInterval(() => {
+    const synth = window.speechSynthesis
+    if (!synth || !synth.speaking) {
+      window.clearInterval(keepAlive)
+      return
+    }
+    if (synth.paused) synth.resume()
+    else {
+      synth.pause()
+      synth.resume()
+    }
+  }, 8000)
   utterance.onend = () => {
+    window.clearInterval(keepAlive)
     options.onCharIndex?.(text.length)
     options.onend?.()
   }
   utterance.onerror = (event) => {
+    window.clearInterval(keepAlive)
     if (event.error === 'interrupted' || event.error === 'canceled') {
       options.onend?.()
       return

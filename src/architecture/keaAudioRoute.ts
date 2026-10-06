@@ -148,17 +148,14 @@ export function shouldPromptAudioRouteOnce(): boolean {
 }
 
 /**
- * Open the audio check before talk on mobile (including installed PWA).
- * Once per tab/PWA session after they choose; also after login flag.
+ * Open the mic picker whenever chat is entered, including after Reset.
+ * Desktop and phone. Do not consume a one-shot flag here: React Strict Mode
+ * mounts the page twice, and the second mount would skip the chooser.
  */
-export function shouldOpenAudioRouteCheck(options?: {
+export function shouldOpenAudioRouteCheck(_options?: {
   restartListen?: boolean
 }) {
-  if (options?.restartListen) return false
-  // After login/register, always show the chooser once (desktop + mobile).
-  if (consumeAudioRoutePromptPending()) return true
-  if (!isKeaMobileDevice()) return false
-  return shouldPromptAudioRouteOnce()
+  return true
 }
 
 export function shouldOfferAudioRoutePrompt(): boolean {

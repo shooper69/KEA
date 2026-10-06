@@ -132,9 +132,9 @@ function TimingSection() {
     <section className="settings-card">
       <h2>Answer timing</h2>
       <p className="settings-note">
-        After the learner stops talking, Kea waits this long, then starts her
-        reply. Default is {DEFAULT_ANSWER_SILENCE_SECONDS}s (fastest). Raise it
-        to slow Kea down if she cuts in early.
+        After the learner stops talking, Kea waits this long of quiet, then
+        starts her reply. Default is {DEFAULT_ANSWER_SILENCE_SECONDS} seconds
+        so she does not interrupt. Lower it if you want her to answer sooner.
       </p>
       <label className="welcome-field kea-length">
         <span>Kea starts to answer after</span>

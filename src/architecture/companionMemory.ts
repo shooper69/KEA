@@ -4,7 +4,7 @@ import {
   preferTopicLabel,
   subjectPhrase,
 } from './keaChatRecall'
-import { loadTalkTranscript } from './keaTalkMemory'
+import { loadTalkScreen, loadTalkTranscript } from './keaTalkMemory'
 import { looksLikeSystemText } from './whisperText'
 import {
   localDayKey,
@@ -79,6 +79,15 @@ const SPANISH_COMMON = new Set(
     'porque', 'cuando', 'dónde', 'donde', 'quien', 'quién', 'cual', 'cuál',
     'quiero', 'quieres', 'puede', 'puedo', 'hacer', 'decir', 'tener', 'tengo',
     'voy', 'vas', 'vamos', 'ir', 'soy', 'eres', 'somos',
+    'estoy', 'estas', 'estás', 'estamos', 'gusta', 'gustan', 'comprar', 'comer',
+    'beber', 'vivir', 'casa', 'perro', 'amigo', 'amiga', 'trabajo', 'comida',
+    'tiempo', 'gente', 'siempre', 'nunca', 'pero', 'algo', 'nada', 'todo',
+    'todos', 'estas', 'estos', 'desde', 'hasta', 'despues', 'después', 'antes',
+    'entonces', 'claro', 'vale', 'verdad', 'tarde', 'agua', 'cafe', 'café',
+    'calle', 'ciudad', 'viaje', 'dinero', 'problema', 'pregunta', 'hablando',
+    'comiendo', 'tienes', 'tiene', 'tenemos', 'podemos', 'puedes', 'quiero',
+    'haciendo', 'diciendo', 'viendo', 'yendo', 'estaba', 'estaban', 'mucho',
+    'poco', 'bien', 'tambien', 'también', 'porque', 'cuando', 'donde', 'dónde',
   ].map((w) => w.toLowerCase()),
 )
 
@@ -106,6 +115,16 @@ const ENGLISH_FALLBACK = new Set(
     'then', 'than', 'into', 'over', 'other', 'another', 'first', 'new', 'old',
     'big', 'little', 'long', 'same', 'different', 'own', 'off', 'out', 'down',
     'how', 'why', 'who', 'yes', 'football', 'soccer', 'fish',
+    'book', 'books', 'table', 'chair', 'name', 'milk', 'apple', 'pen', 'bag',
+    'umbrella', 'sandwich', 'orange', 'banana', 'chicken', 'apartment',
+    'hospital', 'keyboard', 'laptop', 'bottle',
+    'red', 'blue', 'green', 'black', 'white', 'outside', 'inside', 'using',
+    'buying', 'writing', 'drinking', 'talking', 'walking', 'running', 'working',
+    'living', 'sitting', 'standing', 'playing', 'looking', 'reading', 'eating',
+    'speaking', 'actually', 'nothing', 'everything', 'someone', 'together',
+    'already', 'usually', 'often', 'almost', 'enough', 'around', 'without',
+    'during', 'while', 'until', 'street', 'bread', 'shirt', 'shoes', 'room',
+    'door', 'bed', 'car', 'bus', 'train',
   ].map((w) => w.toLowerCase()),
 )
 const SAMPLE_TOPICS: ChatTopic[] = [
@@ -144,19 +163,6 @@ const SAMPLE_TOPICS: ChatTopic[] = [
     firstDiscussedAt: '2026-09-10T10:00:00.000Z',
     lastDiscussedAt: '2026-09-17T09:00:00.000Z',
     discussionCount: 2,
-  },
-]
-
-const SAMPLE_LEARN: LearnListItem[] = [
-  {
-    id: 'sample-about',
-    term: 'about',
-    translation: 'acerca de',
-    languageCode: 'es',
-    createdAt: '2026-09-22T18:00:00.000Z',
-    lastReviewedAt: '2026-09-22T18:00:00.000Z',
-    practiceCount: 0,
-    status: 'learning',
   },
 ]
 
@@ -264,40 +270,136 @@ function looksLikeEnglishToken(token: string) {
   if (/[áéíóúñü]/i.test(token)) return false
   if (!/^[a-zA-Z']+$/.test(token)) return false
   if (ENGLISH_FALLBACK.has(key)) return true
-  return ENGLISH_SHAPE.test(key)
+  if (ENGLISH_SHAPE.test(key)) return true
+  // w/k are rare in Spanish spelling; a tap-free content word with them is English.
+  if (key.length >= 3 && /[wk]/i.test(key)) return true
+  // Spanish words almost never end in these consonants.
+  if (key.length >= 4 && /[bcdfgkmptvw]$/i.test(key)) return true
+  // Spanish does not use the English -ing / -tion ending.
+  return key.length >= 5 && /(ing|tion|sion|ness)$/i.test(key)
+}
+
+/** Spanish words long enough that they are not also everyday English. */
+function strongSpanishCount(text: string): number {
+  if (/[¿¡]/i.test(text)) return 1
+  const tokens = text.toLowerCase().match(/[\p{L}']+/gu) ?? []
+  let hits = 0
+  for (const token of tokens) {
+    if (/[áéíóúñü]/i.test(token)) {
+      hits += 1
+      continue
+    }
+    if (token.length >= 4 && SPANISH_COMMON.has(token)) hits += 1
+  }
+  return hits
+}
+
+export type NativeIntrusionAnalysis = {
+  /** Every native-language slip to paint red in the chat line. */
+  highlights: string[]
+  /** One key word per contiguous slip group — saved on the Learn List. */
+  keyTerms: string[]
+}
+
+type SlipHit = { token: string; start: number; end: number }
+
+function pickKeyTermFromGroup(group: string[]): string {
+  const content = group.filter((token) => {
+    const key = token.toLowerCase()
+    return key.length >= 3 && !ENGLISH_SHORT.has(key)
+  })
+  const pool = content.length ? content : group
+  return [...pool].sort((a, b) => b.length - a.length || a.localeCompare(b))[0] || ''
 }
 
 /**
- * Native-language (English) words dropped into a target-language sentence.
- * These are highlighted in orange and auto-saved onto the Learn List.
- * Pure native-language lines return nothing — orange is only for mid-sentence slips.
+ * Native-language (English) words dropped into a learn-language sentence.
+ * Every native slip is painted red in place. Content words are saved on the
+ * Learn List. A whole native-language sentence returns nothing.
  */
-export function extractNativeIntrusions(text: string): string[] {
+export function analyzeNativeIntrusions(text: string): NativeIntrusionAnalysis {
+  const empty: NativeIntrusionAnalysis = { highlights: [], keyTerms: [] }
   const cleaned = text.replace(/\s+/g, ' ').trim()
-  if (!cleaned || looksLikeSystemText(cleaned)) return []
-  // Must look like a learning-language utterance first (Spanish markers).
-  if (!hasSpanishContext(cleaned) && !/[áéíóúñü¿¡]/i.test(cleaned)) {
-    return []
+  if (!cleaned || looksLikeSystemText(cleaned)) return empty
+  // A whole native sentence stays unpainted. A learn-language sentence keeps
+  // its native slips even when several English words sit in the middle.
+  if (isPrimarilyNativeEnglish(cleaned)) return empty
+  if (!hasSpanishContext(cleaned) && strongSpanishCount(cleaned) < 1) {
+    return empty
   }
-  if (isPrimarilyNativeEnglish(cleaned)) return []
 
-  const tokens = cleaned.match(/[A-Za-zÀ-ÿ']+/g) ?? []
-  const english = tokens.filter(looksLikeEnglishToken)
-  const quoted = [
-    ...cleaned.matchAll(/["«“']([A-Za-z']{3,})["»”']/g),
-  ].map((m) => m[1]).filter(looksLikeEnglishToken)
-  const candidates = [...english, ...quoted]
-  if (!candidates.length) return []
-
-  const found: string[] = []
-  const seen = new Set<string>()
-  for (const token of candidates) {
-    const key = termKey(token)
-    if (seen.has(key)) continue
-    seen.add(key)
-    found.push(normalizeTerm(token))
+  const hits: SlipHit[] = []
+  for (const match of cleaned.matchAll(/[A-Za-zÀ-ÿ']+/g)) {
+    const token = match[0]
+    if (!looksLikeEnglishToken(token)) continue
+    const start = match.index ?? 0
+    hits.push({ token, start, end: start + token.length })
   }
-  return found
+  for (const match of cleaned.matchAll(/["«“']([A-Za-z']{3,})["»”']/g)) {
+    const token = match[1]
+    if (!token || !looksLikeEnglishToken(token)) continue
+    const start = (match.index ?? 0) + 1
+    hits.push({ token, start, end: start + token.length })
+  }
+  hits.sort((a, b) => a.start - b.start || b.end - a.end)
+
+  const uniqueHits: SlipHit[] = []
+  const seenSpan = new Set<string>()
+  for (const hit of hits) {
+    const span = `${hit.start}:${hit.end}`
+    if (seenSpan.has(span)) continue
+    seenSpan.add(span)
+    uniqueHits.push(hit)
+  }
+  if (!uniqueHits.length) return empty
+
+  const groups: SlipHit[][] = []
+  for (const hit of uniqueHits) {
+    const prev = groups[groups.length - 1]
+    const last = prev?.[prev.length - 1]
+    // Same group when only spaces sit between native slips.
+    const joinsPrior =
+      Boolean(last) &&
+      (hit.start <= last!.end + 1 ||
+        /^\s+$/.test(cleaned.slice(last!.end, hit.start)))
+    if (joinsPrior && prev) {
+      prev.push(hit)
+    } else {
+      groups.push([hit])
+    }
+  }
+
+  const highlights: string[] = []
+  const keyTerms: string[] = []
+  const seenHighlight = new Set<string>()
+  const seenKey = new Set<string>()
+  for (const group of groups) {
+    for (const hit of group) {
+      const term = normalizeTerm(hit.token)
+      const key = termKey(term)
+      if (!key || seenHighlight.has(key)) continue
+      seenHighlight.add(key)
+      highlights.push(term)
+    }
+    const keyTerm = normalizeTerm(
+      pickKeyTermFromGroup(group.map((hit) => hit.token)),
+    )
+    const key = termKey(keyTerm)
+    if (!key || seenKey.has(key) || !isLearnWordPhrase(keyTerm)) continue
+    seenKey.add(key)
+    keyTerms.push(keyTerm)
+  }
+  return { highlights, keyTerms }
+}
+
+/** All native slips in a learn-language line (for red highlighting). */
+export function extractNativeIntrusions(text: string): string[] {
+  return analyzeNativeIntrusions(text).highlights
+}
+
+/** Key word from each contiguous slip group (for the Learn List). */
+export function keyNativeIntrusions(text: string): string[] {
+  return analyzeNativeIntrusions(text).keyTerms
 }
 
 const ENGLISH_SHORT = new Set(
@@ -318,7 +420,9 @@ const ENGLISH_SHORT = new Set(
 export function isPrimarilyNativeEnglish(text: string): boolean {
   const cleaned = text.replace(/\s+/g, ' ').trim()
   if (!cleaned) return false
-  if (/[áéíóúñü¿¡]/i.test(cleaned)) return false
+  // One clear Spanish word means this is a learn-language line with slips,
+  // not a native sentence — even when several English words sit in it.
+  if (strongSpanishCount(cleaned) >= 1) return false
   const tokens = cleaned.toLowerCase().match(/[a-z']+/g) ?? []
   if (tokens.length < 2) return false
   let spanish = 0
@@ -470,10 +574,34 @@ function requestedLearnListTerms(userText: string, keaReply = ''): string[] {
   const rememberHit = userText.match(ADD_WORD_REMEMBER)
   if (rememberHit?.[1]) push(rememberHit[1])
   if (SAVE_DEMONSTRATIVE.test(userText) || /\b(this|that|it)\b/i.test(addHit?.[1] ?? '')) {
-    const resolved = resolveDemonstrativeTerm(keaReply, userText)
+    const resolved = resolveDemonstrativeTerm(keaReply, userText) || recentLearnTerm()
     if (resolved) push(resolved)
   }
   return found
+}
+
+/** Word the learner means by “save this” when this turn does not name it. */
+function recentLearnTerm() {
+  const screen = loadTalkScreen()
+  for (let index = screen.length - 1; index >= 0 && index >= screen.length - 8; index -= 1) {
+    const text = screen[index]?.text ?? ''
+    const slips = keyNativeIntrusions(text)
+    if (slips.length) return slips[slips.length - 1]
+    const quoted = [...text.matchAll(QUOTED_TERM)]
+    const last = quoted.length ? normalizeTerm(quoted[quoted.length - 1]?.[1] ?? '') : ''
+    if (last && isLearnWordPhrase(last)) return last
+  }
+  return ''
+}
+
+function foldKey(value: string) {
+  return normalizeTerm(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 const OPEN_QUOTE = /["“‘'«]$/
@@ -496,7 +624,7 @@ function stripQuotesAroundHighlights(
   return next.filter((part) => part.text.length > 0)
 }
 
-/** Wrap matching words in orange highlight markers for chat display. */
+/** Wrap matching words in red highlight markers for chat display. */
 export function highlightNativeIntrusions(
   text: string,
   highlights: string[],
@@ -507,7 +635,7 @@ export function highlightNativeIntrusions(
   )
   if (!unique.length) return [{ text, highlight: false }]
   const pattern = unique.map(escapeRegExp).join('|')
-  const re = new RegExp(`(${pattern})`, 'gi')
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(?:${pattern})(?![\\p{L}\\p{N}])`, 'giu')
   const parts: Array<{ text: string; highlight: boolean }> = []
   let last = 0
   for (const match of text.matchAll(re)) {
@@ -612,11 +740,11 @@ export function splitKeaReply(raw: string): {
 
 function readLearnList(): LearnListItem[] {
   const stored = readJson<LearnListItem[]>(LEARN_KEY, [])
-  const merged = mergeById(stored, SAMPLE_LEARN)
-  if (merged !== stored && merged.length !== stored.length) {
-    writeJson(LEARN_KEY, merged)
-  }
-  return merged
+  // Demo rows used to be merged back in after every read, so a mastered
+  // sample word could never leave the list.
+  const real = stored.filter((item) => item && !String(item.id).startsWith('sample-'))
+  if (real.length !== stored.length) writeJson(LEARN_KEY, real)
+  return real
 }
 
 function readMastered(): MasteredLearnItem[] {
@@ -818,6 +946,7 @@ function markUsed(
   languageCode: LanguageCode,
   token: string,
   skipIds: Set<string>,
+  options?: { quizCorrect?: boolean },
 ) {
   const key = termKey(token)
   if (!key) return
@@ -830,10 +959,46 @@ function markUsed(
     return (target && target === key) || native === key
   })
   if (!item) return
-  item.practiceCount += 1
+  if (options?.quizCorrect) {
+    // One correct quiz answer is enough — graduateReady drops it this turn.
+    item.practiceCount = Math.max(item.practiceCount, getLearnMasteryUses())
+    item.status = 'reinforced'
+  } else {
+    item.practiceCount += 1
+    item.status =
+      item.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
+  }
   item.lastReviewedAt = new Date().toISOString()
-  item.status =
-    item.practiceCount >= getLearnMasteryUses() - 1 ? 'reinforced' : 'learning'
+}
+
+/** Short quiz reply that is the native or target form of a Learn List row. */
+function quizAnswerItem(
+  userText: string,
+  items: LearnListItem[],
+  languageCode: LanguageCode,
+): LearnListItem | null {
+  const answer = userText
+    .replace(/[.!?¿¡,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(
+      /^(it is|it's|its|that is|that's|the word is|i think|se dice|es|means|significa)\s+/i,
+      '',
+    )
+    .trim()
+  if (!answer) return null
+  const words = answer.split(/\s+/).filter(Boolean)
+  if (words.length > 8) return null
+  const key = foldKey(answer)
+  const hits = items.filter((item) => {
+    if (item.languageCode !== languageCode) return false
+    const native = foldKey(item.term)
+    const target = foldKey(item.translation)
+    if (key && (key === native || (target && key === target))) return true
+    if (hasExactPhrase(answer, item.term)) return true
+    return Boolean(item.translation && hasExactPhrase(answer, item.translation))
+  })
+  return hits.length === 1 ? hits[0] : null
 }
 
 export function applyLearnTurn(options: {
@@ -876,7 +1041,10 @@ export function applyLearnTurn(options: {
     })
   }
 
+  // Every red native word in a learn-language sentence, except short
+  // function words such as "the" and "and".
   for (const intrusion of extractNativeIntrusions(options.userText)) {
+    if (ENGLISH_SHORT.has(termKey(intrusion))) continue
     additions.push({ term: intrusion, translation: '' })
   }
 
@@ -930,8 +1098,28 @@ export function applyLearnTurn(options: {
     }
   }
 
-  for (const token of usedTokens) {
-    markUsed(items, options.languageCode, token, addedIds)
+  const quizTurn =
+    isLearnListQuizActive() &&
+    !looksLikeLearnListQuizRequest(options.userText) &&
+    !LEARN_LIST_QUIZ_DONT_KNOW.test(options.userText) &&
+    !looksLikeLearnListQuizStop(options.userText)
+  const quizMatch = quizTurn
+    ? quizAnswerItem(options.userText, items, options.languageCode)
+    : null
+  if (quizMatch) {
+    // One correct quiz answer removes that row now. Other words stay.
+    const token = quizMatch.translation || quizMatch.term
+    if (token) {
+      markUsed(items, options.languageCode, token, addedIds, {
+        quizCorrect: true,
+      })
+    }
+  }
+
+  if (!quizTurn) {
+    for (const token of usedTokens) {
+      markUsed(items, options.languageCode, token, addedIds)
+    }
   }
 
   const graduated = graduateReady(items, readMastered())
@@ -1100,14 +1288,17 @@ You are running a vocabulary test. Stay in quiz mode until they say stop, or eve
 Rules for EVERY quiz reply:
 1. Ask at most ONE new question per reply.
 2. NEVER reveal the answer to a question in the same reply that asks it. No translations, no "it is…", no hints that give the word away, until they have tried.
-3. If this turn is only starting the quiz or asking the next word: speak ONLY the question (plus a tiny warm lead-in if needed). Then stop and wait.
-4. If they just answered:
-   - Correct: brief praise, then ask the NEXT question (question only — do not give that next answer).
-   - Wrong: briefly give the correct word for the one they missed, then ask the NEXT question (question only).
-   - They say they do not know / no sé / no idea / pass: tell them the correct word briefly, then ask the NEXT question (question only).
-5. Do not end after one question. Continue through the list below.
-6. End only if they say stop / enough / no more, or the list is finished.
-7. Keep replies short. Friendly, not teacherly.
+3. Mix the direction at random, about half and half, and do not stick to one direction:
+   - Sometimes ask how to say the native-language word in the learning language.
+   - Sometimes ask how to say the learning-language word in their native language.
+4. If this turn is only starting the quiz or asking the next word: speak ONLY the question (plus a tiny warm lead-in if needed). Then stop and wait.
+5. If they just answered:
+   - Correct: brief praise, then ask the NEXT question (question only — do not give that next answer). That word leaves the Learn List.
+   - Wrong: briefly give the correct word for the one they missed, then ask the NEXT question (question only). Leave that word on the list.
+   - They say they do not know / no sé / no idea / pass: tell them the correct word briefly, then ask the NEXT question (question only). Leave that word on the list.
+6. Do not end after one question. Continue through the list below.
+7. End only if they say stop / enough / no more, or the list is finished.
+8. Keep replies short. Friendly, not teacherly.
 
 Words to test (native → target):
 ${learn || '(empty — say the list is empty, end the quiz, invite a normal chat)'}
@@ -1128,7 +1319,7 @@ Use add when they drop a native-language word into a target-language sentence, a
 ${
   quiz
     ? `
-During LEARN LIST QUIZ: put the target-language form in "used" only when they answered that quiz item correctly. Do not add new words during the quiz unless they clearly ask to save one.
+During LEARN LIST QUIZ: put the target-language form (or the native form) in "used" only when they answered that quiz item correctly. A correct answer removes that word from the Learn List immediately. A wrong answer or "I don't know" must NOT go in "used". Do not add new words during the quiz unless they clearly ask to save one.
 `
     : ''
 }

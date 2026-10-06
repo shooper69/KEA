@@ -3,6 +3,7 @@ import { openKeaMicrophone } from '../architecture/keaMicrophone'
 import {
   connectSpeechAnalyser,
   createSpeechVad,
+  frameIsClick,
   SPEECH_RMS_FLOOR,
 } from '../architecture/keaSpeechVad'
 import {
@@ -23,11 +24,12 @@ interface UseKeaWakeWordOptions {
   onWake: () => void
 }
 
-const SPEECH_HOLD_MS = 140
+const SPEECH_HOLD_MS = 160
 const SHOT_COOLDOWN_MS = 650
-const WAKE_SILENCE_MS = 280
+/** Gap inside “Hey Kea” must not end the phrase early. */
+const WAKE_SILENCE_MS = 700
 /** Longer than a key-tap; still short enough for “Hey Kea”. */
-const MIN_SPEECH_BURST_MS = 180
+const MIN_SPEECH_BURST_MS = 320
 const MAX_UTTERANCE_MS = 2200
 const RING_SECONDS = 2.0
 const AMBIENT_CALIBRATE_MS = 520
@@ -258,6 +260,10 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         if (audioContext.state === 'suspended') await audioContext.resume()
         const linked = connectSpeechAnalyser(audioContext, watchStream)
         analyser = linked.analyser
+        const clickAnalyser = linked.clickAnalyser
+        const clickSamples: Uint8Array<ArrayBuffer> = new Uint8Array(
+          new ArrayBuffer(clickAnalyser.fftSize),
+        )
         ring = new Float32Array(Math.floor(audioContext.sampleRate * RING_SECONDS))
         ringPos = 0
         // Analyser ring — avoids deprecated ScriptProcessor crashes on modern WebViews.
@@ -304,19 +310,39 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
             // Analyser can throw if the context closed mid-frame.
             return
           }
-          analyser.getByteTimeDomainData(samples)
-          let sum = 0
-          for (const value of samples) {
-            const n = (value - 128) / 128
-            sum += n * n
+          let rms = 0
+          let peak = 0
+          let clickRms = 0
+          try {
+            analyser.getByteTimeDomainData(samples)
+            let sum = 0
+            for (const value of samples) {
+              const n = (value - 128) / 128
+              const mag = Math.abs(n)
+              if (mag > peak) peak = mag
+              sum += n * n
+            }
+            rms = Math.sqrt(sum / samples.length)
+            clickAnalyser.getByteTimeDomainData(clickSamples)
+            let clickSum = 0
+            for (const value of clickSamples) {
+              const n = (value - 128) / 128
+              clickSum += n * n
+            }
+            clickRms = Math.sqrt(clickSum / clickSamples.length)
+          } catch {
+            return
           }
-          const rms = Math.sqrt(sum / samples.length)
-          const delta = now - last
+          const rawDelta = now - last
           last = now
+          // A stalled frame is not silence and not a wake.
+          if (rawDelta > 450) return
+          const delta = rawDelta
           const calibrating = now < calibrateUntil
           vad.observe(rms, { calibrating })
           if (calibrating) return
-          if (vad.isSpeech(rms)) {
+          if (frameIsClick(rms, clickRms)) return
+          if (vad.isSpeech(rms, peak)) {
             speechHold += delta
             speechBurstMs += delta
             silenceHold = 0
@@ -355,7 +381,8 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         })
       } catch (caught) {
         logWake('arm failed', caught)
-        if (!cancelled) setArmed(false)
+        if (!cancelled && preferContinuousSpeech) startContinuous()
+        else if (!cancelled) setArmed(false)
       }
     }
 
@@ -423,10 +450,9 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
       }
     }
 
-    // Desktop: continuous SpeechRecognition (Whisper energy on SR failure).
-    // Phones: Whisper energy only — browser SR pings on every start.
-    if (preferContinuousSpeech) startContinuous()
-    else void armEnergy()
+    // Whisper energy gate on every device. Browser speech often starts and
+    // then never hears “Hey Kea”; it is only a fallback if the mic will not open.
+    void armEnergy()
 
     function onVisibility() {
       if (document.visibilityState !== 'visible') {
@@ -439,8 +465,7 @@ export function useKeaWakeWord({ enabled, onWake }: UseKeaWakeWordOptions) {
         return
       }
       if (dead || waking || cancelled || !enabledRef.current) return
-      if (preferContinuousSpeech) startContinuous()
-      else void armEnergy()
+      void armEnergy()
     }
 
     function onPointerUnlock() {

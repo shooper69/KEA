@@ -28,6 +28,7 @@ import { withoutRejoinWelcomes } from '../architecture/keaStartSpeech'
 import {
   connectSpeechAnalyser,
   createSpeechVad,
+  frameIsClick,
   SPEECH_ONSET_MS,
   SPEECH_RMS_FLOOR,
 } from '../architecture/keaSpeechVad'
@@ -42,15 +43,15 @@ import {
 } from '../lib/speech'
 import { askKea, glossLearnWord, keaNameCue, translateSpanishToEnglish } from '../services/keaChat'
 import { transcribeWithWhisper } from '../services/keaTranscribe'
-import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, isKeaSpeaking, keaSpeechRemainingMs, KEA_REPLAY_START, KEA_REPLAY_END, prefetchManagedVoiceAudio } from '../services/keaSpeak'
+import { speakKeaLine, stopKeaSpeech, isKeaReplayActive, keaSpeechCurrentMs, keaSpeechRemainingMs, keaSpeechStillOpen, nudgeKeaSpeech, KEA_REPLAY_START, KEA_REPLAY_END, prefetchManagedVoiceAudio } from '../services/keaSpeak'
 import { getSpeakVoice } from '../architecture/voiceCatalog'
 import { isUsableSpeechTranscript } from '../architecture/whisperText'
 import { learnerProfilePrompt } from '../data/keaLearnerProfile'
 import {
   DEFAULT_LISTEN_IDLE_SECONDS,
-  MIN_LISTEN_IDLE_SECONDS,
+  normalizeListenIdleSeconds,
 } from '../data/keaListenIdle'
-import { heardKeaStop, oneShotSpeechRecognition, speechRecognitionPings } from '../architecture/keaWakeWord'
+import { heardKeaStop } from '../architecture/keaWakeWord'
 import {
   clearParkedTalkSession,
   parkTalkSession,
@@ -187,6 +188,8 @@ export function useVoiceConversation({
     Math.min(15, Math.max(0.5, answerAfterSilenceSeconds)) * 1000,
   )
   const mountedRef = useRef(true)
+  /** Bumped on stop / timeout so a late mic or transcript cannot revive the session. */
+  const sessionEpoch = useRef(0)
 
   useEffect(() => {
     handsFreeRef.current = handsFree
@@ -270,7 +273,9 @@ export function useVoiceConversation({
     saveTalkScreen(historyRef.current)
     appendTalkArchive(historyRef.current)
     if (isKeaReplayActive()) return
-    stopKeaSpeech()
+    // Phones fire hide/freeze when TTS starts. Cutting speech there freezes
+    // her mid-sentence and makes the session look like it died.
+    if (statusRef.current === 'speaking' || keaSpeechStillOpen()) return
     backgroundLiveRef.current = handsFreeRef.current
     releaseMicOnly()
     if (handsFreeRef.current) setStatus('listening')
@@ -278,22 +283,25 @@ export function useVoiceConversation({
 
   const resumeAfterBackground = useCallback(() => {
     if (isKeaReplayActive()) return
+    if (statusRef.current === 'speaking' || keaSpeechStillOpen()) return
     const wasLive = backgroundLiveRef.current || handsFreeRef.current
     backgroundLiveRef.current = false
-    if (!wasLive) return
+    if (!wasLive || fatalListenRef.current) return
     if (pageLiveUntilRef.current && Date.now() >= pageLiveUntilRef.current) {
       handsFreeRef.current = false
       setHandsFree(false)
+      statusRef.current = 'idle'
       setStatus('idle')
       return
     }
-    handsFreeRef.current = false
-    setHandsFree(false)
-    fatalListenRef.current = false
-    stoppingRecordRef.current = false
-    busyRef.current = false
     window.setTimeout(() => {
-      if (!fatalListenRef.current) startTalkRef.current()
+      if (fatalListenRef.current || !handsFreeRef.current) return
+      if (statusRef.current === 'speaking' || keaSpeechStillOpen()) return
+      if (streamRef.current) {
+        startListeningRef.current()
+        return
+      }
+      startTalkRef.current()
     }, 80)
   }, [])
 
@@ -442,7 +450,11 @@ export function useVoiceConversation({
     return () => {
       mountedRef.current = false
       // Leave chat: stop listening / speech, but park so return resumes without wake.
-      if (handsFreeRef.current || statusRef.current !== 'idle') {
+      // An explicit stop (bird, Stop Kea, Reset) sets fatal and must not park.
+      if (
+        !fatalListenRef.current &&
+        (handsFreeRef.current || statusRef.current !== 'idle')
+      ) {
         parkTalkSession()
       }
       try {
@@ -467,6 +479,7 @@ export function useVoiceConversation({
     clearParkedTalkSession()
     clearListenIdleTimer()
     clearRestartTimer()
+    sessionEpoch.current += 1
     handsFreeRef.current = false
     setHandsFree(false)
     pageLiveUntilRef.current = 0
@@ -474,6 +487,7 @@ export function useVoiceConversation({
     busyRef.current = false
     fatalListenRef.current = false
     teardownAudio()
+    statusRef.current = 'idle'
     setStatus('idle')
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
@@ -486,20 +500,13 @@ export function useVoiceConversation({
   const armListenIdle = useCallback((force = false) => {
     const now = Date.now()
     // Speech VAD arms this every frame — throttle refreshes.
+    const idleMs = normalizeListenIdleSeconds(listenIdleSeconds) * 1000
     if (!force && now - lastIdleArmAtRef.current < 1000) {
-      pageLiveUntilRef.current = Math.max(
-        pageLiveUntilRef.current,
-        now +
-          Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
-            1000,
-      )
+      pageLiveUntilRef.current = Math.max(pageLiveUntilRef.current, now + idleMs)
       return
     }
     lastIdleArmAtRef.current = now
     clearListenIdleTimer()
-    const idleMs =
-      Math.max(MIN_LISTEN_IDLE_SECONDS, listenIdleSeconds || DEFAULT_LISTEN_IDLE_SECONDS) *
-      1000
     pageLiveUntilRef.current = now + idleMs
     lastActivityAtRef.current = now
     window.dispatchEvent(new Event('kea-user-activity'))
@@ -511,6 +518,15 @@ export function useVoiceConversation({
         return
       }
       if (statusRef.current !== 'listening' && !handsFreeRef.current) return
+      // Never drop the session while she is still answering.
+      if (
+        statusRef.current === 'speaking' ||
+        statusRef.current === 'thinking' ||
+        keaSpeechStillOpen()
+      ) {
+        listenIdleTimerRef.current = window.setTimeout(finishIfDue, 1000)
+        return
+      }
       // Still mid-utterance — wait for silence, then stop.
       if (
         statusRef.current === 'listening' &&
@@ -554,6 +570,7 @@ export function useVoiceConversation({
   )
 
   const processRecording = useCallback(async (blob: Blob) => {
+    const epoch = sessionEpoch.current
     if (!mountedRef.current) return
     if (fatalListenRef.current || !handsFreeRef.current) return
     if (sendingRef.current) return
@@ -572,6 +589,7 @@ export function useVoiceConversation({
     try {
       logSpeech('whisper')
       const result = await transcribeWithWhisper(blob)
+      if (sessionEpoch.current !== epoch) return
       if (!mountedRef.current || fatalListenRef.current) {
         busyRef.current = false
         return
@@ -657,8 +675,12 @@ export function useVoiceConversation({
       sourceRef.current = linked.source
       analyserRef.current = linked.analyser
       const analyser = linked.analyser
+      const clickAnalyser = linked.clickAnalyser
       const samples: Uint8Array<ArrayBuffer> = new Uint8Array(
         new ArrayBuffer(analyser.fftSize),
+      )
+      const clickSamples: Uint8Array<ArrayBuffer> = new Uint8Array(
+        new ArrayBuffer(clickAnalyser.fftSize),
       )
       let last = performance.now()
       const ambientUntil = performance.now() + AMBIENT_CALIBRATE_MS
@@ -666,6 +688,7 @@ export function useVoiceConversation({
       speechVadRef.current = vad
       /** Frames that look like speech but have not yet held long enough (rejects taps). */
       let speechOnsetMs = 0
+      let stopPeeked = false
       const finishForAnswer = () => {
         if (recorder.state !== 'recording') return
         stopAnalyser()
@@ -678,43 +701,91 @@ export function useVoiceConversation({
         }
         recorder.stop()
       }
+      const peekStopPhrase = () => {
+        if (stopPeeked || busyRef.current) return
+        stopPeeked = true
+        const blob = new Blob(chunksRef.current.slice(), {
+          type: recorder.mimeType || mime || 'audio/webm',
+        })
+        if (blob.size < 2400) return
+        const epoch = sessionEpoch.current
+        void transcribeWithWhisper(blob, {
+          prompt:
+            'The speaker may say "stop Kea", "Kea stop", or "stop listening". If that is not what was said, return empty.',
+          language: 'en',
+        })
+          .then((result) => {
+            if (sessionEpoch.current !== epoch || fatalListenRef.current) return
+            if (result.text && heardKeaStop(result.text)) hardStopFromPhraseRef.current()
+          })
+          .catch(() => {
+            // A missed stop check must not end the turn.
+          })
+      }
       const tick = (now: number) => {
         rafRef.current = requestAnimationFrame(tick)
-        analyser.getByteTimeDomainData(samples)
-        let sum = 0
-        for (const value of samples) {
-          const n = (value - 128) / 128
-          sum += n * n
-        }
-        const rms = Math.sqrt(sum / samples.length)
-        const delta = now - last
-        last = now
-        const calibrating = now < ambientUntil && speechMsRef.current === 0
-        vad.observe(rms, { calibrating })
-        if (calibrating) return
-        if (vad.isSpeech(rms)) {
-          // Keyboard taps are short spikes — require sustained onset first.
-          if (speechMsRef.current === 0) {
-            speechOnsetMs += delta
-            if (speechOnsetMs < SPEECH_ONSET_MS) return
-            speechMsRef.current = speechOnsetMs
-          } else {
-            speechMsRef.current += delta
+        try {
+          analyser.getByteTimeDomainData(samples)
+          let sum = 0
+          let peak = 0
+          for (const value of samples) {
+            const n = (value - 128) / 128
+            const mag = Math.abs(n)
+            if (mag > peak) peak = mag
+            sum += n * n
           }
-          silenceMsRef.current = 0
-          armListenIdle()
-        } else {
-          speechOnsetMs = 0
-          if (speechMsRef.current > MIN_SPEECH_MS) {
-            silenceMsRef.current += delta
-            if (silenceMsRef.current >= answerSilenceMsRef.current) {
-              finishForAnswer()
-              return
+          const rms = Math.sqrt(sum / samples.length)
+          clickAnalyser.getByteTimeDomainData(clickSamples)
+          let clickSum = 0
+          for (const value of clickSamples) {
+            const n = (value - 128) / 128
+            clickSum += n * n
+          }
+          const clickRms = Math.sqrt(clickSum / clickSamples.length)
+          const rawDelta = now - last
+          last = now
+          // A stalled frame is not silence — do not answer off a hitch.
+          if (rawDelta > 450) return
+          const delta = rawDelta
+          const calibrating = now < ambientUntil && speechMsRef.current === 0
+          vad.observe(rms, { calibrating })
+          if (calibrating) return
+          if (frameIsClick(rms, clickRms) || (peak > 0.16 && peak > rms * 4.8)) return
+          if (vad.isSpeech(rms, peak)) {
+            // Keyboard taps are short spikes — require sustained onset first.
+            if (speechMsRef.current === 0) {
+              speechOnsetMs += delta
+              if (speechOnsetMs < SPEECH_ONSET_MS) return
+              speechMsRef.current = speechOnsetMs
+            } else {
+              speechMsRef.current += delta
+            }
+            silenceMsRef.current = 0
+            stopPeeked = false
+            if (speechMsRef.current > MIN_SPEECH_MS) armListenIdle()
+          } else {
+            speechOnsetMs = 0
+            if (speechMsRef.current > MIN_SPEECH_MS) {
+              silenceMsRef.current += delta
+              // Catch "Stop Kea" without waiting out the full answer silence.
+              if (
+                silenceMsRef.current >= 900 &&
+                speechMsRef.current < 3600 &&
+                silenceMsRef.current < answerSilenceMsRef.current
+              ) {
+                peekStopPhrase()
+              }
+              if (silenceMsRef.current >= answerSilenceMsRef.current) {
+                finishForAnswer()
+                return
+              }
             }
           }
-        }
-        if (now - recordStartedAtRef.current >= MAX_RECORD_MS) {
-          if (speechMsRef.current > MIN_SPEECH_MS) finishForAnswer()
+          if (now - recordStartedAtRef.current >= MAX_RECORD_MS) {
+            if (speechMsRef.current > MIN_SPEECH_MS) finishForAnswer()
+          }
+        } catch {
+          // Analyser throws if the context closed mid-frame. Keep the session up.
         }
       }
       rafRef.current = requestAnimationFrame(tick)
@@ -767,6 +838,7 @@ export function useVoiceConversation({
         }
         return
       }
+      const speakEpoch = sessionEpoch.current
       busyRef.current = true
       setStatus('speaking')
       setMessages((current) =>
@@ -782,10 +854,19 @@ export function useVoiceConversation({
         : () => {}
       let settled = false
       let safety = 0
+      let progressWatch = 0
+      let safetyHeard = -1
       const finish = () => {
+        if (sessionEpoch.current !== speakEpoch) {
+          settled = true
+          window.clearTimeout(safety)
+          window.clearInterval(progressWatch)
+          return
+        }
         if (settled) return
         settled = true
         window.clearTimeout(safety)
+        window.clearInterval(progressWatch)
         cancelStopWatch()
         busyRef.current = false
         sendingRef.current = false
@@ -812,12 +893,25 @@ export function useVoiceConversation({
         window.clearTimeout(safety)
         const wait = Math.min(SPEAK_SAFETY_MS, Math.max(2_000, ms))
         safety = window.setTimeout(() => {
-          // Still playing — extend instead of chopping the last words.
-          const left = keaSpeechRemainingMs()
-          if (isKeaSpeaking() && left > 350) {
-            logSpeech('speak safety extend', left)
-            armSafety(left + 4_000)
+          if (sessionEpoch.current !== speakEpoch) {
+            finish()
             return
+          }
+          // Keep a moving clip alive. A frozen one gets one short grace, then release.
+          if (keaSpeechStillOpen()) {
+            const left = keaSpeechRemainingMs()
+            const heard = keaSpeechCurrentMs()
+            const moving = heard > safetyHeard + 80
+            safetyHeard = heard
+            if (left > 350 || moving) {
+              logSpeech('speak safety extend', left)
+              armSafety(left > 350 ? left + 4_000 : 4_000)
+              return
+            }
+            if (wait > 3_000) {
+              armSafety(3_000)
+              return
+            }
           }
           logSpeech('speak safety unlock')
           try {
@@ -829,6 +923,33 @@ export function useVoiceConversation({
         }, wait)
       }
       armSafety(estimateSpeakBudgetMs(spoken))
+      let progressMs = -1
+      let stalls = 0
+      progressWatch = window.setInterval(() => {
+        if (settled || sessionEpoch.current !== speakEpoch) {
+          window.clearInterval(progressWatch)
+          return
+        }
+        if (!keaSpeechStillOpen()) return
+        const nowMs = keaSpeechCurrentMs()
+        if (progressMs >= 0 && nowMs <= progressMs + 80) {
+          stalls += 1
+          if (stalls === 2) nudgeKeaSpeech()
+          if (stalls >= 4) {
+            window.clearInterval(progressWatch)
+            logSpeech('speak stall — release')
+            try {
+              stopKeaSpeech()
+            } catch {
+              // ignore
+            }
+            finish()
+          }
+          return
+        }
+        stalls = 0
+        progressMs = nowMs
+      }, 1500)
       void speakKeaLine(spoken, {
         lang: getLanguage(targetLanguage).speechLocale,
         onend: finish,
@@ -853,15 +974,16 @@ export function useVoiceConversation({
       busyRef.current = true
       armListenIdle(true)
       setStatus('thinking')
+      const userSlips = extractNativeIntrusions(userText)
+      // A whole native sentence is translated up top. A learn-language sentence
+      // keeps its native slips in red — never replace that line with a gloss
+      // that wipes the red words.
       const nativeUtterance =
+        userSlips.length === 0 &&
         targetLanguage === 'es' &&
         nativeLanguage === 'en' &&
         isPrimarilyNativeEnglish(userText)
-      // Orange only for native slips inside a learn-language sentence — never on
-      // a whole native-language line (that used to paint random English words).
-      const userHighlights = nativeUtterance
-        ? []
-        : extractNativeIntrusions(userText)
+      const userHighlights = userSlips
       const userMessageId = crypto.randomUUID()
       const userMessage: TranscriptMessage = {
         id: userMessageId,
@@ -920,8 +1042,8 @@ export function useVoiceConversation({
           else setStatus('idle')
           return
         }
-        // Do not merge model "add" terms into orange highlights — that painted
-        // English words orange when the learner spoke a full native sentence.
+        // Do not merge model "add" terms into red highlights — that painted
+        // English words red when the learner spoke a full native sentence.
         const keaMessage: TranscriptMessage = {
           id: crypto.randomUUID(),
           speaker: 'kea',
@@ -1006,6 +1128,7 @@ export function useVoiceConversation({
 
   const hardStopFromPhrase = useCallback(() => {
     logSpeech('stop phrase')
+    sessionEpoch.current += 1
     clearParkedTalkSession()
     stopWatchGen.current += 1
     busyRef.current = false
@@ -1020,43 +1143,21 @@ export function useVoiceConversation({
     stoppingRecordRef.current = true
     teardownAudio()
     stopKeaSpeech()
+    statusRef.current = 'idle'
     setStatus('idle')
     setMicLabel('')
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
 
   /**
-   * While Kea is talking, listen for “Stop Kea”.
-   * Desktop: short SpeechRecognition shots. Phones: Whisper on the open mic
-   * (browser SR beeps on every start).
+   * While Kea is talking, listen for “Stop Kea” on a cloned mic track.
+   * A second recorder on the live stream crashes some browsers, and
+   * SpeechRecognition often never hears the stop phrase.
    */
   const watchStopWhileSpeaking = useCallback(() => {
     const gen = ++stopWatchGen.current
-    const mobile = speechRecognitionPings()
 
-    const tickDesktop = async () => {
-      while (
-        stopWatchGen.current === gen &&
-        handsFreeRef.current &&
-        !fatalListenRef.current
-      ) {
-        try {
-          const said = await oneShotSpeechRecognition(2200, heardKeaStop)
-          if (stopWatchGen.current !== gen) return
-          if (said && heardKeaStop(said)) {
-            hardStopFromPhrase()
-            return
-          }
-        } catch {
-          // Engine busy / denied — brief pause then retry while still speaking.
-        }
-        if (stopWatchGen.current !== gen) return
-        if (statusRef.current !== 'speaking') return
-        await new Promise((resolve) => window.setTimeout(resolve, 280))
-      }
-    }
-
-    const tickMobileWhisper = async () => {
+    const tick = async () => {
       while (
         stopWatchGen.current === gen &&
         handsFreeRef.current &&
@@ -1064,15 +1165,17 @@ export function useVoiceConversation({
         statusRef.current === 'speaking'
       ) {
         const stream = streamRef.current
-        if (!stream) {
+        const tracks = stream?.getAudioTracks().map((track) => track.clone()) ?? []
+        if (!stream || tracks.length === 0) {
           await new Promise((resolve) => window.setTimeout(resolve, 400))
           continue
         }
+        const clone = new MediaStream(tracks)
         try {
           const mime = pickRecorderMime()
           const recorder = mime
-            ? new MediaRecorder(stream, { mimeType: mime })
-            : new MediaRecorder(stream)
+            ? new MediaRecorder(clone, { mimeType: mime })
+            : new MediaRecorder(clone)
           const chunks: Blob[] = []
           recorder.ondataavailable = (event) => {
             if (event.data.size > 0) chunks.push(event.data)
@@ -1087,7 +1190,7 @@ export function useVoiceConversation({
             }
           })
           recorder.start(80)
-          await new Promise((resolve) => window.setTimeout(resolve, 1600))
+          await new Promise((resolve) => window.setTimeout(resolve, 1400))
           if (stopWatchGen.current !== gen || statusRef.current !== 'speaking') {
             try {
               if (recorder.state !== 'inactive') recorder.stop()
@@ -1115,12 +1218,13 @@ export function useVoiceConversation({
           }
         } catch {
           await new Promise((resolve) => window.setTimeout(resolve, 350))
+        } finally {
+          tracks.forEach((track) => track.stop())
         }
       }
     }
 
-    if (mobile) void tickMobileWhisper()
-    else void tickDesktop()
+    void tick()
     return () => {
       if (stopWatchGen.current === gen) stopWatchGen.current += 1
     }
@@ -1145,6 +1249,7 @@ export function useVoiceConversation({
     },
   ) => {
     if (startingRef.current || handsFreeRef.current) return
+    const epoch = sessionEpoch.current
     startingRef.current = true
     setStarting(true)
     listenWhenMicReadyRef.current = false
@@ -1266,6 +1371,10 @@ export function useVoiceConversation({
       // Brief settle so wake-word can release its tracks.
       await new Promise((resolve) => window.setTimeout(resolve, 40))
       const { stream, info } = await openKeaMicrophone()
+      if (sessionEpoch.current !== epoch || !mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       streamRef.current = stream
       setMicLabel(info.label)
       patchVoiceDiagnostics({
@@ -1305,6 +1414,7 @@ export function useVoiceConversation({
   }, [start])
 
   const stop = useCallback(() => {
+    sessionEpoch.current += 1
     clearParkedTalkSession()
     stopWatchGen.current += 1
     startingRef.current = false
@@ -1321,6 +1431,7 @@ export function useVoiceConversation({
     clearRestartTimer()
     stopKeaSpeech()
     teardownAudio()
+    statusRef.current = 'idle'
     setStatus('idle')
     patchVoiceDiagnostics({ recognitionRunning: false })
   }, [clearListenIdleTimer, clearRestartTimer, teardownAudio])
@@ -1389,5 +1500,10 @@ export function useVoiceConversation({
     pauseSpeech,
     resumeSpeech,
     stopSpeech: stopKeaSpeech,
+    /** Live session from refs, so a tap is not stuck on a stale render. */
+    isTalking: () =>
+      startingRef.current ||
+      handsFreeRef.current ||
+      statusRef.current !== 'idle',
   }
 }

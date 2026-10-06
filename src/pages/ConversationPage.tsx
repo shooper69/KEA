@@ -11,10 +11,7 @@ import { TextComposer } from '../components/companion/TextComposer'
 import { VoiceMic } from '../components/companion/VoiceMic'
 import { LearnerQuestionnaire } from '../components/companion/LearnerQuestionnaire'
 import { KEA_FLY_SRC } from '../data/keaAbout'
-import {
-  clearAudioRoutePromptPending,
-  shouldOpenAudioRouteCheck,
-} from '../architecture/keaAudioRoute'
+import { shouldOpenAudioRouteCheck } from '../architecture/keaAudioRoute'
 import {
   isTalkHeld,
   markFreshChatScreen,
@@ -95,10 +92,7 @@ export function ConversationPage() {
   const { block, setBlock, guardStart } = useTalkGate(isAdmin)
   const [restartListen] = useState(() => {
     const restarting = peekRestartListen()
-    if (restarting) {
-      clearAudioRoutePromptPending()
-      saveTextMode(false)
-    }
+    if (restarting) saveTextMode(false)
     return restarting
   })
   /** Returning from another page while Kea was live — resume listen, no wake. */
@@ -107,8 +101,20 @@ export function ConversationPage() {
     const timer = window.setTimeout(() => releaseRestartListen(), 400)
     return () => window.clearTimeout(timer)
   }, [])
-  const [audioRouteOpen, setAudioRouteOpen] = useState(() =>
-    shouldOpenAudioRouteCheck({ restartListen }),
+  const restartStamp = searchParams.get('restart') ?? ''
+  // First arrival and Reset open the mic chooser. Coming back to chat while
+  // Kea was live does not — listening resumes and the idle window restarts.
+  useEffect(() => {
+    if (parkResume) {
+      setAudioRouteOpen(false)
+      return
+    }
+    if (restartStamp || restartListen || shouldOpenAudioRouteCheck()) {
+      setAudioRouteOpen(true)
+    }
+  }, [parkResume, restartListen, restartStamp])
+  const [audioRouteOpen, setAudioRouteOpen] = useState(
+    () => !parkResume && shouldOpenAudioRouteCheck({ restartListen }),
   )
   const [popup1Open, setPopup1Open] = useState(() => shouldShowPopup1('home'))
   const [subLeaveOpen, setSubLeaveOpen] = useState(() => {
@@ -217,7 +223,7 @@ export function ConversationPage() {
 
   function beginTalking() {
     if (audioRouteOpen || spokenTour || quizOpen) return
-    if (liveRef.current) return
+    if (voice.isTalking()) return
     if (!guardStart()) return
     setOpeningDone(true)
     // Already greeted this session — just listen.
@@ -259,7 +265,7 @@ export function ConversationPage() {
   // Prefetch the short welcome-back line as soon as the page opens,
   // including while the mic chooser is on screen.
   useEffect(() => {
-    if (block || spokenTour || quizOpen || audioRouteOpen) return
+    if (block || spokenTour || quizOpen) return
     const line = buildStartSpeechLine({
       languageCode: target,
       firstName,
@@ -578,8 +584,8 @@ export function ConversationPage() {
         onToggle={() => {
           if (quizOpen) return
           wake.release()
-          // Stop wins whenever talk is live OR still arming — never ignore a stop tap.
-          if (live || voice.handsFree || voice.starting || voice.status !== 'idle') {
+          // Refs, not the last render — a stuck "speaking" state was swallowing the tap.
+          if (voice.isTalking()) {
             voice.stop()
             return
           }

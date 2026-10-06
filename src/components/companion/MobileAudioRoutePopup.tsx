@@ -227,6 +227,16 @@ export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
           >
             Not now
           </button>
+          {panel === 'pc' ? (
+            <button
+              type="button"
+              className="audio-route__save"
+              disabled={saving || !pcInputId}
+              onClick={() => void choosePc()}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          ) : null}
         </div>
 
         {panel === 'phone' ? (
@@ -274,88 +284,87 @@ export function MobileAudioRoutePopup({ onDone }: MobileAudioRoutePopupProps) {
         ) : null}
 
         {panel === 'pc' ? (
-          <aside
-            className="audio-route__panel"
-            aria-label="Computer audio options"
-          >
-            <div className="audio-route__panel-head">
-              <h3 className="audio-route__panel-title">This computer</h3>
-              <button
-                type="button"
-                className="audio-route__panel-close"
-                aria-label="Close computer options"
-                onClick={() => setPanel(null)}
-              >
-                ✕
-              </button>
-            </div>
-            <p className="audio-route__panel-note">
-              Choose the microphone Kea listens on, and where you hear her.
-            </p>
-            <div className="audio-route__device-block">
-              <p className="audio-route__device-heading">Input (microphone)</p>
-              <ul className="audio-route__device-list">
-                {inputs.length === 0 ? (
-                  <li className="audio-route__device-empty">
-                    No microphones listed yet. Allow mic access and try again.
-                  </li>
-                ) : (
-                  inputs.map((item) => (
-                    <li key={`in-${item.deviceId}`}>
-                      <button
-                        type="button"
-                        className={`audio-route__device${
-                          pcInputId === item.deviceId
-                            ? ' audio-route__device--live'
-                            : ''
-                        }`}
-                        disabled={saving}
-                        onClick={() => setPcInputId(item.deviceId)}
-                      >
-                        {deviceLabel(item, 'microphone')}
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-            <div className="audio-route__device-block">
-              <p className="audio-route__device-heading">Output (speakers)</p>
-              <ul className="audio-route__device-list">
-                {outputs.length === 0 ? (
-                  <li className="audio-route__device-empty">
-                    This browser only lists speakers after permission, or may
-                    use the system default.
-                  </li>
-                ) : (
-                  outputs.map((item) => (
-                    <li key={`out-${item.deviceId}`}>
-                      <button
-                        type="button"
-                        className={`audio-route__device${
-                          pcOutputId === item.deviceId
-                            ? ' audio-route__device--live'
-                            : ''
-                        }`}
-                        disabled={saving}
-                        onClick={() => setPcOutputId(item.deviceId)}
-                      >
-                        {deviceLabel(item, 'speakers')}
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-            <button
-              type="button"
-              className="kea-button audio-route__choice audio-route__choice--live"
-              disabled={saving || !pcInputId}
-              onClick={() => void choosePc()}
+          <>
+            <aside
+              className="audio-route__panel audio-route__panel--devices"
+              aria-label="Computer microphones"
             >
-              Use these devices
-            </button>
-          </aside>
+              <div className="audio-route__panel-head">
+                <h3 className="audio-route__panel-title">This computer</h3>
+                <button
+                  type="button"
+                  className="audio-route__panel-close"
+                  aria-label="Close computer options"
+                  onClick={() => setPanel(null)}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="audio-route__panel-note">
+                Choose the microphone Kea listens on, and where you hear her.
+              </p>
+              <div className="audio-route__device-block">
+                <p className="audio-route__device-heading">Input (microphone)</p>
+                <ul className="audio-route__device-list">
+                  {inputs.length === 0 ? (
+                    <li className="audio-route__device-empty">
+                      No microphones listed yet. Allow mic access and try again.
+                    </li>
+                  ) : (
+                    inputs.map((item) => (
+                      <li key={`in-${item.deviceId}`}>
+                        <button
+                          type="button"
+                          className={`audio-route__device${
+                            pcInputId === item.deviceId
+                              ? ' audio-route__device--live'
+                              : ''
+                          }`}
+                          disabled={saving}
+                          onClick={() => setPcInputId(item.deviceId)}
+                        >
+                          {deviceLabel(item, 'microphone')}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </aside>
+            <aside
+              className="audio-route__panel audio-route__panel--devices"
+              aria-label="Computer speakers"
+            >
+              <div className="audio-route__device-block">
+                <p className="audio-route__device-heading">Output (speakers)</p>
+                <ul className="audio-route__device-list">
+                  {outputs.length === 0 ? (
+                    <li className="audio-route__device-empty">
+                      This browser only lists speakers after permission, or may
+                      use the system default.
+                    </li>
+                  ) : (
+                    outputs.map((item) => (
+                      <li key={`out-${item.deviceId}`}>
+                        <button
+                          type="button"
+                          className={`audio-route__device${
+                            pcOutputId === item.deviceId
+                              ? ' audio-route__device--live'
+                              : ''
+                          }`}
+                          disabled={saving}
+                          onClick={() => setPcOutputId(item.deviceId)}
+                        >
+                          {deviceLabel(item, 'speakers')}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </aside>
+          </>
         ) : null}
       </div>
     </div>,

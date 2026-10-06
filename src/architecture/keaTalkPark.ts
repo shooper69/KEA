@@ -5,8 +5,11 @@
  */
 
 const PARK_KEY = 'kea-talk-parked-v1'
+/** Survives React strict-mode’s extra mount so the flag is not consumed twice. */
+let parkedLatch: boolean | null = null
 
 export function parkTalkSession() {
+  parkedLatch = null
   try {
     sessionStorage.setItem(PARK_KEY, '1')
   } catch {
@@ -15,6 +18,7 @@ export function parkTalkSession() {
 }
 
 export function clearParkedTalkSession() {
+  parkedLatch = null
   try {
     sessionStorage.removeItem(PARK_KEY)
   } catch {
@@ -24,13 +28,14 @@ export function clearParkedTalkSession() {
 
 /** True once if a live session was parked; clears the flag. */
 export function consumeParkedTalkSession() {
+  if (parkedLatch !== null) return parkedLatch
   try {
-    if (sessionStorage.getItem(PARK_KEY) !== '1') return false
-    sessionStorage.removeItem(PARK_KEY)
-    return true
+    parkedLatch = sessionStorage.getItem(PARK_KEY) === '1'
+    if (parkedLatch) sessionStorage.removeItem(PARK_KEY)
   } catch {
-    return false
+    parkedLatch = false
   }
+  return parkedLatch
 }
 
 export function isTalkParked() {

@@ -158,11 +158,9 @@ function readProfile(): StoredProfile {
           answerAfterSilenceSeconds >= 0.5
         ) {
           const n = Math.min(15, Math.round(answerAfterSilenceSeconds * 2) / 2)
-          // Old shipped defaults were 3s / 2s — prefer the current fast default.
-          if (
-            (n === 3 || n === 2) &&
-            migrated === DEFAULT_ANSWER_SILENCE_SECONDS
-          ) {
+          // One-time bump: waits under 6s were cutting in mid-thought.
+          // After that, a settings choice (faster or slower) is kept.
+          if (n < DEFAULT_ANSWER_SILENCE_SECONDS && migrated === DEFAULT_ANSWER_SILENCE_SECONDS) {
             return DEFAULT_ANSWER_SILENCE_SECONDS
           }
           return n
@@ -380,7 +378,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         targetLanguage:
           cloud?.targetLanguage || metaTarget || current.targetLanguage,
         preferredVoice: cloud?.preferredVoice ?? current.preferredVoice,
-        listenIdleSeconds: cloud?.listenIdleSeconds ?? current.listenIdleSeconds,
+        listenIdleSeconds: normalizeListenIdleSeconds(
+          cloud?.listenIdleSeconds ?? current.listenIdleSeconds,
+        ),
         skyTheme: cloud?.skyTheme ?? current.skyTheme,
         chatKeep: cloud?.chatKeep ?? current.chatKeep,
         notifyMemory: cloud?.notifyMemory ?? current.notifyMemory,

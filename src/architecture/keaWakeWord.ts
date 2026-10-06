@@ -43,6 +43,14 @@ export function heardKeaWake(text: string) {
   if (new RegExp(`\\b${KEA_TOKEN}\\s+(listen|wake|start|talk)\\b`).test(tail)) {
     return true
   }
+  // Short call even with a filler: "hey uh kea", "yo kea please".
+  if (
+    words.length <= 8 &&
+    new RegExp(`\\b${HEY_TOKEN}\\b`).test(tail) &&
+    new RegExp(`\\b${KEA_TOKEN}\\b`).test(tail)
+  ) {
+    return true
+  }
 
   const compact = tail.replace(/\s+/g, '')
   if (
@@ -73,13 +81,11 @@ export function heardKeaStop(text: string) {
     return true
   }
   // Short alone when the whole utterance is just stop / quit talking.
-  if (/^(stop|quit|end|pause|enough)(\s+(please|now))?$/.test(n)) {
+  // Bare "end" / "enough" are common noise transcripts and must not kill the session.
+  if (/^(stop|quit|pause)(\s+(please|now|kea|kia|keya))?$/.test(n)) {
     return true
   }
   if (/^(stop|quit|pause)\s+(listening|talking|please|now)$/.test(n)) {
-    return true
-  }
-  if (/^(that('|’)s|thats)\s+enough$/.test(n)) {
     return true
   }
   // Compact / slurred phone ASR: "stopkea", "stoplisten"

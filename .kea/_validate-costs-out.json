@@ -1,0 +1,8 @@
+﻿{
+  "env": {
+    "hasServiceRole": false,
+    "hasUrl": true,
+    "urlHost": "laubnngplqvsxokbfski.supabase.co"
+  },
+  "error": "Missing Kea service role / URL ÔÇö cannot query live table"
+}
