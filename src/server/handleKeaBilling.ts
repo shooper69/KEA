@@ -12,6 +12,7 @@ import {
   type KeaPlanId,
 } from './keaStripeBilling.ts'
 import { requireKeaUser } from './keaUserAuth.ts'
+import { postCreatorQuestEvent } from './creatorquest.ts'
 
 type BillingEnv = {
   STRIPE_SECRET_KEY?: string
@@ -324,9 +325,84 @@ export async function handleKeaBilling(
         const invoice = object
         const subscriptionId =
           typeof invoice.subscription === 'string' ? invoice.subscription : null
+        let subscriptionData: Record<string, unknown> | null = null
         if (subscriptionId && key) {
           const { ok, data } = await stripeGet(key, `subscriptions/${subscriptionId}`)
-          if (ok) await applySubscriptionToProfile(env, data)
+          if (ok) {
+            subscriptionData = data
+            await applySubscriptionToProfile(env, data)
+          }
+        }
+        const amountPaid =
+          typeof invoice.amount_paid === 'number' ? invoice.amount_paid : 0
+        const currency =
+          typeof invoice.currency === 'string' ? invoice.currency : null
+        const invoiceId = typeof invoice.id === 'string' ? invoice.id : null
+        const customerId =
+          typeof invoice.customer === 'string' ? invoice.customer : null
+        const parsed = subscriptionData
+          ? planFromSubscriptionObject(subscriptionData)
+          : { userId: null as string | null, planId: null }
+        const externalUserId =
+          (typeof (invoice.metadata as { userId?: string } | undefined)?.userId ===
+          'string'
+            ? (invoice.metadata as { userId: string }).userId
+            : null) || parsed.userId
+        if (externalUserId && invoiceId && amountPaid > 0 && currency) {
+          const paymentId =
+            typeof invoice.payment_intent === 'string'
+              ? invoice.payment_intent
+              : null
+          await postCreatorQuestEvent(
+            {
+              CREATORQUEST_EVENTS_URL: process.env.CREATORQUEST_EVENTS_URL,
+              CREATORQUEST_APP_KEY: process.env.CREATORQUEST_APP_KEY,
+            },
+            {
+              type: 'invoice_paid',
+              external_user_id: externalUserId,
+              customer_id: customerId,
+              external_subscription_id: subscriptionId,
+              invoice_id: invoiceId,
+              payment_id: paymentId,
+              amount_paid_minor: amountPaid,
+              currency,
+              billing_interval: 'month',
+              paid_at: new Date().toISOString(),
+              customer_email:
+                typeof invoice.customer_email === 'string'
+                  ? invoice.customer_email
+                  : null,
+            },
+          )
+        }
+      } else if (type === 'charge.refunded') {
+        const charge = object
+        const invoiceId =
+          typeof charge.invoice === 'string' ? charge.invoice : null
+        const refunds = Array.isArray(charge.refunds?.data)
+          ? charge.refunds.data
+          : []
+        const refund = refunds[0] as
+          | { id?: string; amount?: number; reason?: string; created?: number }
+          | undefined
+        if (invoiceId && refund?.id && typeof refund.amount === 'number') {
+          await postCreatorQuestEvent(
+            {
+              CREATORQUEST_EVENTS_URL: process.env.CREATORQUEST_EVENTS_URL,
+              CREATORQUEST_APP_KEY: process.env.CREATORQUEST_APP_KEY,
+            },
+            {
+              type: 'invoice_refunded',
+              invoice_id: invoiceId,
+              refund_id: refund.id,
+              amount_refunded_minor: refund.amount,
+              reason: refund.reason ?? null,
+              refunded_at: refund.created
+                ? new Date(refund.created * 1000).toISOString()
+                : new Date().toISOString(),
+            },
+          )
         }
       }
     } catch (caught) {

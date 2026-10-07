@@ -24,6 +24,10 @@ import {
   identify,
   trackRegisterClick,
 } from '../../architecture/websiteTracker/client'
+import {
+  captureCreatorQuestRefFromLocation,
+  readCreatorQuestRefFromDocument,
+} from '../../lib/creatorquestRef'
 
 type AuthView = 'register' | 'login' | 'forgot' | 'check-email' | 'reset'
 
@@ -63,6 +67,7 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
   )
 
   useEffect(() => {
+    captureCreatorQuestRefFromLocation()
     if (isPasswordRecoveryLocation()) {
       setView('reset')
       return
@@ -133,6 +138,16 @@ export function AuthPanel({ initialView = 'register' }: AuthPanelProps) {
     }
     setEmail(normalizedEmail)
     identify({ first_name: name.trim(), email: normalizedEmail })
+    if (data.user?.id && readCreatorQuestRefFromDocument()) {
+      void fetch('/.netlify/functions/creatorquest-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          userId: data.user.id,
+        }),
+      }).catch(() => {})
+    }
     setProfile({
       firstName: name.trim(),
       lastName: lastName.trim(),
